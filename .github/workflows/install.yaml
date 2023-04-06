@@ -1,8 +1,10 @@
-name: Lint
+name: Install
 
 on:
   push:
     branches:
+      - '*'
+    paths:
       - '*'
   pull_request:
     branches:
@@ -12,9 +14,12 @@ on:
 
 jobs:
 
-  lint:
+  install:
 
+    name: Install
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
     steps:
 
       - name: checkout repo
@@ -25,11 +30,8 @@ jobs:
         with:
           python-version: '3.9'
 
-      - name: setup linters
-        run: |
-          pip install pre-commit==2.17.0
-          pre-commit install-hooks
+      - name: install package
+        run: pip install .
 
-      # lint all files
-      - name: lint
-        run: pre-commit run --all-files
+      - name: run help
+        run: rebar help
