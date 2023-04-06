@@ -27,6 +27,7 @@ setup(
     url="https://github.com/phac-nml/rebar",
     packages=["rebar"],
     install_requires=[
+        "requests>=2.27.1",
         "biopython>=1.79",
         "pandas>=1.4.1",
         "pango_aliasor>=0.2.2",
