@@ -1,6 +1,9 @@
 import sys
 import logging
 
+NO_DATA_CHAR = "NA"
+GENOME_LEN = 29903
+
 
 def create_logger(logfile=None):
     # create logger

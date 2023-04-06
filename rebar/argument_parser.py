@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 
 import argparse
-from .wrappers import lineage_tree, download_barcodes
+from .wrappers import lineage_tree, download_barcodes, detect_recombination
 from . import version
 
 rebar_description = "rebar: REcombination BARcode detection\n\n"
@@ -9,6 +9,7 @@ rebar_subcommand_description = (
     "rebar implements the following sub-commands:\n\n"
     "\ttree\t\tCreate nomenclature tree of designated pango lineages.\n"
     "\tbarcodes\tDownload lineage barcodes from freyja-data.\n"
+    "\trecombination\tDetect recombination from nextclade output.\n"
     "\thelp\t\tPrint rebar subcommands.\n"
     "\tversion\t\tPrint rebar version.\n"
     "\n"
@@ -32,11 +33,43 @@ barcodes_description = (
 )
 barcodes_output_description = "Output file path for the barcodes csv.\n\n"
 
+recombination_description = "Detect recombination.\n\n"
+recombination_tree_description = "Input newick path for the lineage tree.\n\n"
+recombination_barcodes_description = "Input csv path for the lineage barcodes.\n\n"
+recombination_nextclade_description = "Input tsv path for the nextclade qc.\n\n"
+recombination_outdir_description = "Output directory for detection results.\n\n"
+recombination_exclude_shared_description = (
+    "Exclude mutations shared by all parents when exporting.\n\n"
+)
+
 
 def add_barcodes_group(parser):
     required = parser.add_argument_group("required arguments")
     required.add_argument(
         "--output", required=True, type=str, help=barcodes_output_description
+    )
+    parser.add_argument("--log", required=False, type=str, help=log_description)
+
+
+def add_recombination_group(parser):
+    required = parser.add_argument_group("required arguments")
+    required.add_argument(
+        "--tree", required=True, type=str, help=recombination_tree_description
+    )
+    required.add_argument(
+        "--barcodes", required=True, type=str, help=recombination_barcodes_description
+    )
+    required.add_argument(
+        "--nextclade", required=True, type=str, help=recombination_nextclade_description
+    )
+    required.add_argument(
+        "--outdir", required=True, type=str, help=recombination_outdir_description
+    )
+    parser.add_argument(
+        "--exclude-shared",
+        required=False,
+        action="store_true",
+        help=recombination_exclude_shared_description,
     )
     parser.add_argument("--log", required=False, type=str, help=log_description)
 
@@ -76,5 +109,12 @@ def make_parser():
     )
     add_barcodes_group(barcodes_parser)
     barcodes_parser.set_defaults(func=download_barcodes)
+
+    # recombination
+    recombination_parser = subparsers.add_parser(
+        "recombination", description=recombination_description
+    )
+    add_recombination_group(recombination_parser)
+    recombination_parser.set_defaults(func=detect_recombination)
 
     return parser
