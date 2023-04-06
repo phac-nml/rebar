@@ -1,0 +1,4 @@
+test/
+
+*.zip
+rebar/__pycache__
