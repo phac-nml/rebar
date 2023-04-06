@@ -1,0 +1,41 @@
+name: Pipeline
+
+on:
+  push:
+    branches:
+      - '*'
+  pull_request:
+    branches:
+      - '*'
+  release:
+    types: [published]
+
+jobs:
+
+  pipeline:
+
+    name: Pipeline
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+    steps:
+
+      - name: checkout repo
+        uses: actions/checkout@v3
+
+      - name: setup Python
+        uses: actions/setup-python@v2
+        with:
+          python-version: '3.9'
+
+      - name: install package
+        run: pip install .
+
+      - name: run help
+        run: rebar help
+
+      - name: tree
+        run: rebar tree --output tree.nwk
+
+      - name: barcodes
+        run: rebar barcodes --output barcodes.csv
