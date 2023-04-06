@@ -4,8 +4,6 @@ on:
   push:
     branches:
       - '*'
-    paths:
-      - '*'
   pull_request:
     branches:
       - '*'
