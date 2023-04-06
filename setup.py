@@ -3,7 +3,7 @@ from setuptools import setup
 
 def get_version():
     version = "0.0.0"
-    with open("treetime/__init__.py") as ifile:
+    with open("rebar/__init__.py") as ifile:
         for line in ifile:
             if line[:7] == "version":
                 version = line.split("=")[-1].strip()[1:-1]
