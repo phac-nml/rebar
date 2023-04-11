@@ -1,4 +1,7 @@
 test/
+data/
+build/
+*.egg-info
 
 *.zip
 rebar/__pycache__

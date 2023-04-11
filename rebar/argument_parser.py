@@ -1,7 +1,12 @@
 #!/usr/bin/env python3
 
 import argparse
-from .wrappers import lineage_tree, download_barcodes, detect_recombination
+from .wrappers import (
+    lineage_tree,
+    download_barcodes,
+    detect_recombination,
+    analyze_subs,
+)
 from . import version
 
 rebar_description = "rebar: REcombination BARcode detection\n\n"
@@ -9,6 +14,7 @@ rebar_subcommand_description = (
     "rebar implements the following sub-commands:\n\n"
     "\ttree\t\tCreate nomenclature tree of designated pango lineages.\n"
     "\tbarcodes\tDownload lineage barcodes from freyja-data.\n"
+    "\tsubs\t\tSummarize substitutions observed in alignment.\n"
     "\trecombination\tDetect recombination from nextclade output.\n"
     "\thelp\t\tPrint rebar subcommands.\n"
     "\tversion\t\tPrint rebar version.\n"
@@ -17,7 +23,9 @@ rebar_subcommand_description = (
 # rebar_usage_description = ""
 
 log_description = "Output log file path.\n\n"
+threads_description = "Number of threads to use."
 
+# -----------------------------------------------------------------------------
 tree_description = (
     "Creates a nomenclature tree of designated pango lineages."
     " Uses the lineages_notes.txt from"
@@ -27,12 +35,20 @@ tree_description = (
 
 tree_output_description = "Output file path for the newick tree.\n\n"
 
+# -----------------------------------------------------------------------------
 barcodes_description = (
     "Download barcodes csv of mutations observed in each pango-lineage."
     " Uses the usher_barcodes.csv from https://github.com/andersen-lab/Freyja-data\n\n"
 )
 barcodes_output_description = "Output file path for the barcodes csv.\n\n"
 
+# -----------------------------------------------------------------------------
+subs_description = "Create nextclade-like TSV output from alignment."
+subs_alignment_description = "Input file path for the alignment fasta.\n\n"
+subs_reference_description = "Input file path for the reference fasta.\n\n"
+subs_output_description = "Output file path for the subs tsv.\n\n"
+
+# -----------------------------------------------------------------------------
 recombination_description = "Detect recombination.\n\n"
 recombination_tree_description = "Input newick path for the lineage tree.\n\n"
 recombination_barcodes_description = "Input csv path for the lineage barcodes.\n\n"
@@ -74,6 +90,23 @@ def add_recombination_group(parser):
     parser.add_argument("--log", required=False, type=str, help=log_description)
 
 
+def add_subs_group(parser):
+    required = parser.add_argument_group("required arguments")
+    required.add_argument(
+        "--output", required=True, type=str, help=subs_output_description
+    )
+    required.add_argument(
+        "--alignment", required=True, type=str, help=subs_alignment_description
+    )
+    required.add_argument(
+        "--reference", required=True, type=str, help=subs_reference_description
+    )
+    required.add_argument(
+        "--threads", required=True, type=int, help=threads_description
+    )
+    parser.add_argument("--log", required=False, type=str, help=log_description)
+
+
 def add_tree_group(parser):
     required = parser.add_argument_group("required arguments")
     required.add_argument(
@@ -109,6 +142,11 @@ def make_parser():
     )
     add_barcodes_group(barcodes_parser)
     barcodes_parser.set_defaults(func=download_barcodes)
+
+    # subs
+    subs_parser = subparsers.add_parser("subs", description=subs_description)
+    add_subs_group(subs_parser)
+    subs_parser.set_defaults(func=analyze_subs)
 
     # recombination
     recombination_parser = subparsers.add_parser(

@@ -5,6 +5,98 @@ import pandas as pd
 import numpy as np
 from .utils import NO_DATA_CHAR
 from .substitution import Substitution
+from .backbone import Backbone
+
+
+class GenomeAlt:
+    def __init__(self, record, reference=None):
+        self.strain = record.id
+        self.seq = record.seq
+        self.substitutions = []
+        self.deletions = []
+        self.missing = []
+
+        if reference:
+            self.parse_sequence(reference)
+
+    def __repr__(self):
+        return self.id
+
+    def parse_sequence(self, reference):
+
+        # Dashes (-) at the 5' and 3' end should be treated as
+        # missing data, not true deletions
+        terminal_5p = True
+        terminal_3p = False
+        terminal_char = ["N", "-", "N-"]
+
+        for i, bases in enumerate(zip(reference.seq, self.seq)):
+            r = bases[0]
+            s = bases[1]
+            # Genomic coordinates are 1 based
+            coord = i + 1
+
+            # Collapse all downstream and upstream bases
+            upstream_bases = "".join(set(self.seq[:i]))
+            downstream_bases = "".join(set(self.seq[i + 1 :]))
+
+            if (
+                len(upstream_bases) > 0
+                and terminal_5p
+                and upstream_bases not in terminal_char
+            ):
+                terminal_5p = False
+            if (
+                len(downstream_bases) > 0
+                and not terminal_3p
+                and downstream_bases in terminal_char
+            ):
+                terminal_3p = True
+
+            # Missing Data
+            if s == "N":
+                self.missing.append(coord)
+            elif (s == "-" and terminal_5p) or (s == "-" and terminal_3p):
+                self.missing.append(coord)
+
+            # Deletions
+            elif s == "-":
+                self.deletions.append(coord)
+
+            # Substitutions
+            elif r == "N":
+                continue
+
+            elif r != s:
+                sub = "{ref}{coord}{alt}".format(ref=r, coord=coord, alt=s)
+                self.substitutions.append(Substitution(sub))
+
+    def coords_to_ranges(self, attr):
+        # Author: @cs95
+        # Source: https://stackoverflow.com/a/52302366
+        values = getattr(self, attr)
+        if len(values) == 0:
+            return values
+
+        coords = pd.Series([str(c) for c in values])
+        diffs = coords.astype(int).diff().bfill().ne(1).cumsum()
+        ranges = (
+            coords.groupby(diffs)
+            .apply(lambda x: "-".join(x.values[[0, -1]]) if len(x) > 1 else x.item())
+            .tolist()
+        )
+        return ranges
+
+    def to_dataframe(self):
+        df = pd.DataFrame(
+            {
+                "strain": [self.strain],
+                "substitutions": [",".join([str(s) for s in self.substitutions])],
+                "deletions": [",".join(self.coords_to_ranges("deletions"))],
+                "missing": [",".join(self.coords_to_ranges("missing"))],
+            }
+        )
+        return df
 
 
 class Genome:
@@ -30,8 +122,9 @@ class Genome:
 
         # Attributes that will be set later
         self.lineage = None
-        self.is_recombinant = None
-        self.backbone = None
+        self.recombinant = None
+        self.recursive = False
+        self.backbone = Backbone()
 
     def parse_intervals(self, nextclade_row, col):
         col_str = nextclade_row[col].values[0].split(",")
@@ -73,109 +166,23 @@ class Genome:
         subs = sorted([Substitution(s) for s in set(subs_str) if s != NO_DATA_CHAR])
         return subs
 
-    def identify_backbone(
-        self,
-        barcode_summary,
-        barcodes_df,
-        tree,
-        recombinant_lineages=None,
-        include_recombinants=False,
-    ):
-
-        backbone = {}
-
-        # Optionally filter the barcodes to remove recombinant lineages
-        if not include_recombinants and recombinant_lineages != False:
-            barcode_summary = barcode_summary[
-                ~barcode_summary["lineage"].isin(recombinant_lineages)
-            ]
-
-        # Identify the lineages with the largest number of barcode matches
-        max_barcodes = barcode_summary["total"].max()
-        max_lineages = list(
-            barcode_summary[barcode_summary["total"] == max_barcodes]["lineage"]
-        )
-
-        # Get MRCA of all max_lineages
-        lineage = tree.common_ancestor(max_lineages).name
-
-        # Query the levels of support/conflict in this barcode
-        lineage_row = barcodes_df.query("lineage == @lineage")
-        lineage_subs = sorted(
-            [
-                Substitution(s)
-                for s in lineage_row.columns[1:]
-                if list(lineage_row[s])[0] == 1
-            ]
-        )
-
-        # Get the barcode subs that were observed
-        support_subs = sorted([s for s in lineage_subs if s in self.subs])
-        # Get the barcode subs that were not observed
-        missing_subs = sorted([s for s in lineage_subs if s not in self.subs])
-        # Get the sample subs that are not in the barcode
-        # Unlabeled private sub coords should not be included in conflict
-        privates_unlabeled_coord = [p.coord for p in self.privates_unlabeled]
-        conflict_subs = sorted(
-            [
-                s
-                for s in self.subs
-                if s not in lineage_subs
-                if s.coord not in privates_unlabeled_coord
-            ]
-        )
-
-        # Check if any of the max_lineages contain the conflict subs
-        if len(max_lineages) > 1:
-            for max_lin in max_lineages:
-                # Filter the barcodes to just this lineage
-                barcode_summary_filter = barcode_summary[
-                    barcode_summary["lineage"] == max_lin
-                ]
-                max_lin_backbone = self.identify_backbone(
-                    barcode_summary=barcode_summary_filter,
-                    barcodes_df=barcodes_df,
-                    tree=tree,
-                    recombinant_lineages=recombinant_lineages,
-                    include_recombinants=include_recombinants,
-                )
-                conflict_subs = [
-                    s
-                    for s in conflict_subs
-                    if s not in max_lin_backbone["support_subs"]
-                ]
-
-        backbone["lineage"] = lineage
-        backbone["max_lineages"] = max_lineages
-        backbone["support_subs"] = support_subs
-        backbone["missing_subs"] = missing_subs
-        backbone["conflict_subs"] = conflict_subs
-
-        return backbone
-
     def identify_breakpoints(self, alt_backbone, region_min_subs=1, region_min_len=1):
 
         result = {}
 
-        parent_1 = self.backbone["lineage"]
-        parent_2 = alt_backbone["lineage"]
+        parent_1 = self.backbone.lineage
+        parent_2 = alt_backbone.lineage
 
         # Identify the substitutions that are uniq to each parent
         parent_1_subs = [
-            s
-            for s in self.backbone["support_subs"]
-            if s not in alt_backbone["support_subs"]
+            s for s in self.backbone.support_subs if s not in alt_backbone.support_subs
         ]
         parent_2_subs = [
-            s
-            for s in alt_backbone["support_subs"]
-            if s not in self.backbone["support_subs"]
+            s for s in alt_backbone.support_subs if s not in self.backbone.support_subs
         ]
         # Identify the substitutions that are shared by both parents
         shared_subs = [
-            s
-            for s in self.backbone["support_subs"]
-            if s in alt_backbone["support_subs"]
+            s for s in self.backbone.support_subs if s in alt_backbone.support_subs
         ]
 
         # Organize into a dataframe for easy parsing
@@ -275,10 +282,10 @@ class Genome:
         # )
 
         parent_1_conflict = self.cleanup_conflicts(
-            self.backbone, regions_filter, "conflict_subs"
+            self.backbone, regions_filter, "conflict_subs_ref"
         )
         parent_2_conflict = self.cleanup_conflicts(
-            alt_backbone, regions_filter, "conflict_subs"
+            alt_backbone, regions_filter, "conflict_subs_ref"
         )
 
         # Missing subs, hmm
@@ -304,9 +311,9 @@ class Genome:
         return result
 
     def cleanup_conflicts(self, backbone, regions_filter, col):
-        subs = copy.copy(backbone[col])
-        lineage = backbone["lineage"]
-        for s in backbone[col]:
+        subs = copy.copy(getattr(backbone, col))
+        lineage = backbone.lineage
+        for s in getattr(backbone, col):
             region_found = False
             for r in regions_filter.values():
                 start = r["start"]
@@ -407,5 +414,61 @@ class Genome:
         )
         subprocess.run(cmd_str, shell=True)
 
+    def reverse_iter_collapse(
+        regions,
+        min_len,
+        max_breakpoint_len,
+        start_coord,
+        end_coord,
+        parent,
+    ):
+        """Collapse adjacent regions from the same parent into one region."""
+
+        coord_list = list(regions.keys())
+        coord_list.reverse()
+
+        for coord in coord_list:
+            prev_start_coord = coord
+            prev_end_coord = regions[prev_start_coord]["end"]
+            prev_region_len = (prev_end_coord - prev_start_coord) + 1
+            prev_parent = regions[coord]["parent"]
+            breakpoint_len = start_coord - prev_end_coord
+
+            # If the previous region was too short AND from a different parent
+            # Delete that previous region, it's an intermission
+            if prev_region_len < min_len and parent != prev_parent:
+                del regions[prev_start_coord]
+
+            # If the previous breakpoint was too long AND from a different parent
+            # Don't add the current region
+            elif (
+                start_coord != prev_start_coord
+                and parent != prev_parent
+                and (max_breakpoint_len != -1 and breakpoint_len > max_breakpoint_len)
+            ):
+                break
+
+            # Collapse the current region into the previous one
+            elif parent == prev_parent:
+                regions[prev_start_coord]["end"] = end_coord
+                break
+
+            # Otherwise, parents differ and this is the start of a new region
+            else:
+                regions[start_coord] = {"parent": parent, "end": end_coord}
+                break
+
+        # Check if the reveres iter collapse wound up deleting all the regions
+        if len(regions) == 0:
+            regions[start_coord] = {"parent": parent, "end": end_coord}
+
     def __repr__(self):
-        return self.id
+        text = (
+            self.id
+            + "\n\trecombinant: "
+            + str(self.recombinant)
+            + "\n\tbackbone:    "
+            + "\n\t\t"
+            + str(self.backbone).replace("\n", "\n\t\t")
+        )
+        return text

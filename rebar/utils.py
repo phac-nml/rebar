@@ -12,7 +12,7 @@ def create_logger(logfile=None):
 
     # create file handler which logs even debug messages
     if logfile:
-        handler = logging.FileHandler(logfile)
+        handler = logging.FileHandler(logfile, "w+")
     else:
         handler = logging.StreamHandler(sys.stdout)
     handler.setLevel(logging.DEBUG)

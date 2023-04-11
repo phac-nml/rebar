@@ -1,13 +1,18 @@
 import os
 from datetime import datetime
+from multiprocess import Pool  # Note that we are importing "multiprocess", no "ing"!
+import functools
 import requests
 import logging
+import re
 from io import StringIO
 import pandas as pd
+from tqdm import tqdm
 from .utils import create_logger, NO_DATA_CHAR, GENOME_LEN
-from .genome import Genome
+from .genome import Genome, GenomeAlt
+from .backbone import Backbone
 from pango_aliasor.aliasor import Aliasor
-from Bio import Phylo
+from Bio import Phylo, SeqIO
 from Bio.Phylo.BaseTree import Clade
 
 logging.getLogger("requests").setLevel(logging.WARNING)
@@ -92,6 +97,10 @@ def lineage_tree(params):
     r = requests.get(LINEAGES_URL)
     lineage_text = r.text
 
+    # Attempt semi-structure text parsing for parents
+    # This is most useful for identifying recursive recombinants
+    recombinant_parents = {}
+
     # Convert the text table to list
     lineages = []
     for line in lineage_text.split("\n"):
@@ -103,7 +112,24 @@ def lineage_tree(params):
             continue
         lineages.append(lineage)
 
+        # Check for recursive recombination
+        # Recombinant lineage of .... Delta and BA.1
+        if "Recombinant lineage" in line:
+            line_split = line.split("Recombinant lineage")[1]
+            line_words = line_split.split(" ")
+            # Check for words that match lineage format
+            # Bit risky, also catches "UK" if not comma after
+            patterns = "^([A-Z]{2,}$|[A-Z]+\\.[0-9]+)"
+            for word in line_words:
+                lineage_matches = re.findall(patterns, word)
+                if len(lineage_matches) > 0:
+                    parent = word.replace(",", "").replace("*", "")
+                    if lineage not in recombinant_parents:
+                        recombinant_parents[lineage] = []
+                    recombinant_parents[lineage].append(parent)
+
     # Initialize the aliasor, which will download the latest aliases
+    logger.info(str(datetime.now()) + "\tInitialising aliases.")
     aliasor = Aliasor()
 
     # -------------------------------------------------------------------------
@@ -135,6 +161,14 @@ def lineage_tree(params):
         elif lineage.startswith("X") and parent == "":
             parent = "X"
 
+        # Check for recursive recombinant
+        if lineage in recombinant_parents:
+            recursive_parents = [
+                p for p in recombinant_parents[lineage] if p.startswith("X")
+            ]
+            if len(recursive_parents) > 0:
+                parent = recursive_parents[0]
+
         parent_clade = [c for c in tree.find_clades(parent)]
         # If we found a parent, as long as the input list is formatted correctly
         # this should always be true
@@ -150,6 +184,66 @@ def lineage_tree(params):
     Phylo.write(tree, params.output, "newick")
 
     logger.info(str(datetime.now()) + "\tFinished module: tree.")
+
+    return 0
+
+
+def analyze_subs(params):
+    """
+    Create nextclade-like TSV output from alignment.
+
+    Parameters
+    ----------
+        output : str
+            file path for output newick tree.
+        log : str
+            file path for output log.
+    """
+
+    logger = params.logger
+    logger.info(str(datetime.now()) + "\tBeginning module: tree.")
+
+    # Create output directory if it doesn't exist
+    outdir = os.path.dirname(params.output)
+    if not os.path.exists(outdir) and outdir != "":
+        logger.info(str(datetime.now()) + "\tCreating output directory: " + outdir)
+        os.mkdir(outdir)
+
+    # reference
+    logger.info(str(datetime.now()) + "\tImporting reference: " + params.reference)
+    records = SeqIO.parse(params.reference, "fasta")
+    ref_rec = next(records)
+
+    # alignment
+    logger.info(str(datetime.now()) + "\tImporting alignment: " + params.alignment)
+    num_records = len(list(SeqIO.parse(params.alignment, "fasta")))
+    records = SeqIO.parse(params.alignment, "fasta")
+
+    logger.info(str(datetime.now()) + "\tParsing sequences.")
+    p = Pool(params.threads)
+
+    # Use starmap for positional parameters
+    # genomes = p.starmap(GenomeAlt, zip(records, repeat(ref_rec)))
+
+    # Use imap + functools.partial for named parameters
+    # genomes = p.imap(functools.partial(GenomeAlt, reference=ref_rec), records)
+
+    # Reminder: An enclosing list() statement waits for the iterator to end.
+    genomes = list(
+        tqdm(
+            p.imap(functools.partial(GenomeAlt, reference=ref_rec), records),
+            total=num_records,
+        )
+    )
+
+    logger.info(str(datetime.now()) + "\tExporting results to: " + params.output)
+
+    cols = ["strain", "substitutions", "deletions", "missing"]
+    export_data = {col: [] for col in cols}
+
+    dfs = [genome.to_dataframe() for genome in genomes]
+    df = pd.concat(dfs)
+    df.to_csv(params.output, sep="\t", index=False)
 
     return 0
 
@@ -213,59 +307,107 @@ def detect_recombination(params):
         genomes.append(genome)
 
     # -------------------------------------------------------------------------
-    # PASS 0: Lineage assignment
+    # PHASE 1: IDENTIFY NON-RECOMBINANTS
     # Identify the lineage (or set of lineages) whose barcodes most closely
     # match each genomes observed substitutions.
 
-    logger.info(str(datetime.now()) + "\tAssigning lineage.")
+    logger.info(str(datetime.now()) + "\tIdentifying non-recombinants.")
     for genome in genomes:
 
-        backbone = genome.identify_backbone(
+        genome.backbone.search(
+            genome=genome,
             barcode_summary=genome.barcode_summary,
             barcodes_df=barcodes_df,
             tree=tree,
             recombinant_lineages=recombinant_lineages,
             include_recombinants=True,
         )
-        genome.lineage = backbone["lineage"]
+        genome.lineage = genome.backbone.lineage
+
+        # Option 1: Top backbone lineage is recombinant
+        #           Investigate further in next phase
+        if genome.backbone.lineage in recombinant_lineages:
+
+            # Identify the generic recombinant type
+            recombinant_path = recombinant_tree.get_path(genome.backbone.lineage)
+            # Move backwards up the path, until we find a parental lineage that
+            # starts with "X", because it might be an alias ("EK")
+
+            for c in recombinant_path[::-1]:
+                if c.name.startswith("X"):
+                    genome.recombinant = c.name.split(".")[0]
+                    break
+
+            # Check if this is a recursive recombinant
+            # In the get_path method, the root is excluded
+            node_path = recombinant_tree.get_path(genome.recombinant)
+            # So if node_path just has more than one clade, it's recursive
+            if len(node_path) > 1:
+                genome.recursive = True
+
+        # Option 2: Perfect match to non-recombinant
+        #           Stop further investigation
+        elif len(genome.backbone.conflict_subs_ref) == 0:
+            genome.recombinant = False
+
+        # else. Has conflicts with non-recombinant lineage
+        #           Investigate further in next phase
+
+    quit()
 
     # -------------------------------------------------------------------------
-    # PASS 1: Backbone
+    # PHASE 2: BACKBONE SEARCH
     # Identify the lineage (or set of lineages) whose barcodes most closely
-    # match each genomes observed substitutions.
+    # match each genomes observed substitutions, EXCLUDING RECOMBINANTS
 
-    logger.info(str(datetime.now()) + "\tIdentifying backbone lineage.")
+    logger.info(str(datetime.now()) + "\tIdentifying recombinant backbones")
     for genome in genomes:
 
-        genome.backbone = genome.identify_backbone(
-            barcode_summary=genome.barcode_summary,
+        # Skip clear non-recombinants
+        if genome.recombinant == False:
+            continue
+
+        # Redo the backbone search, excluding select lineages
+        barcode_summary = genome.barcode_summary
+
+        # Option 1. Not Recursive, exclude recombinant lineages from search
+        if not genome.recursive:
+            barcode_summary = barcode_summary[
+                ~barcode_summary["lineage"].isin(recombinant_lineages)
+            ]
+        # Uhhh, TBD
+        else:
+            ...
+
+        genome.backbone = Backbone()
+        genome.backbone.search(
+            genome=genome,
+            barcode_summary=barcode_summary,
             barcodes_df=barcodes_df,
             tree=tree,
             recombinant_lineages=recombinant_lineages,
             include_recombinants=False,
         )
 
-        # If no subs from the barcode is missing, this is not a recombinant
-        num_missing_subs = len(genome.backbone["missing_subs"])
-        if num_missing_subs == 0:
-            genome.is_recombinant = False
-
     # -------------------------------------------------------------------------
     # Pass 2: Secondary Parent
 
     logger.info(str(datetime.now()) + "\tIdentifying secondary parent.")
     parents_dict = {}
+    max_depth = 3
 
     for genome in genomes:
 
-        if genome.is_recombinant == False:
+        if genome.recombinant == False:
             continue
 
-        max_lineages = genome.backbone["max_lineages"]
+        print(genome)
         barcode_summary_filter = genome.barcode_summary[
-            ~genome.barcode_summary["lineage"].isin(max_lineages)
+            ~genome.barcode_summary["lineage"].isin(genome.backbone.max_lineages)
         ]
-        alt_backbone = genome.identify_backbone(
+        alt_backbone = Backbone()
+        alt_backbone.search(
+            genome=genome,
             barcode_summary=barcode_summary_filter,
             barcodes_df=barcodes_df,
             tree=tree,
@@ -274,6 +416,8 @@ def detect_recombination(params):
         )
 
         result = genome.identify_breakpoints(alt_backbone)
+        print(result)
+        break
         genome.recombination_subs = result["subs_df"]
         genome.recombination_breakpoints = result["breakpoints"]
         genome.recombination_regions = result["regions"]
@@ -284,10 +428,20 @@ def detect_recombination(params):
 
         # parents_dict[parents].append(genome)
 
+    quit()
+
     # -------------------------------------------------------------------------
     # Pass 3: Export
 
-    cols = ["strain", "lineage", "parents", "breakpoints", "regions", "subs"]
+    cols = [
+        "strain",
+        "is_recombinant",
+        "lineage",
+        "parents",
+        "breakpoints",
+        "regions",
+        "subs",
+    ]
 
     export_dict = {col: [] for col in cols}
 
@@ -297,7 +451,9 @@ def detect_recombination(params):
                 if col == "strain":
                     export_dict["strain"].append(genome.id)
                 elif col == "lineage":
-                    export_dict["lineage"].append(genome.lineage)
+                    export_dict["lineage"].append(genome.backbone.lineage)
+                elif col == "is_recombinant":
+                    export_dict["is_recombinant"].append(genome.is_recombinant)
                 else:
                     export_dict[col].append(NO_DATA_CHAR)
             continue

@@ -15,7 +15,7 @@ with open("README.md", "r") as fh:
     long_description = fh.read()
 
 setup(
-    name="ncov-rebar",
+    name="rebar",
     version=get_version(),
     author="Katherine Eaton",
     author_email="katherine.eaton@phac-aspc.gc.ca",
@@ -33,6 +33,8 @@ setup(
         "numpy>=1.22.3",
         "pango_aliasor>=0.2.2",
         "snipit>=1.0.7",
+        "multiprocess>=0.70.14",
+        "tqdm>=4.65.0",
     ],
     entry_points={
         "console_scripts": [
