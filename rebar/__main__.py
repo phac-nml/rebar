@@ -22,16 +22,16 @@ def main():
 
     # Create output directory if it doesn't exist
     if hasattr(params, "output"):
-        outdir = os.path.dirname(params.output)
-    if not os.path.exists(outdir) and outdir != "":
+        params.outdir = os.path.dirname(params.output)
+    if not os.path.exists(params.outdir) and params.outdir != "":
         params.logger.info(
-            str(datetime.now()) + "\tCreating output directory: " + outdir
+            str(datetime.now()) + "\tCreating output directory: " + params.outdir
         )
-        os.mkdir(outdir)
+        os.mkdir(params.outdir)
 
     # Initialize system resources for multiprocessing
+    available_cpus = cpu_count()
     if hasattr(params, "threads"):
-        available_cpus = cpu_count()
         if params.threads > available_cpus:
             params.threads = available_cpus
     else:

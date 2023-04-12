@@ -1,28 +1,29 @@
+# Standard libraries
 import os
 from datetime import datetime
-from multiprocess import Pool  # Note that we are importing "multiprocess", no "ing"!
 import functools
 import requests
 import logging
 import re
 from io import StringIO
+
+# PyPI libraries
 import pandas as pd
 from tqdm import tqdm
-from .utils import create_logger, NO_DATA_CHAR, GENOME_LEN
-from .genome import Genome, GenomeAlt
-from .backbone import Backbone
+from multiprocess import Pool  # Note that we are importing "multiprocess", no "ing"!
 from pango_aliasor.aliasor import Aliasor
 from Bio import Phylo, SeqIO
 from Bio.Phylo.BaseTree import Clade
 
+# rebar objects
+from .utils import create_logger, NO_DATA_CHAR, LINEAGES_URL, BARCODES_URL
+from .genome import genome_mp
+from .backbone import backbone_search_lineage_mp, backbone_search_recombination_mp
+from . import RebarError
+
+# Quiet URL fetch requests messages
 logging.getLogger("requests").setLevel(logging.WARNING)
 logging.getLogger("urllib3").setLevel(logging.WARNING)
-
-LINEAGES_URL = (
-    "https://raw.githubusercontent.com/cov-lineages/pango-designation/master/"
-    "lineage_notes.txt"
-)
-BARCODES_URL = "https://github.com/andersen-lab/Freyja-data/raw/main/usher_barcodes.csv"
 
 
 def download_barcodes(params):
@@ -36,14 +37,8 @@ def download_barcodes(params):
         log : str
             file path for output log.
     """
-    logger = create_logger(params.log)
+    logger = params.logger
     logger.info(str(datetime.now()) + "\tBeginning module: barcodes.")
-
-    # Create output directory if it doesn't exist
-    outdir = os.path.dirname(params.output)
-    if not os.path.exists(outdir) and outdir != "":
-        logger.info(str(datetime.now()) + "\tCreating output directory: " + outdir)
-        os.mkdir(outdir)
 
     # Download latest lineage barcodes
     logger.info(str(datetime.now()) + "\tDownloading lineage barcodes.")
@@ -64,8 +59,8 @@ def download_barcodes(params):
     logger.info(str(datetime.now()) + "\tExporting barcodes: " + params.output)
     barcodes_df.to_csv(params.output, sep=",", index=False)
 
+    # Finish
     logger.info(str(datetime.now()) + "\tFinished module: barcodes.")
-
     return 0
 
 
@@ -201,50 +196,40 @@ def analyze_subs(params):
     """
 
     logger = params.logger
-    logger.info(str(datetime.now()) + "\tBeginning module: tree.")
+    logger.info(str(datetime.now()) + "\tBeginning module: subs.")
 
-    # Create output directory if it doesn't exist
-    outdir = os.path.dirname(params.output)
-    if not os.path.exists(outdir) and outdir != "":
-        logger.info(str(datetime.now()) + "\tCreating output directory: " + outdir)
-        os.mkdir(outdir)
-
-    # reference
+    # Import reference
     logger.info(str(datetime.now()) + "\tImporting reference: " + params.reference)
     records = SeqIO.parse(params.reference, "fasta")
     ref_rec = next(records)
 
-    # alignment
+    # Import alignment
     logger.info(str(datetime.now()) + "\tImporting alignment: " + params.alignment)
     num_records = len(list(SeqIO.parse(params.alignment, "fasta")))
     records = SeqIO.parse(params.alignment, "fasta")
 
-    logger.info(str(datetime.now()) + "\tParsing sequences.")
+    # Parse substitutions
+    logger.info(str(datetime.now()) + "\tParsing substitutions from alignment.")
+
     p = Pool(params.threads)
-
-    # Use starmap for positional parameters
-    # genomes = p.starmap(GenomeAlt, zip(records, repeat(ref_rec)))
-
-    # Use imap + functools.partial for named parameters
-    # genomes = p.imap(functools.partial(GenomeAlt, reference=ref_rec), records)
-
-    # Reminder: An enclosing list() statement waits for the iterator to end.
     genomes = list(
         tqdm(
-            p.imap(functools.partial(GenomeAlt, reference=ref_rec), records),
+            p.imap(functools.partial(genome_mp, reference=ref_rec), records),
             total=num_records,
         )
     )
+    # Pool memory management, don't accept anymore new tasks and wait for them
+    p.close()
+    p.join()
 
+    # Export
     logger.info(str(datetime.now()) + "\tExporting results to: " + params.output)
-
-    cols = ["strain", "substitutions", "deletions", "missing"]
-    export_data = {col: [] for col in cols}
-
     dfs = [genome.to_dataframe() for genome in genomes]
     df = pd.concat(dfs)
     df.to_csv(params.output, sep="\t", index=False)
 
+    # Finish
+    logger.info(str(datetime.now()) + "\tFinished module: subs.")
     return 0
 
 
@@ -255,144 +240,192 @@ def detect_recombination(params):
     Parameters
     ----------
         tree : str
-            file path of input lineage nomenclature tree.
+            file path of input tree newick.
         barcodes : str
             file path of input barcodes csv.
-        nextclade : str
-            file path of input nextclade tsv.
-        log : str
-            file path for output log.
+        subs : str
+            file path of input subs tsv.
+        genome_length : int
+            length of genome, only required if using nextclade TSV.
+        logger : str
+            output logging object (created in __main__.py).
     """
-    logger = create_logger(params.log)
-    logger.info(str(datetime.now()) + "\tBeginning module: recombination")
 
-    # Create output directory if it doesn't exist
-    outdir = os.path.dirname(params.outdir)
-    if not os.path.exists(outdir) and outdir != "":
-        logger.info(str(datetime.now()) + "\tCreating output directory: " + outdir)
-        os.mkdir(outdir)
+    logger = params.logger
+    logger.info(str(datetime.now()) + "\tBeginning module: recombination.")
 
     # -------------------------------------------------------------------------
-    # Inputs
+    # PHASE 1: SETUP
+    # Objectives:
+    #   1. Import the substitutions dataframe of each sample.
+    #   2. Import the lineage-determining mutation barcodes dataframe.
+    #   3. Import the lineage nomenclature tree, to identify designated recombinants.
 
-    # barcodes
+    # Import the dataframe from the `subs` module, or alternatively from nextclade
+    logger.info(str(datetime.now()) + "\tImporting subs: " + params.subs)
+    subs_df = pd.read_csv(params.subs, sep="\t").fillna(NO_DATA_CHAR)
+
+    # We're going to need to know the genome length later, raise an error
+    # if it wasn't provided.
+    if "genome_length" not in subs_df.columns and not params.genome_length:
+        raise RebarError(
+            "If 'genome_length' is not a column in --subs TSV,"
+            " --genome-length must be provided."
+        )
+    # If the user provided nextclade TSV as input instead of the rebar subs output
+    # the ID column will be called "seqName" instead of strain
+    if "seqName" in subs_df.columns:
+        subs_df.rename({"seqName": "strain"}, inplace=True)
+
+    subs_df.set_index("strain", inplace=True)
+    subs_df["strain"] = subs_df.index
+
+    # Import lineage barcodes
     logger.info(str(datetime.now()) + "\tImporting barcodes: " + params.barcodes)
     barcodes_df = pd.read_csv(params.barcodes, sep=",")
-    # Rename the empty column that should be lineage
+    # Rename the empty first column that should be lineage
     barcodes_df.rename(columns={"Unnamed: 0": "lineage"}, inplace=True)
 
-    # tree
+    # Import tree
     logger.info(str(datetime.now()) + "\tImporting tree: " + params.tree)
     tree = Phylo.read(params.tree, "newick")
+
     # Identify which lineages are known recombinants
     recombinant_tree = [c for c in tree.find_clades("X")][0]
     recombinant_lineages = [c.name for c in recombinant_tree.find_clades()]
 
-    # nextclade
-    logger.info(str(datetime.now()) + "\tImporting nextclade: " + params.nextclade)
-    nextclade_df = pd.read_csv(params.nextclade, sep="\t").fillna(NO_DATA_CHAR)
+    # -------------------------------------------------------------------------
+    # PHASE 2: PARSE SUBTITUTIONS AND BARCODES
+    # Objectives:
+    #  1. Store substitutions, deletions, and missing data as class attributes.
+    #    - Ex. `genome.substitutions`, `genome.deletions`
+    #  2. Summarize matches to lineage barcodes.
+    #    - Ex. `genome.barcode_summary`
 
-    # parse subs into genomic record
-    logger.info(str(datetime.now()) + "\tCreating genome records.")
-    strains = list(nextclade_df["seqName"])
-    genomes = []
-    for strain in strains:
-        nexclade_row = nextclade_df.query("seqName == @strain")
-        genome = Genome(
-            id=strain,
-            genome_len=GENOME_LEN,
-            nextclade_row=nexclade_row,
-            barcode=barcodes_df,
-        )
-        genomes.append(genome)
+    logger.info(str(datetime.now()) + "\tParsing genomic records.")
+
+    # The objects we're going to process in parallel
+    # We specifically use iterrows, otherwise it iterates over the df cols
+    iterator = subs_df.iterrows()
+    # The function we're going to apply to the iterator in parallel
+    # Note the use of functools.partial to later pass named arguments to `imap`
+    # `genome_mp` is a multiprocessing wrapper for instatiating the Genome class
+    task = functools.partial(genome_mp, barcodes=barcodes_df)
+    # The total number of objects, for the progress bar
+    total = len(subs_df)
+    # Create pool for multiprocessing tasks
+    pool = Pool(params.threads)
+    # Reminder: list() is required, to run the tasks and update progress bar
+    genomes = list(tqdm(pool.imap_unordered(task, iterator), total=total))
+    # Pool memory management, don't accept new tasks and wait for them to finish
+    pool.close()
+    pool.join()
 
     # -------------------------------------------------------------------------
-    # PHASE 1: IDENTIFY NON-RECOMBINANTS
-    # Identify the lineage (or set of lineages) whose barcodes most closely
-    # match each genomes observed substitutions.
+    # PHASE 3: IDENTIFY RECOMBINANTS
+    # Objectives:
+    #   1. Assign a lineage to each genome based on the highest barcode matches.
+    #   2. Flag any samples that are definitively not recombinants.
+    #        - Based on a perfect match to a non-recombinant lineage barcode.
+    #        - These will be excluded from downstream processing to save time.
+    #   3. Flag any samples that are definitively NOT recursive recombinants.
+    #        - A perfect match to XBB.1.5 (BA.2.75 x BA.2.10) is not recursive.
+    #        - A perfect match to XBL (XBB.1 x BA.2.75) is a recursive recombinant.
+    #        - All other cases will have recursive set to `None`, for uncertainty
+    #        - This will determine whether we allow recombinants to be the original
+    #          parents in subsequent phases.
 
-    logger.info(str(datetime.now()) + "\tIdentifying non-recombinants.")
-    for genome in genomes:
+    logger.info(str(datetime.now()) + "\tIdentifying recombinants.")
 
-        genome.backbone.search(
-            genome=genome,
-            barcode_summary=genome.barcode_summary,
-            barcodes_df=barcodes_df,
-            tree=tree,
-            recombinant_lineages=recombinant_lineages,
-            include_recombinants=True,
-        )
-        genome.lineage = genome.backbone.lineage
+    # The objects we're going to iterate over
+    iterator = genomes
+    # The function we're going to apply to the iterator in parallel
+    # Note the use of functools.partial to later pass named arguments to `imap`
+    # `backbone_search_lineage_mp` is a multiprocessing wrapper for instatiating the
+    #   Backbone class, and searching for the main lineage assignment.
+    task = functools.partial(
+        backbone_search_lineage_mp,
+        barcodes=barcodes_df,
+        tree=tree,
+        recombinant_lineages=recombinant_lineages,
+        recombinant_tree=recombinant_tree,
+    )
+    # The total number of objects, for the progress bar
+    total = len(iterator)
+    # Create pool for multiprocessing tasks
+    pool = Pool(params.threads)
+    # Reminder: list() is required, to run the tasks and update progress bar
+    genomes = list(tqdm(pool.imap_unordered(task, iterator), total=total))
+    # Pool memory management, don't accept new tasks and wait for them to finish
+    pool.close()
+    pool.join()
 
-        # Option 1: Top backbone lineage is recombinant
-        #           Investigate further in next phase
-        if genome.backbone.lineage in recombinant_lineages:
+    # -------------------------------------------------------------------------
+    # PHASE 2: IDENTIFY FIRST RECOMBINATION PARENT
+    # Objectives
+    #   1. Identify the lineage that is the next best barcode match.
 
-            # Identify the generic recombinant type
-            recombinant_path = recombinant_tree.get_path(genome.backbone.lineage)
-            # Move backwards up the path, until we find a parental lineage that
-            # starts with "X", because it might be an alias ("EK")
+    logger.info(str(datetime.now()) + "\tIdentifying first recombination parent.")
 
-            for c in recombinant_path[::-1]:
-                if c.name.startswith("X"):
-                    genome.recombinant = c.name.split(".")[0]
-                    break
+    # The objects we're going to iterate over
+    iterator = genomes
+    # The function we're going to apply to the iterator in parallel
+    # Note the use of functools.partial to later pass named arguments to `imap`
+    # `backbone_search_recombination_mp` is a multiprocessing wrapper for the
+    #   Backbone class, and searching for a recombination parent.
+    task = functools.partial(
+        backbone_search_recombination_mp,
+        parent="parent_1",
+        barcodes=barcodes_df,
+        tree=tree,
+        recombinant_lineages=recombinant_lineages,
+        recombinant_tree=recombinant_tree,
+    )
+    # The total number of objects, for the progress bar
+    total = len(iterator)
+    # Create pool for multiprocessing tasks
+    pool = Pool(params.threads)
+    # Reminder: list() is required, to run the tasks and update progress bar
+    genomes = list(tqdm(pool.imap_unordered(task, iterator), total=total))
+    # Pool memory management, don't accept new tasks and wait for them to finish
+    pool.close()
+    pool.join()
 
-            # Check if this is a recursive recombinant
-            # In the get_path method, the root is excluded
-            node_path = recombinant_tree.get_path(genome.recombinant)
-            # So if node_path just has more than one clade, it's recursive
-            if len(node_path) > 1:
-                genome.recursive = True
+    # -------------------------------------------------------------------------
+    # PHASE 3: IDENTIFY SECOND RECOMBINATION PARENT
+    # Objectives
+    #   1. Identify the lineage that is the next best barcode match.
+    #   2. Keep searching through top barcodes until:
+    #      - Breakpoints were detected, OR
+    #      - The max_depth has been reached.
 
-        # Option 2: Perfect match to non-recombinant
-        #           Stop further investigation
-        elif len(genome.backbone.conflict_subs_ref) == 0:
-            genome.recombinant = False
+    logger.info(str(datetime.now()) + "\tIdentifying secondary recombination parent.")
 
-        # else. Has conflicts with non-recombinant lineage
-        #           Investigate further in next phase
+    # The objects we're going to iterate over
+    iterator = genomes
+    # The function we're going to apply to the iterator in parallel
+    # Note the use of functools.partial to later pass named arguments to `imap`
+    # `backbone_search_recombination_mp` is a multiprocessing wrapper for the
+    #   Backbone class, and searching for a recombination parent.
+    task = functools.partial(
+        backbone_search_recombination_mp,
+        parent="parent_2",
+        barcodes=barcodes_df,
+        tree=tree,
+        recombinant_lineages=recombinant_lineages,
+        recombinant_tree=recombinant_tree,
+    )
+    # The total number of objects, for the progress bar
+    total = len(iterator)
+    # Create pool for multiprocessing tasks
+    pool = Pool(params.threads)
+    # Reminder: list() is required, to run the tasks and update progress bar
+    genomes = list(tqdm(pool.imap_unordered(task, iterator), total=total))
+    # Pool memory management, don't accept new tasks and wait for them to finish
+    pool.close()
+    pool.join()
 
     quit()
-
-    # -------------------------------------------------------------------------
-    # PHASE 2: BACKBONE SEARCH
-    # Identify the lineage (or set of lineages) whose barcodes most closely
-    # match each genomes observed substitutions, EXCLUDING RECOMBINANTS
-
-    logger.info(str(datetime.now()) + "\tIdentifying recombinant backbones")
-    for genome in genomes:
-
-        # Skip clear non-recombinants
-        if genome.recombinant == False:
-            continue
-
-        # Redo the backbone search, excluding select lineages
-        barcode_summary = genome.barcode_summary
-
-        # Option 1. Not Recursive, exclude recombinant lineages from search
-        if not genome.recursive:
-            barcode_summary = barcode_summary[
-                ~barcode_summary["lineage"].isin(recombinant_lineages)
-            ]
-        # Uhhh, TBD
-        else:
-            ...
-
-        genome.backbone = Backbone()
-        genome.backbone.search(
-            genome=genome,
-            barcode_summary=barcode_summary,
-            barcodes_df=barcodes_df,
-            tree=tree,
-            recombinant_lineages=recombinant_lineages,
-            include_recombinants=False,
-        )
-
-    # -------------------------------------------------------------------------
-    # Pass 2: Secondary Parent
-
-    logger.info(str(datetime.now()) + "\tIdentifying secondary parent.")
     parents_dict = {}
     max_depth = 3
 
@@ -402,31 +435,41 @@ def detect_recombination(params):
             continue
 
         print(genome)
-        barcode_summary_filter = genome.barcode_summary[
-            ~genome.barcode_summary["lineage"].isin(genome.backbone.max_lineages)
+
+        print(genome.backbone.top_lineages)
+        print(genome.barcode_summary)
+        # Filter barcode summary to remove the lineage and the first parent backbone
+        barcode_summary = genome.barcode_summary
+        barcode_summary[
+            ~(barcode_summary["lineage"].isin(genome.backbone.top_lineages))
         ]
-        alt_backbone = Backbone()
-        alt_backbone.search(
-            genome=genome,
-            barcode_summary=barcode_summary_filter,
-            barcodes_df=barcodes_df,
-            tree=tree,
-            recombinant_lineages=recombinant_lineages,
-            include_recombinants=False,
-        )
-
-        result = genome.identify_breakpoints(alt_backbone)
-        print(result)
+        print(barcode_summary)
         break
-        genome.recombination_subs = result["subs_df"]
-        genome.recombination_breakpoints = result["breakpoints"]
-        genome.recombination_regions = result["regions"]
-        # parents = [r["parent"] for r in genome.recombination_regions.values()]
-        # parents = ",".join(np.unique(sorted(parents)))
-        # if parents not in parents_dict:
-        #     parents_dict[parents] = []
+        # barcode_summary_filter = genome.barcode_summary[
+        #     ~genome.barcode_summary["lineage"].isin(genome.backbone.top_lineages)
+        # ]
+        # alt_backbone = Backbone()
+        # alt_backbone.search(
+        #     genome=genome,
+        #     barcode_summary=barcode_summary_filter,
+        #     barcodes_df=barcodes_df,
+        #     tree=tree,
+        #     recombinant_lineages=recombinant_lineages,
+        #     include_recombinants=False,
+        # )
 
-        # parents_dict[parents].append(genome)
+        # result = genome.identify_breakpoints(alt_backbone)
+        # print(result)
+        # break
+        # genome.recombination_subs = result["subs_df"]
+        # genome.recombination_breakpoints = result["breakpoints"]
+        # genome.recombination_regions = result["regions"]
+        # # parents = [r["parent"] for r in genome.recombination_regions.values()]
+        # # parents = ",".join(np.unique(sorted(parents)))
+        # # if parents not in parents_dict:
+        # #     parents_dict[parents] = []
+
+        # # parents_dict[parents].append(genome)
 
     quit()
 
@@ -477,7 +520,7 @@ def detect_recombination(params):
 
     export_df = pd.DataFrame(export_dict)
     file_name = "recombination.tsv"
-    file_path = os.path.join(outdir, file_name)
+    file_path = os.path.join(params.outdir, file_name)
     export_df.to_csv(file_path, sep="\t", index=False)
     # print(export_df)
 

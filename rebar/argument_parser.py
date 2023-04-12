@@ -52,10 +52,15 @@ subs_output_description = "Output file path for the subs tsv.\n\n"
 recombination_description = "Detect recombination.\n\n"
 recombination_tree_description = "Input newick path for the lineage tree.\n\n"
 recombination_barcodes_description = "Input csv path for the lineage barcodes.\n\n"
-recombination_nextclade_description = "Input tsv path for the nextclade qc.\n\n"
+recombination_subs_description = (
+    "Input tsv path from the subs subcommand output (or nextclade tsv).\n\n"
+)
 recombination_outdir_description = "Output directory for detection results.\n\n"
 recombination_exclude_shared_description = (
     "Exclude mutations shared by all parents when exporting.\n\n"
+)
+recombination_length_description = (
+    "Length of the reference genome, if genome_len column is not provided in subs.\n\n"
 )
 
 
@@ -76,7 +81,7 @@ def add_recombination_group(parser):
         "--barcodes", required=True, type=str, help=recombination_barcodes_description
     )
     required.add_argument(
-        "--nextclade", required=True, type=str, help=recombination_nextclade_description
+        "--subs", required=True, type=str, help=recombination_subs_description
     )
     required.add_argument(
         "--outdir", required=True, type=str, help=recombination_outdir_description
@@ -87,7 +92,16 @@ def add_recombination_group(parser):
         action="store_true",
         help=recombination_exclude_shared_description,
     )
+    required.add_argument(
+        "--threads", required=False, type=int, help=threads_description
+    )
     parser.add_argument("--log", required=False, type=str, help=log_description)
+    parser.add_argument(
+        "--genome-length",
+        required=False,
+        type=int,
+        help=recombination_length_description,
+    )
 
 
 def add_subs_group(parser):
@@ -102,7 +116,7 @@ def add_subs_group(parser):
         "--reference", required=True, type=str, help=subs_reference_description
     )
     required.add_argument(
-        "--threads", required=True, type=int, help=threads_description
+        "--threads", required=False, type=int, help=threads_description
     )
     parser.add_argument("--log", required=False, type=str, help=log_description)
 

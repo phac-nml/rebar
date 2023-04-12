@@ -35,6 +35,7 @@ setup(
         "snipit>=1.0.7",
         "multiprocess>=0.70.14",
         "tqdm>=4.65.0",
+        "pre-commit==2.17.0",
     ],
     entry_points={
         "console_scripts": [

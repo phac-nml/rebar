@@ -2,7 +2,13 @@ import sys
 import logging
 
 NO_DATA_CHAR = "NA"
-GENOME_LEN = 29903
+
+LINEAGES_URL = (
+    "https://raw.githubusercontent.com/cov-lineages/pango-designation/master/"
+    "lineage_notes.txt"
+)
+
+BARCODES_URL = "https://github.com/andersen-lab/Freyja-data/raw/main/usher_barcodes.csv"
 
 
 def create_logger(logfile=None):

@@ -31,3 +31,6 @@ class Substitution:
 
     def __add__(self, other):
         return self.coord + other.coord
+
+    def __hash__(self):
+        return hash(str(self))
