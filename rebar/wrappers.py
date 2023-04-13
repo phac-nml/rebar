@@ -18,7 +18,7 @@ from Bio.Phylo.BaseTree import Clade
 # rebar objects
 from .utils import create_logger, NO_DATA_CHAR, LINEAGES_URL, BARCODES_URL
 from .genome import genome_mp
-from .backbone import backbone_search_lineage_mp, backbone_search_recombination_mp
+from .export import Export
 from . import RebarError
 
 # Quiet URL fetch requests messages
@@ -262,7 +262,7 @@ def detect_recombination(params):
     #   3. Import the lineage nomenclature tree, to identify designated recombinants.
 
     # Import the dataframe from the `subs` module, or alternatively from nextclade
-    logger.info(str(datetime.now()) + "\tImporting subs: " + params.subs)
+    logger.info(str(datetime.now()) + "\tImporting substitutions: " + params.subs)
     subs_df = pd.read_csv(params.subs, sep="\t").fillna(NO_DATA_CHAR)
 
     # We're going to need to know the genome length later, raise an error
@@ -295,254 +295,82 @@ def detect_recombination(params):
     recombinant_lineages = [c.name for c in recombinant_tree.find_clades()]
 
     # -------------------------------------------------------------------------
-    # PHASE 2: PARSE SUBTITUTIONS AND BARCODES
+    # PHASE 2: DETECT RECOMBINATION
     # Objectives:
-    #  1. Store substitutions, deletions, and missing data as class attributes.
-    #    - Ex. `genome.substitutions`, `genome.deletions`
-    #  2. Summarize matches to lineage barcodes.
-    #    - Ex. `genome.barcode_summary`
+    #   1. Store substitutions, deletions, and missing data as class attributes.
+    #     - Ex. `genome.substitutions`, `genome.deletions`
+    #   2. Summarize matches to lineage barcodes.
+    #     - Ex. `genome.barcode_summary`
+    #   3. Assign a lineage to each genome based on the highest barcode matches.
+    #   4. Flag any samples that are definitively not recombinants.
+    #     - Based on a perfect match to a non-recombinant lineage barcode.
+    #     - These will be excluded from downstream processing to save time.
+    #   5. Flag any samples that are recursive recombinants.
+    #     - A perfect match to XBB.1.5 (BA.2.75 x BA.2.10) is not recursive.
+    #     - A perfect match to XBL (XBB.1 x BA.2.75) is a recursive recombinant.
+    #     - All other cases will have recursive set to `None`, for uncertainty
+    #     - This will determine whether we allow recombinants to be the original
+    #       parents in subsequent phases.
 
-    logger.info(str(datetime.now()) + "\tParsing genomic records.")
+    logger.info(str(datetime.now()) + "\tDetecting recombination.")
 
     # The objects we're going to process in parallel
     # We specifically use iterrows, otherwise it iterates over the df cols
     iterator = subs_df.iterrows()
     # The function we're going to apply to the iterator in parallel
     # Note the use of functools.partial to later pass named arguments to `imap`
-    # `genome_mp` is a multiprocessing wrapper for instatiating the Genome class
-    task = functools.partial(genome_mp, barcodes=barcodes_df)
+    # `genome_mp` is a multiprocessing wrapper for the Genome class
+    task = functools.partial(
+        genome_mp,
+        barcodes=barcodes_df,
+        tree=tree,
+        recombinant_tree=recombinant_tree,
+        recombinant_lineages=recombinant_lineages,
+        max_depth=params.max_depth,
+        min_subs=params.min_subs,
+        min_length=params.min_length,
+    )
     # The total number of objects, for the progress bar
     total = len(subs_df)
     # Create pool for multiprocessing tasks
     pool = Pool(params.threads)
     # Reminder: list() is required, to run the tasks and update progress bar
     genomes = list(tqdm(pool.imap_unordered(task, iterator), total=total))
+
     # Pool memory management, don't accept new tasks and wait for them to finish
     pool.close()
     pool.join()
-
-    # -------------------------------------------------------------------------
-    # PHASE 3: IDENTIFY RECOMBINANTS
-    # Objectives:
-    #   1. Assign a lineage to each genome based on the highest barcode matches.
-    #   2. Flag any samples that are definitively not recombinants.
-    #        - Based on a perfect match to a non-recombinant lineage barcode.
-    #        - These will be excluded from downstream processing to save time.
-    #   3. Flag any samples that are definitively NOT recursive recombinants.
-    #        - A perfect match to XBB.1.5 (BA.2.75 x BA.2.10) is not recursive.
-    #        - A perfect match to XBL (XBB.1 x BA.2.75) is a recursive recombinant.
-    #        - All other cases will have recursive set to `None`, for uncertainty
-    #        - This will determine whether we allow recombinants to be the original
-    #          parents in subsequent phases.
-
-    logger.info(str(datetime.now()) + "\tIdentifying recombinants.")
-
-    # The objects we're going to iterate over
-    iterator = genomes
-    # The function we're going to apply to the iterator in parallel
-    # Note the use of functools.partial to later pass named arguments to `imap`
-    # `backbone_search_lineage_mp` is a multiprocessing wrapper for instatiating the
-    #   Backbone class, and searching for the main lineage assignment.
-    task = functools.partial(
-        backbone_search_lineage_mp,
-        barcodes=barcodes_df,
-        tree=tree,
-        recombinant_lineages=recombinant_lineages,
-        recombinant_tree=recombinant_tree,
-    )
-    # The total number of objects, for the progress bar
-    total = len(iterator)
-    # Create pool for multiprocessing tasks
-    pool = Pool(params.threads)
-    # Reminder: list() is required, to run the tasks and update progress bar
-    genomes = list(tqdm(pool.imap_unordered(task, iterator), total=total))
-    # Pool memory management, don't accept new tasks and wait for them to finish
-    pool.close()
-    pool.join()
-
-    # -------------------------------------------------------------------------
-    # PHASE 2: IDENTIFY FIRST RECOMBINATION PARENT
-    # Objectives
-    #   1. Identify the lineage that is the next best barcode match.
-
-    logger.info(str(datetime.now()) + "\tIdentifying first recombination parent.")
-
-    # The objects we're going to iterate over
-    iterator = genomes
-    # The function we're going to apply to the iterator in parallel
-    # Note the use of functools.partial to later pass named arguments to `imap`
-    # `backbone_search_recombination_mp` is a multiprocessing wrapper for the
-    #   Backbone class, and searching for a recombination parent.
-    task = functools.partial(
-        backbone_search_recombination_mp,
-        parent="parent_1",
-        barcodes=barcodes_df,
-        tree=tree,
-        recombinant_lineages=recombinant_lineages,
-        recombinant_tree=recombinant_tree,
-    )
-    # The total number of objects, for the progress bar
-    total = len(iterator)
-    # Create pool for multiprocessing tasks
-    pool = Pool(params.threads)
-    # Reminder: list() is required, to run the tasks and update progress bar
-    genomes = list(tqdm(pool.imap_unordered(task, iterator), total=total))
-    # Pool memory management, don't accept new tasks and wait for them to finish
-    pool.close()
-    pool.join()
-
-    # -------------------------------------------------------------------------
-    # PHASE 3: IDENTIFY SECOND RECOMBINATION PARENT
-    # Objectives
-    #   1. Identify the lineage that is the next best barcode match.
-    #   2. Keep searching through top barcodes until:
-    #      - Breakpoints were detected, OR
-    #      - The max_depth has been reached.
-
-    logger.info(str(datetime.now()) + "\tIdentifying secondary recombination parent.")
-
-    # The objects we're going to iterate over
-    iterator = genomes
-    # The function we're going to apply to the iterator in parallel
-    # Note the use of functools.partial to later pass named arguments to `imap`
-    # `backbone_search_recombination_mp` is a multiprocessing wrapper for the
-    #   Backbone class, and searching for a recombination parent.
-    task = functools.partial(
-        backbone_search_recombination_mp,
-        parent="parent_2",
-        barcodes=barcodes_df,
-        tree=tree,
-        recombinant_lineages=recombinant_lineages,
-        recombinant_tree=recombinant_tree,
-    )
-    # The total number of objects, for the progress bar
-    total = len(iterator)
-    # Create pool for multiprocessing tasks
-    pool = Pool(params.threads)
-    # Reminder: list() is required, to run the tasks and update progress bar
-    genomes = list(tqdm(pool.imap_unordered(task, iterator), total=total))
-    # Pool memory management, don't accept new tasks and wait for them to finish
-    pool.close()
-    pool.join()
-
-    quit()
-    parents_dict = {}
-    max_depth = 3
-
-    for genome in genomes:
-
-        if genome.recombinant == False:
-            continue
-
-        print(genome)
-
-        print(genome.backbone.top_lineages)
-        print(genome.barcode_summary)
-        # Filter barcode summary to remove the lineage and the first parent backbone
-        barcode_summary = genome.barcode_summary
-        barcode_summary[
-            ~(barcode_summary["lineage"].isin(genome.backbone.top_lineages))
-        ]
-        print(barcode_summary)
-        break
-        # barcode_summary_filter = genome.barcode_summary[
-        #     ~genome.barcode_summary["lineage"].isin(genome.backbone.top_lineages)
-        # ]
-        # alt_backbone = Backbone()
-        # alt_backbone.search(
-        #     genome=genome,
-        #     barcode_summary=barcode_summary_filter,
-        #     barcodes_df=barcodes_df,
-        #     tree=tree,
-        #     recombinant_lineages=recombinant_lineages,
-        #     include_recombinants=False,
-        # )
-
-        # result = genome.identify_breakpoints(alt_backbone)
-        # print(result)
-        # break
-        # genome.recombination_subs = result["subs_df"]
-        # genome.recombination_breakpoints = result["breakpoints"]
-        # genome.recombination_regions = result["regions"]
-        # # parents = [r["parent"] for r in genome.recombination_regions.values()]
-        # # parents = ",".join(np.unique(sorted(parents)))
-        # # if parents not in parents_dict:
-        # #     parents_dict[parents] = []
-
-        # # parents_dict[parents].append(genome)
-
-    quit()
 
     # -------------------------------------------------------------------------
     # Pass 3: Export
 
-    cols = [
-        "strain",
-        "is_recombinant",
-        "lineage",
-        "parents",
-        "breakpoints",
-        "regions",
-        "subs",
-    ]
+    logger.info(str(datetime.now()) + "\tPreparing to export.")
 
-    export_dict = {col: [] for col in cols}
+    # Unless requested, exclude non-recombinants from output
+    if not params.export_non_rec:
+        genomes = [g for g in genomes if len(g.recombination.breakpoints) > 0]
+    export = Export(
+        genomes=genomes, outdir=params.outdir, include_shared=params.include_shared
+    )
 
-    for genome in genomes:
-        if genome.is_recombinant == False:
-            for col in cols:
-                if col == "strain":
-                    export_dict["strain"].append(genome.id)
-                elif col == "lineage":
-                    export_dict["lineage"].append(genome.backbone.lineage)
-                elif col == "is_recombinant":
-                    export_dict["is_recombinant"].append(genome.is_recombinant)
-                else:
-                    export_dict[col].append(NO_DATA_CHAR)
-            continue
+    # YAML
+    logger.info(str(datetime.now()) + "\tExporting YAML.")
+    export.to_yaml()
 
-        regions = [
-            "{}:{}|{}".format(r["start"], r["end"], r["parent"])
-            for r in genome.recombination_regions.values()
-        ]
-        subs = [
-            "{}|{}".format(",".join([str(s) for s in r["subs"]]), r["parent"])
-            for r in genome.recombination_regions.values()
-        ]
-        parents = [r["parent"] for r in genome.recombination_regions.values()]
+    logger.info(str(datetime.now()) + "\tExporting dataframe.")
+    export.to_dataframe()
 
-        export_dict["strain"].append(genome.id)
-        export_dict["lineage"].append(genome.lineage)
-        export_dict["parents"].append(",".join(parents))
-        export_dict["regions"].append(",".join(regions))
-        export_dict["breakpoints"].append(",".join(genome.recombination_breakpoints))
-        export_dict["subs"].append(";".join(subs))
+    logger.info(str(datetime.now()) + "\tExporting dataframes by parent.")
+    export.to_dataframes()
 
-    export_df = pd.DataFrame(export_dict)
-    file_name = "recombination.tsv"
-    file_path = os.path.join(params.outdir, file_name)
-    export_df.to_csv(file_path, sep="\t", index=False)
-    # print(export_df)
+    # Dataframe
+    logger.info(str(datetime.now()) + "\tExporting alignments by parent.")
+    export.to_alignments()
 
-    # for parent in parents_dict:
-    #     print(parent)
-    #     print(parents_dict[parent])
-    quit()
-    logger.info(str(datetime.now()) + "\tExporting results to: " + params.outdir)
-    recombinants = [g for g in genomes]
-    for genome in recombinants:
+    # Snipit figures
+    logger.info(str(datetime.now()) + "\tExporting snipit by parent.")
+    export.to_snipit(ext=params.snipit_format)
 
-        file_name = "test.tsv"
-        file_path = os.path.join(params.outdir, file_name)
-        genome.recombination_subs.to_csv(file_path, sep="\t", index=False)
-
-        if params.exclude_shared:
-            genome.recombination_subs = genome.recombination_subs.query(
-                "parent != 'shared'"
-            )
-
-        # Create the alignment of Ns + informative positions
-        genome.write_snipit(exclude_shared=params.exclude_shared, outdir=params.outdir)
-        break
-
+    # Finish
     logger.info(str(datetime.now()) + "\tFinished module: recombination")
+    return 0

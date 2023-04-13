@@ -55,13 +55,26 @@ recombination_barcodes_description = "Input csv path for the lineage barcodes.\n
 recombination_subs_description = (
     "Input tsv path from the subs subcommand output (or nextclade tsv).\n\n"
 )
+recombination_max_depth_description = (
+    "The maximum search depth to look for parents through the top lineage matches.\n\n"
+)
+recombination_min_subs_description = (
+    "The minimum number of consecutive barcode positions from each parent.\n\n"
+)
+recombination_min_len_description = (
+    "The minimum genomic region length each parent must contribute.\n\n"
+)
 recombination_outdir_description = "Output directory for detection results.\n\n"
-recombination_exclude_shared_description = (
-    "Exclude mutations shared by all parents when exporting.\n\n"
+recombination_include_shared_description = (
+    "Include mutations shared by all parents when exporting.\n\n"
 )
 recombination_length_description = (
     "Length of the reference genome, if genome_len column is not provided in subs.\n\n"
 )
+recombination_export_non_rec_description = (
+    "Include non-recombinant samples in output files.\n\n"
+)
+recombination_snipit_format_description = "snipit format extension for figures.\n\n"
 
 
 def add_barcodes_group(parser):
@@ -87,10 +100,10 @@ def add_recombination_group(parser):
         "--outdir", required=True, type=str, help=recombination_outdir_description
     )
     parser.add_argument(
-        "--exclude-shared",
+        "--include-shared",
         required=False,
         action="store_true",
-        help=recombination_exclude_shared_description,
+        help=recombination_include_shared_description,
     )
     required.add_argument(
         "--threads", required=False, type=int, help=threads_description
@@ -101,6 +114,40 @@ def add_recombination_group(parser):
         required=False,
         type=int,
         help=recombination_length_description,
+    )
+    parser.add_argument(
+        "--max-depth",
+        required=False,
+        default=10,
+        type=int,
+        help=recombination_max_depth_description,
+    )
+    parser.add_argument(
+        "--min-subs",
+        required=False,
+        default=3,
+        type=int,
+        help=recombination_min_subs_description,
+    )
+    parser.add_argument(
+        "--min-length",
+        required=False,
+        default=1,
+        type=int,
+        help=recombination_min_len_description,
+    )
+    parser.add_argument(
+        "--export-non-rec",
+        required=False,
+        action="store_true",
+        help=recombination_export_non_rec_description,
+    )
+    parser.add_argument(
+        "--snipit-format",
+        required=False,
+        default="pdf",
+        type=str,
+        help=recombination_snipit_format_description,
     )
 
 
