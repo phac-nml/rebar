@@ -33,6 +33,7 @@ class Genome:
         max_depth=1,
         min_subs=1,
         min_length=1,
+        mask=0,
     ):
         """
         Genome constructor. Parses genomic features from a sequence records or
@@ -72,9 +73,23 @@ class Genome:
         # Entry point #1, from fasta alignment
         if record:
             self.id = record.id
-            self.seq = record.seq
+            self.seq = str(record.seq)
+
+            # Mask genome sequence
+            self.seq = "".join(
+                (["N"] * mask)  # 5' masking
+                + [self.seq[mask:-mask]]  # in between, unmasked bases
+                + ["N"] * mask  # 3' masking
+            )
 
         if reference and self.seq:
+            # Mask genome sequence
+            reference.seq = str(reference.seq)
+            reference.seq = "".join(
+                (["N"] * mask)  # 5' masking
+                + [reference.seq[mask:-mask]]  # in between, unmasked bases
+                + ["N"] * mask  # 3' masking
+            )
             self.parse_sequence(reference)
 
         # Entry point #2, from subs dataframe
@@ -141,11 +156,8 @@ class Genome:
         self.missing       : list
         self.genome_length : int
         """
-        # Dashes (-) at the 5' and 3' end should be treated as
-        # missing data, not true deletions
-        terminal_5p = True
-        terminal_3p = False
-        terminal_char = ["N", "-", "N-"]
+
+        coord = 0
 
         for i, bases in enumerate(zip(reference.seq, self.seq)):
             r = bases[0]
@@ -153,40 +165,25 @@ class Genome:
             # Genomic coordinates are 1 based
             coord = i + 1
 
-            # Collapse all downstream and upstream bases
-            upstream_bases = "".join(set(self.seq[:i]))
-            downstream_bases = "".join(set(self.seq[i + 1 :]))
-
-            if (
-                len(upstream_bases) > 0
-                and terminal_5p
-                and upstream_bases not in terminal_char
-            ):
-                terminal_5p = False
-            if (
-                len(downstream_bases) > 0
-                and not terminal_3p
-                and downstream_bases in terminal_char
-            ):
-                terminal_3p = True
+            # print(i, r, s)
 
             # Missing Data
             if s == "N":
-                self.missing.append(coord)
-            elif (s == "-" and terminal_5p) or (s == "-" and terminal_3p):
                 self.missing.append(coord)
 
             # Deletions
             elif s == "-":
                 self.deletions.append(coord)
 
-            # Substitutions
+            # Substitution, missing ref data
             elif r == "N":
                 continue
 
+            # Substitution, true
             elif r != s:
                 sub = "{ref}{coord}{alt}".format(ref=r, coord=coord, alt=s)
                 self.substitutions.append(Substitution(sub))
+            next
 
         self.genome_length = coord
         return 0
@@ -340,15 +337,21 @@ class Genome:
         else:
             recombination_dict = self.recombination.to_dict()
 
+            # only write parents if recombination detected:
+            if not self.recombination.parent_2.lineage:
+                parents = ""
+            else:
+                parents = "{},{}".format(
+                    self.recombination.parent_1.lineage,
+                    self.recombination.parent_2.lineage,
+                )
+
             genome_dataframe = pd.DataFrame(
                 {
                     "strain": [self.id],
                     "lineage": [self.lineage.lineage],
                     "recombinant": [self.lineage.recombinant],
-                    "parents": "{},{}".format(
-                        self.recombination.parent_1.lineage,
-                        self.recombination.parent_2.lineage,
-                    ),
+                    "parents": parents,
                     "breakpoints": recombination_dict["breakpoints"],
                     "regions": recombination_dict["regions"],
                 }
@@ -468,6 +471,9 @@ class Genome:
 
         # Save a copy of the barcode summary, before we modify it
         barcode_summary = self.barcode_summary
+        print(self)
+        print("barcode_summary_initial:")
+        print(barcode_summary)
 
         # Option 1. Definitely not a recursive recombinant.
         #           Exclude all recombinant lineages from new search.
@@ -485,6 +491,8 @@ class Genome:
             barcode_summary = barcode_summary[
                 ~barcode_summary["lineage"].isin(self.lineage.top_lineages)
             ]
+        print("barcode_summary_filter:")
+        print(barcode_summary)
 
         # Assign parent_1
         self.recombination.parent_1 = self.lineage_assignment(
@@ -494,12 +502,20 @@ class Genome:
             recombinant_lineages=recombinant_lineages,
             recombinant_tree=recombinant_tree,
         )
+        print("parent_1")
+        print(self.recombination.parent_1)
 
         # Assign parent_2
         # Exclude the backbone and parent_1 lineages, to start out with
-        exclude_lineages = (
-            self.lineage.top_lineages + self.recombination.parent_1.top_lineages
-        )
+        # exclude_lineages = (
+        #     self.lineage.top_lineages + self.recombination.parent_1.top_lineages
+        # )
+        # Exclude the backbone and all descendants of parent_1
+        parent_1_tree = next(tree.find_clades(self.recombination.parent_1.lineage))
+        parent_1_descendants = [c.name for c in parent_1_tree.find_clades()]
+        exclude_lineages = self.lineage.top_lineages + parent_1_descendants
+        print("exclude_lineages:")
+        print(exclude_lineages)
         recombination_detected = False
         depth = 0
 
@@ -512,6 +528,9 @@ class Genome:
             barcode_summary = barcode_summary[
                 ~barcode_summary["lineage"].isin(exclude_lineages)
             ]
+            print("-" * 80)
+            print("DEPTH:", depth)
+            print(barcode_summary)
 
             # Summarize the barcode support for the next top lineages
             parent_2 = self.lineage_assignment(
@@ -521,6 +540,8 @@ class Genome:
                 recombinant_lineages=recombinant_lineages,
                 recombinant_tree=recombinant_tree,
             )
+            print("parent_2:")
+            print(parent_2)
 
             # Detect recombination
             recombination = Recombination(
@@ -536,10 +557,14 @@ class Genome:
             if len(recombination.breakpoints) > 0:
                 recombination_detected = True
                 self.recombination = recombination
+                self.lineage.recombinant = True
 
             # Otherwise, update our exclude lineages for the next search
             else:
                 exclude_lineages += parent_2.top_lineages
+
+        if not recombination_detected:
+            self.lineage.recombinant = False
 
         return 0
 
@@ -559,8 +584,8 @@ def genome_mp(iterator, **kwargs):
         # First value is index, second value is series
         kwargs["subs_row"] = iterator[1]
 
-    else:
-        raise RebarError("Unknown iterator was passed to genome_mp.")
+    # else:
+    #    raise RebarError("Unknown iterator was passed to genome_mp.")
 
     genome = Genome(**kwargs)
     return genome

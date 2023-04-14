@@ -92,12 +92,15 @@ class Recombination:
             }
         ).sort_values(by="substitution")
 
+        print(list(subs_df["substitution"]))
+        print(list(subs_df["parent"]))
         # Search for genomic blocks from each parent
         # Just look at the subs that are uniq to one parent and detected in sample
         subs_uniq_df = subs_df[
             (subs_df["parent"] != "shared")
             & (subs_df["substitution"].isin(genome.substitutions))
         ]
+        print(subs_uniq_df)
 
         # The subs_df has to have at minimum these uniq subs from each parent
         if len(subs_uniq_df) < (min_subs * 2):
@@ -146,7 +149,7 @@ class Recombination:
         regions_filter = {}
         for start in regions:
             num_subs = len(regions[start]["subs"])
-            region_len = regions[start]["end"] - start
+            region_len = (regions[start]["end"] - start) + 1
             if num_subs < min_subs:
                 continue
             if region_len < min_length:

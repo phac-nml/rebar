@@ -127,25 +127,6 @@ class Barcode:
             ]
         )
         conflict_subs = sorted(conflict_ref + conflict_alt)
-
-        # Check if any of the top_lineages contain the conflict subs
-        if len(top_lineages) > 1:
-            for max_lin in top_lineages:
-                # Filter the barcodes to just this lineage
-                barcode_summary_filter = barcode_summary[
-                    barcode_summary["lineage"] == max_lin
-                ]
-                max_lin_barcode = Barcode()
-                max_lin_barcode.search(
-                    genome=genome,
-                    barcode_summary=barcode_summary_filter,
-                    barcodes=barcodes,
-                    tree=tree,
-                )
-                conflict_subs = [
-                    s for s in conflict_subs if s not in max_lin_barcode.support
-                ]
-
         conflict_ref = [s for s in conflict_ref if s in conflict_subs]
         conflict_alt = [s for s in conflict_alt if s in conflict_subs]
 

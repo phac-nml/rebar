@@ -14,6 +14,9 @@ def get_version():
 with open("README.md", "r") as fh:
     long_description = fh.read()
 
+with open("requirements.txt", "r") as r:
+    require_list = r.read().strip().split("\n")
+
 setup(
     name="rebar",
     version=get_version(),
@@ -26,17 +29,7 @@ setup(
     keywords="SARS-CoV-2, recombination",
     url="https://github.com/phac-nml/rebar",
     packages=["rebar"],
-    install_requires=[
-        "requests>=2.27.1",
-        "biopython>=1.79",
-        "pandas>=1.4.1",
-        "numpy>=1.22.3",
-        "pango_aliasor>=0.2.2",
-        "snipit>=1.0.7",
-        "multiprocess>=0.70.14",
-        "tqdm>=4.65.0",
-        "pre-commit==2.17.0",
-    ],
+    install_requires=require_list,
     entry_points={
         "console_scripts": [
             "rebar = rebar.__main__:main",

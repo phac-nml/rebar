@@ -8,7 +8,18 @@ LINEAGES_URL = (
     "lineage_notes.txt"
 )
 
-BARCODES_URL = "https://github.com/andersen-lab/Freyja-data/raw/main/usher_barcodes.csv"
+BARCODES_USHER_URL = (
+    "https://github.com/andersen-lab/Freyja-data/raw/main/usher_barcodes.csv"
+)
+BARCODES_NEXTCLADE_URL = (
+    "https://raw.githubusercontent.com/corneliusroemer/pango-sequences/"
+    "main/data/pango-consensus-sequences_summary.json"
+)
+
+PANGO_SEQUENCES_URL = (
+    "https://raw.githubusercontent.com/corneliusroemer/pango-sequences/"
+    "main/data/pango-consensus-sequences_genome-nuc.fasta.zst"
+)
 
 
 def create_logger(logfile=None):

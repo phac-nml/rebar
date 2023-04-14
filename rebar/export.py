@@ -33,6 +33,10 @@ class Export:
         result = {}
 
         for genome in self.genomes:
+            # No recombination detected, skip
+            if len(genome.recombination.breakpoints) == 0:
+                continue
+            # Recombination detected, proceed
             parents = sorted(
                 [
                     genome.recombination.parent_1.lineage,

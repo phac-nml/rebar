@@ -1,0 +1,10 @@
+requests>=2.27.1
+biopython>=1.79
+pandas>=1.4.1
+numpy>=1.22.3
+pango_aliasor>=0.2.2
+snipit>=1.0.7
+multiprocess>=0.70.14
+tqdm>=4.65.0
+pre-commit==2.17.0
+zstandard

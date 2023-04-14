@@ -8,15 +8,22 @@ import re
 from io import StringIO
 
 # PyPI libraries
+import zstandard as zstd
 import pandas as pd
 from tqdm import tqdm
 from multiprocess import Pool  # Note that we are importing "multiprocess", no "ing"!
 from pango_aliasor.aliasor import Aliasor
-from Bio import Phylo, SeqIO
+from Bio import Phylo, SeqIO, Entrez
 from Bio.Phylo.BaseTree import Clade
 
 # rebar objects
-from .utils import create_logger, NO_DATA_CHAR, LINEAGES_URL, BARCODES_URL
+from .utils import (
+    NO_DATA_CHAR,
+    LINEAGES_URL,
+    BARCODES_USHER_URL,
+    BARCODES_NEXTCLADE_URL,
+    PANGO_SEQUENCES_URL,
+)
 from .genome import genome_mp
 from .export import Export
 from . import RebarError
@@ -24,6 +31,89 @@ from . import RebarError
 # Quiet URL fetch requests messages
 logging.getLogger("requests").setLevel(logging.WARNING)
 logging.getLogger("urllib3").setLevel(logging.WARNING)
+
+
+def run(params):
+    """
+    Run the full rebar pipeline.
+
+    Parameters
+    ----------
+        output : str
+            file path for output barcodes csv.
+        log : str
+            file path for output log.
+    """
+
+    #  run barcodes subcommand
+    if not params.barcodes:
+        params.output = os.path.join(params.outdir, "barcodes.csv")
+        download_barcodes(params)
+        params.barcodes = params.output
+
+    # run tree subcommand
+    if not params.tree:
+        params.output = os.path.join(params.outdir, "tree.nwk")
+        lineage_tree(params)
+        params.tree = params.output
+
+    # run subs subcommand
+    if not params.subs:
+        params.output = os.path.join(params.outdir, "subs.tsv")
+        analyze_subs(params)
+        params.subs = params.output
+
+    # detect recombination
+    detect_recombination(params)
+
+    return 0
+
+
+def validate(params):
+    """
+    Validate rebar on all designated lineages.
+    """
+    logger = params.logger
+    logger.info(str(datetime.now()) + "\t" + "-" * 40)
+    logger.info(str(datetime.now()) + "\tBEGINNING SUBCOMMAND: validate.")
+
+    # Download latest lineage consensus sequences
+    if not params.alignment:
+        logger.info(str(datetime.now()) + "\tDownloading lineage consensus sequences.")
+        file_name = PANGO_SEQUENCES_URL.split("/")[-1]
+        # The sequences are a .fasta.zst file, remove the .zst as we're decompressing
+        fasta_path = os.path.join(params.outdir, os.path.splitext(file_name)[0])
+        response = requests.get(PANGO_SEQUENCES_URL, stream=True)
+
+        decomp = zstd.ZstdDecompressor()
+        with open(fasta_path, "wb") as outfile:
+            decomp.copy_stream(response.raw, outfile)
+
+        params.alignment = fasta_path
+
+    # download reference if not provided
+    if not params.reference:
+        if not params.email:
+            raise RebarError(
+                "If --reference is not provided,"
+                " --email is required for NCBI downloads."
+            )
+        logger.info(str(datetime.now()) + "\tDownloading reference genome.")
+        Entrez.email = params.email
+        handle = Entrez.efetch(
+            db="nucleotide", id="MN908947.3", rettype="fasta", retmode="text"
+        )
+        records = SeqIO.read(handle, "fasta")
+        reference_path = os.path.join(params.outdir, "reference.fasta")
+        with open(reference_path, "w") as outfile:
+            SeqIO.write(records, outfile, "fasta")
+
+        params.reference = reference_path
+
+    run(params)
+
+    logger.info(str(datetime.now()) + "\t" + "-" * 40)
+    logger.info(str(datetime.now()) + "\tFINISHED SUBCOMMAND: validate.")
 
 
 def download_barcodes(params):
@@ -38,12 +128,15 @@ def download_barcodes(params):
             file path for output log.
     """
     logger = params.logger
-    logger.info(str(datetime.now()) + "\tBeginning module: barcodes.")
+    logger.info(str(datetime.now()) + "\t" + "-" * 40)
+    logger.info(str(datetime.now()) + "\tBEGINNING SUBCOMMAND: barcodes.")
 
     # Download latest lineage barcodes
     logger.info(str(datetime.now()) + "\tDownloading lineage barcodes.")
-    r = requests.get(BARCODES_URL)
+    r = requests.get(BARCODES_USHER_URL)
     barcodes_text = r.text
+
+    print(BARCODES_NEXTCLADE_URL)
 
     # Validate barcodes structure
     logger.info(str(datetime.now()) + "\tValidating barcode structure.")
@@ -60,7 +153,7 @@ def download_barcodes(params):
     barcodes_df.to_csv(params.output, sep=",", index=False)
 
     # Finish
-    logger.info(str(datetime.now()) + "\tFinished module: barcodes.")
+    logger.info(str(datetime.now()) + "\tFINISHED SUBCOMMAND: barcodes.")
     return 0
 
 
@@ -76,8 +169,9 @@ def lineage_tree(params):
             file path for output log.
     """
 
-    logger = create_logger(params.log)
-    logger.info(str(datetime.now()) + "\tBeginning module: tree.")
+    logger = params.logger
+    logger.info(str(datetime.now()) + "\t" + "-" * 40)
+    logger.info(str(datetime.now()) + "\tBEGINNING SUBCOMMAND: tree.")
 
     # Create output directory if it doesn't exist
     outdir = os.path.dirname(params.output)
@@ -88,7 +182,7 @@ def lineage_tree(params):
     # -------------------------------------------------------------------------
     # Download latest designated lineages from pango-designation
 
-    logger.info(str(datetime.now()) + "\tDownloading list of designated lineages.")
+    logger.info(str(datetime.now()) + "\tDownloading designated lineage summaries.")
     r = requests.get(LINEAGES_URL)
     lineage_text = r.text
 
@@ -98,6 +192,8 @@ def lineage_tree(params):
 
     # Convert the text table to list
     lineages = []
+
+    # This could be parallelized, but it's already extremely fast
     for line in lineage_text.split("\n"):
         if "Withdrawn" in line or line.startswith("Lineage"):
             continue
@@ -138,6 +234,7 @@ def lineage_tree(params):
     clade = Clade(name="X", clades=[], branch_length=1)
     tree.clades.append(clade)
 
+    # This can't be parallelized, sequential processing is required
     for lineage in lineages:
 
         # Identify the parent
@@ -178,7 +275,7 @@ def lineage_tree(params):
     logger.info(str(datetime.now()) + "\tExporting newick tree: " + params.output)
     Phylo.write(tree, params.output, "newick")
 
-    logger.info(str(datetime.now()) + "\tFinished module: tree.")
+    logger.info(str(datetime.now()) + "\tFINISHED SUBCOMMAND: tree.")
 
     return 0
 
@@ -196,7 +293,8 @@ def analyze_subs(params):
     """
 
     logger = params.logger
-    logger.info(str(datetime.now()) + "\tBeginning module: subs.")
+    logger.info(str(datetime.now()) + "\t" + "-" * 40)
+    logger.info(str(datetime.now()) + "\tBeginning subcommand: subs.")
 
     # Import reference
     logger.info(str(datetime.now()) + "\tImporting reference: " + params.reference)
@@ -211,16 +309,16 @@ def analyze_subs(params):
     # Parse substitutions
     logger.info(str(datetime.now()) + "\tParsing substitutions from alignment.")
 
-    p = Pool(params.threads)
-    genomes = list(
-        tqdm(
-            p.imap(functools.partial(genome_mp, reference=ref_rec), records),
-            total=num_records,
-        )
-    )
-    # Pool memory management, don't accept anymore new tasks and wait for them
-    p.close()
-    p.join()
+    # Process genomes in parallel
+    pool = Pool(params.threads)
+    iterator = records
+    task = functools.partial(genome_mp, reference=ref_rec, mask=params.mask)
+    total = num_records
+    genomes = list(tqdm(pool.imap_unordered(task, iterator), total=total))
+
+    # Pool memory management, don't accept anymore new tasks and wait
+    pool.close()
+    pool.join()
 
     # Export
     logger.info(str(datetime.now()) + "\tExporting results to: " + params.output)
@@ -229,7 +327,7 @@ def analyze_subs(params):
     df.to_csv(params.output, sep="\t", index=False)
 
     # Finish
-    logger.info(str(datetime.now()) + "\tFinished module: subs.")
+    logger.info(str(datetime.now()) + "\tFinished subcommand: subs.")
     return 0
 
 
@@ -252,7 +350,8 @@ def detect_recombination(params):
     """
 
     logger = params.logger
-    logger.info(str(datetime.now()) + "\tBeginning module: recombination.")
+    logger.info(str(datetime.now()) + "\t" + "-" * 40)
+    logger.info(str(datetime.now()) + "\tBEGINNING SUBCOMMAND: recombination.")
 
     # -------------------------------------------------------------------------
     # PHASE 1: SETUP
@@ -285,6 +384,13 @@ def detect_recombination(params):
     barcodes_df = pd.read_csv(params.barcodes, sep=",")
     # Rename the empty first column that should be lineage
     barcodes_df.rename(columns={"Unnamed: 0": "lineage"}, inplace=True)
+    # Convert this to a more efficient data structure
+    # dict where keys are mutations, and values are list of lineages observed in
+
+    # barcodes_dict = {
+    #     Substitution(sub): list(barcodes_df[barcodes_df[sub] == 1]["lineage"])
+    #     for sub in barcodes_df.columns[1:]
+    # }
 
     # Import tree
     logger.info(str(datetime.now()) + "\tImporting tree: " + params.tree)
@@ -314,12 +420,12 @@ def detect_recombination(params):
 
     logger.info(str(datetime.now()) + "\tDetecting recombination.")
 
-    # The objects we're going to process in parallel
-    # We specifically use iterrows, otherwise it iterates over the df cols
-    iterator = subs_df.iterrows()
-    # The function we're going to apply to the iterator in parallel
-    # Note the use of functools.partial to later pass named arguments to `imap`
-    # `genome_mp` is a multiprocessing wrapper for the Genome class
+    # Process genomes in parallel
+    pool = Pool(params.threads)
+
+    iterator = [rec for rec in subs_df.iterrows() if rec[1]["strain"] in ["XAA"]]
+    # total = len(subs_df)
+    total = len(iterator)
     task = functools.partial(
         genome_mp,
         barcodes=barcodes_df,
@@ -330,14 +436,9 @@ def detect_recombination(params):
         min_subs=params.min_subs,
         min_length=params.min_length,
     )
-    # The total number of objects, for the progress bar
-    total = len(subs_df)
-    # Create pool for multiprocessing tasks
-    pool = Pool(params.threads)
-    # Reminder: list() is required, to run the tasks and update progress bar
-    genomes = list(tqdm(pool.imap_unordered(task, iterator), total=total))
-
-    # Pool memory management, don't accept new tasks and wait for them to finish
+    genomes = list(tqdm(pool.imap(task, iterator), total=total))
+    print(genomes)
+    # Pool memory management, don't accept new tasks and wait
     pool.close()
     pool.join()
 
@@ -346,8 +447,8 @@ def detect_recombination(params):
 
     logger.info(str(datetime.now()) + "\tPreparing to export.")
 
-    # Unless requested, exclude non-recombinants from output
-    if not params.export_non_rec:
+    # If requested, exclude non-recombinants from output
+    if params.exclude_non_recomb:
         genomes = [g for g in genomes if len(g.recombination.breakpoints) > 0]
     export = Export(
         genomes=genomes, outdir=params.outdir, include_shared=params.include_shared
@@ -372,5 +473,5 @@ def detect_recombination(params):
     export.to_snipit(ext=params.snipit_format)
 
     # Finish
-    logger.info(str(datetime.now()) + "\tFinished module: recombination")
+    logger.info(str(datetime.now()) + "\tFINISHED SUBCOMMAND: recombination")
     return 0
