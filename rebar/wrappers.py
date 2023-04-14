@@ -13,7 +13,7 @@ import pandas as pd
 from tqdm import tqdm
 from multiprocess import Pool  # Note that we are importing "multiprocess", no "ing"!
 from pango_aliasor.aliasor import Aliasor
-from Bio import Phylo, SeqIO, Entrez
+from Bio import Phylo, SeqIO
 from Bio.Phylo.BaseTree import Clade
 
 # rebar objects
@@ -27,6 +27,7 @@ from .utils import (
 from .genome import genome_mp
 from .export import Export
 from . import RebarError
+from .substitution import Substitution
 
 # Quiet URL fetch requests messages
 logging.getLogger("requests").setLevel(logging.WARNING)
@@ -44,7 +45,6 @@ def run(params):
         log : str
             file path for output log.
     """
-
     #  run barcodes subcommand
     if not params.barcodes:
         params.output = os.path.join(params.outdir, "barcodes.csv")
@@ -91,25 +91,6 @@ def validate(params):
 
         params.alignment = fasta_path
 
-    # download reference if not provided
-    if not params.reference:
-        if not params.email:
-            raise RebarError(
-                "If --reference is not provided,"
-                " --email is required for NCBI downloads."
-            )
-        logger.info(str(datetime.now()) + "\tDownloading reference genome.")
-        Entrez.email = params.email
-        handle = Entrez.efetch(
-            db="nucleotide", id="MN908947.3", rettype="fasta", retmode="text"
-        )
-        records = SeqIO.read(handle, "fasta")
-        reference_path = os.path.join(params.outdir, "reference.fasta")
-        with open(reference_path, "w") as outfile:
-            SeqIO.write(records, outfile, "fasta")
-
-        params.reference = reference_path
-
     run(params)
 
     logger.info(str(datetime.now()) + "\t" + "-" * 40)
@@ -131,26 +112,77 @@ def download_barcodes(params):
     logger.info(str(datetime.now()) + "\t" + "-" * 40)
     logger.info(str(datetime.now()) + "\tBEGINNING SUBCOMMAND: barcodes.")
 
-    # Download latest lineage barcodes
-    logger.info(str(datetime.now()) + "\tDownloading lineage barcodes.")
+    # -------------------------------------------------------------------------
+    # Nextclade barcodes
+
+    logger.info(str(datetime.now()) + "\tDownloading Nextclade barcodes.")
+    r = requests.get(BARCODES_NEXTCLADE_URL)
+    barcodes_data = r.json()
+    barcodes_dict = {
+        lineage: barcodes_data[lineage]["nucSubstitutions"] for lineage in barcodes_data
+    }
+
+    # Convert to dataframe
+    logger.info(str(datetime.now()) + "\tConverting barcodes to dataframe.")
+
+    lineages = list(barcodes_dict.keys())
+    subs = [item for sublist in barcodes_dict.values() for item in sublist]
+    subs = [s for s in set(subs) if s != ""]
+    subs_detections = {s: [0] * len(barcodes_dict) for s in subs}
+    for s in subs:
+        for i, lineage in enumerate(lineages):
+            if s in barcodes_dict[lineage]:
+                subs_detections[s][i] = 1
+
+    barcodes_nextclade_df = pd.DataFrame(subs_detections)
+    barcodes_nextclade_df.insert(loc=0, column="lineage", value=lineages)
+
+    # -------------------------------------------------------------------------
+    # UShER Barcodes
+
+    logger.info(str(datetime.now()) + "\tDownloading UShER barcodes.")
     r = requests.get(BARCODES_USHER_URL)
     barcodes_text = r.text
+    barcodes_usher_df = pd.read_csv(StringIO(barcodes_text), sep=",")
+    # Rename the empty first column that should be lineage
+    barcodes_usher_df.rename(columns={"Unnamed: 0": "lineage"}, inplace=True)
 
-    print(BARCODES_NEXTCLADE_URL)
+    logger.info(str(datetime.now()) + "\tSupplementing missing Nextclade lineages.")
 
-    # Validate barcodes structure
-    logger.info(str(datetime.now()) + "\tValidating barcode structure.")
-    try:
-        barcodes_df = pd.read_csv(StringIO(barcodes_text), sep=",")
-        logger.info(str(datetime.now()) + "\tValidation successful.")
-    except Exception as e:
-        logger.info(str(datetime.now()) + "\tValidation failed.")
-        logger.info(str(datetime.now()) + "\t\t" + e.message + " " + e.args)
-        return 1
+    nextclade_lineages = list(barcodes_nextclade_df["lineage"])
+    usher_lineages = list(barcodes_usher_df["lineage"])
+
+    usher_uniq = [l for l in usher_lineages if l not in nextclade_lineages]
+
+    for lineage in usher_uniq:
+        logger.info(str(datetime.now()) + "\t\tAdding UShER lineage " + lineage + ".")
+        lineage_row = pd.DataFrame({s: [0] for s in barcodes_nextclade_df.columns})
+        lineage_row["lineage"] = lineage
+
+        barcodes_nextclade_df = pd.concat(
+            [barcodes_nextclade_df, lineage_row], ignore_index=True
+        )
+        lineage_i = len(barcodes_nextclade_df) - 1
+
+        df = barcodes_usher_df[barcodes_usher_df["lineage"] == lineage]
+
+        detections = list(df.columns[df.apply(lambda col: col.sum() == 1)])
+        for sub in detections:
+            if sub not in barcodes_nextclade_df:
+                barcodes_nextclade_df[sub] = 0
+            barcodes_nextclade_df.at[lineage_i, sub] = 1
+
+    # Sort columns by genomic position
+    subs_order = sorted([Substitution(s) for s in barcodes_nextclade_df.columns[1:]])
+    subs_order_str = [str(s) for s in subs_order]
+    cols_order = ["lineage"] + subs_order_str
+    barcodes_df = barcodes_nextclade_df[cols_order]
 
     # Export
-    logger.info(str(datetime.now()) + "\tExporting barcodes: " + params.output)
-    barcodes_df.to_csv(params.output, sep=",", index=False)
+    barcodes_path = os.path.join(params.outdir, "barcodes.csv")
+    logger.info(str(datetime.now()) + "\tExporting barcodes: " + barcodes_path)
+    # Export to csv, to be consistent with usher barcodes format
+    barcodes_df.to_csv(barcodes_path, sep=",", index=False)
 
     # Finish
     logger.info(str(datetime.now()) + "\tFINISHED SUBCOMMAND: barcodes.")
@@ -172,12 +204,6 @@ def lineage_tree(params):
     logger = params.logger
     logger.info(str(datetime.now()) + "\t" + "-" * 40)
     logger.info(str(datetime.now()) + "\tBEGINNING SUBCOMMAND: tree.")
-
-    # Create output directory if it doesn't exist
-    outdir = os.path.dirname(params.output)
-    if not os.path.exists(outdir) and outdir != "":
-        logger.info(str(datetime.now()) + "\tCreating output directory: " + outdir)
-        os.mkdir(outdir)
 
     # -------------------------------------------------------------------------
     # Download latest designated lineages from pango-designation
@@ -272,11 +298,12 @@ def lineage_tree(params):
     # -------------------------------------------------------------------------
     # Export
 
-    logger.info(str(datetime.now()) + "\tExporting newick tree: " + params.output)
-    Phylo.write(tree, params.output, "newick")
+    tree_path = os.path.join(params.outdir, "tree.nwk")
+    logger.info(str(datetime.now()) + "\tExporting newick tree: " + tree_path)
+    Phylo.write(tree, tree_path, "newick")
 
+    # Finish
     logger.info(str(datetime.now()) + "\tFINISHED SUBCOMMAND: tree.")
-
     return 0
 
 
@@ -321,10 +348,11 @@ def analyze_subs(params):
     pool.join()
 
     # Export
-    logger.info(str(datetime.now()) + "\tExporting results to: " + params.output)
+    subs_path = os.path.join(params.outdir, "subs.tsv")
+    logger.info(str(datetime.now()) + "\tExporting results to: " + subs_path)
     dfs = [genome.to_dataframe() for genome in genomes]
     df = pd.concat(dfs)
-    df.to_csv(params.output, sep="\t", index=False)
+    df.to_csv(subs_path, sep="\t", index=False)
 
     # Finish
     logger.info(str(datetime.now()) + "\tFinished subcommand: subs.")
@@ -382,15 +410,6 @@ def detect_recombination(params):
     # Import lineage barcodes
     logger.info(str(datetime.now()) + "\tImporting barcodes: " + params.barcodes)
     barcodes_df = pd.read_csv(params.barcodes, sep=",")
-    # Rename the empty first column that should be lineage
-    barcodes_df.rename(columns={"Unnamed: 0": "lineage"}, inplace=True)
-    # Convert this to a more efficient data structure
-    # dict where keys are mutations, and values are list of lineages observed in
-
-    # barcodes_dict = {
-    #     Substitution(sub): list(barcodes_df[barcodes_df[sub] == 1]["lineage"])
-    #     for sub in barcodes_df.columns[1:]
-    # }
 
     # Import tree
     logger.info(str(datetime.now()) + "\tImporting tree: " + params.tree)
@@ -423,9 +442,15 @@ def detect_recombination(params):
     # Process genomes in parallel
     pool = Pool(params.threads)
 
-    iterator = [rec for rec in subs_df.iterrows() if rec[1]["strain"] in ["XAA"]]
-    # total = len(subs_df)
+    iterator = subs_df.iterrows()
+    total = len(subs_df)
+
+    # Debuging
+    # iterator = [rec for rec in subs_df.iterrows() if rec[1]["strain"].startswith("X")]
+    iterator = [rec for rec in subs_df.iterrows() if rec[1]["strain"] == "XD"]
+    # iterator = iterator[0:1]
     total = len(iterator)
+
     task = functools.partial(
         genome_mp,
         barcodes=barcodes_df,

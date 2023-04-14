@@ -471,7 +471,7 @@ class Genome:
 
         # Save a copy of the barcode summary, before we modify it
         barcode_summary = self.barcode_summary
-        print(self)
+        print(self.to_yaml())
         print("barcode_summary_initial:")
         print(barcode_summary)
 

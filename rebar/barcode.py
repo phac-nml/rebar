@@ -76,19 +76,22 @@ class Barcode:
         }
         return barcode_dict
 
-    def search(self, genome, barcode_summary, barcodes, tree):
+    def search(self, genome, barcode_summary, barcodes, tree, max_lineages=10):
 
         # Identify the lineages with the largest number of barcode matches
         max_barcodes = barcode_summary["total"].max()
         top_lineages = list(
             barcode_summary[barcode_summary["total"] == max_barcodes]["lineage"]
         )
+        top_lineages = top_lineages[0:max_lineages]
 
         # Get MRCA of all top_lineages
         lineage = tree.common_ancestor(top_lineages).name
 
         # Query the levels of support/conflict in this barcode
         lineage_row = barcodes.query("lineage == @lineage")
+        print(lineage)
+        print(lineage_row)
         lineage_subs = sorted(
             [
                 Substitution(s)

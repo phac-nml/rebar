@@ -52,9 +52,6 @@ def main():
         else:
             params.threads = 1
 
-        # m = mp.Process(target=addi, args=(num1, num2))
-        # return_code = params.func(params)
-        # with Pool(params.threads) as params.pool:
         return_code = params.func(params)
     sys.exit(return_code)
 
