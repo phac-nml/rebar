@@ -471,9 +471,9 @@ class Genome:
 
         # Save a copy of the barcode summary, before we modify it
         barcode_summary = self.barcode_summary
-        print(self.to_yaml())
-        print("barcode_summary_initial:")
-        print(barcode_summary)
+        # print(self.to_yaml())
+        # print("barcode_summary_initial:")
+        # print(barcode_summary)
 
         # Option 1. Definitely not a recursive recombinant.
         #           Exclude all recombinant lineages from new search.
@@ -491,8 +491,8 @@ class Genome:
             barcode_summary = barcode_summary[
                 ~barcode_summary["lineage"].isin(self.lineage.top_lineages)
             ]
-        print("barcode_summary_filter:")
-        print(barcode_summary)
+        # print("barcode_summary_filter:")
+        # print(barcode_summary)
 
         # Assign parent_1
         self.recombination.parent_1 = self.lineage_assignment(
@@ -502,8 +502,8 @@ class Genome:
             recombinant_lineages=recombinant_lineages,
             recombinant_tree=recombinant_tree,
         )
-        print("parent_1")
-        print(self.recombination.parent_1)
+        # print("parent_1")
+        # print(self.recombination.parent_1)
 
         # Assign parent_2
         # Exclude the backbone and parent_1 lineages, to start out with
@@ -514,8 +514,8 @@ class Genome:
         parent_1_tree = next(tree.find_clades(self.recombination.parent_1.lineage))
         parent_1_descendants = [c.name for c in parent_1_tree.find_clades()]
         exclude_lineages = self.lineage.top_lineages + parent_1_descendants
-        print("exclude_lineages:")
-        print(exclude_lineages)
+        # print("exclude_lineages:")
+        # print(exclude_lineages)
         recombination_detected = False
         depth = 0
 
@@ -528,9 +528,9 @@ class Genome:
             barcode_summary = barcode_summary[
                 ~barcode_summary["lineage"].isin(exclude_lineages)
             ]
-            print("-" * 80)
-            print("DEPTH:", depth)
-            print(barcode_summary)
+            # print("-" * 80)
+            # print("DEPTH:", depth)
+            # print(barcode_summary)
 
             # Summarize the barcode support for the next top lineages
             parent_2 = self.lineage_assignment(
@@ -540,8 +540,8 @@ class Genome:
                 recombinant_lineages=recombinant_lineages,
                 recombinant_tree=recombinant_tree,
             )
-            print("parent_2:")
-            print(parent_2)
+            # print("parent_2:")
+            # print(parent_2)
 
             # Detect recombination
             recombination = Recombination(

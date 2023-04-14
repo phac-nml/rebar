@@ -446,9 +446,9 @@ def detect_recombination(params):
     total = len(subs_df)
 
     # Debuging
-    # iterator = [rec for rec in subs_df.iterrows() if rec[1]["strain"].startswith("X")]
-    iterator = [rec for rec in subs_df.iterrows() if rec[1]["strain"] == "XD"]
-    # iterator = iterator[0:1]
+    iterator = [rec for rec in subs_df.iterrows() if rec[1]["strain"].startswith("X")]
+    # iterator = [rec for rec in subs_df.iterrows() if rec[1]["strain"] == "XD"]
+    iterator = iterator[0:10]
     total = len(iterator)
 
     task = functools.partial(
