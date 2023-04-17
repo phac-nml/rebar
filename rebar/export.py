@@ -81,7 +81,7 @@ class Export:
             genome_length = self.parents[parents][0].genome_length
             df = self.dataframes[parents]
 
-            coords = [s.coord for s in list(df["substitution"])]
+            coords = [coord for coord in list(df["coord"])]
             aln_lines = []
             # Construct a pseudo-alignment where every position is 'N'
             # unless it's a barcode substitution in the dataframe
@@ -129,4 +129,5 @@ class Export:
                 parent_2=parent_2,
                 ext=ext,
             )
+            print(cmd_str)
             subprocess.run(cmd_str, shell=True)

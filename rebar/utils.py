@@ -1,5 +1,8 @@
 import sys
 import logging
+import os
+import requests
+import zstandard as zstd
 
 NO_DATA_CHAR = "NA"
 
@@ -35,3 +38,16 @@ def create_logger(logfile=None):
     handler.setLevel(logging.DEBUG)
     logger.addHandler(handler)
     return logger
+
+
+def download_consensus_sequences(outdir):
+    file_name = PANGO_SEQUENCES_URL.split("/")[-1]
+    # The sequences are a .fasta.zst file, remove the .zst as we're decompressing
+    fasta_path = os.path.join(outdir, os.path.splitext(file_name)[0])
+    response = requests.get(PANGO_SEQUENCES_URL, stream=True)
+
+    decomp = zstd.ZstdDecompressor()
+    with open(fasta_path, "wb") as outfile:
+        decomp.copy_stream(response.raw, outfile)
+
+    return fasta_path

@@ -3,6 +3,7 @@
 import argparse
 from .wrappers import (
     run,
+    run_test,
     validate,
     lineage_tree,
     download_barcodes,
@@ -12,129 +13,165 @@ from .wrappers import (
 from . import version
 
 
+def add_alignment_param(parser, required=False):
+    text = "Path to alignment fasta."
+    parser.add_argument("--alignment", required=required, type=str, help=text)
+
+
+def add_barcodes_param(parser, required=False):
+    text = "Input barcodes csv, from `barcodes` subcommand."
+    parser.add_argument("--barcodes", required=required, type=str, help=text)
+
+
+def add_debug_param(parser, required=False):
+    text = "Log debugging output."
+    parser.add_argument("--debug", required=required, action="store_true", help=text)
+
+
+def add_exclude_non_recomb_param(parser, required=False):
+    text = "Exclude non-recombinant samples from output files"
+    parser.add_argument(
+        "--exclude-non-recomb", required=required, action="store_true", help=text
+    )
+
+
+def add_log_param(parser, required=False):
+    text = "Log file path."
+    parser.add_argument("--log", required=required, type=str, help=text)
+
+
+def add_lineages_param(parser, required=False):
+    text = "Comma-separated list of lineages to test (ex. 'XBF,XBB.1.5')."
+    parser.add_argument("--lineages", required=required, type=str, help=text)
+
+
+def add_mask_param(parser, required=False):
+    text = "Number of bases to mask at 5' and 3' end of genome (Default: 200)."
+    parser.add_argument("--mask", required=required, default=200, type=int, help=text)
+
+
+def add_max_depth_param(parser, required=False):
+    text = "Maximum search depth to look for parents (Default: 20)."
+    parser.add_argument(
+        "--max-depth", required=required, default=20, type=int, help=text
+    )
+
+
+def add_min_length_param(parser, required=False):
+    text = (
+        "Minimum number of consecutive barcode positions from each parent (Default: 3)."
+    )
+    parser.add_argument(
+        "--min-length", required=required, default=3, type=int, help=text
+    )
+
+
+def add_min_subs_param(parser, required=False):
+    text = "Minimum number of lineage-determining substitutions from each parent (Default: 1)."
+    parser.add_argument("--min-subs", required=required, default=1, type=int, help=text)
+
+
+def add_outdir_param(parser, required=False):
+    text = "Output directory for results (Default: output)."
+    parser.add_argument(
+        "--outdir", required=required, default="output", type=str, help=text
+    )
+
+
+def add_reference_param(parser, required=False):
+    text = "Path to reference fasta."
+    parser.add_argument("--reference", required=required, type=str, help=text)
+
+
+def add_shared_param(parser, required=False):
+    text = "Include mutations shared by all parents when exporting."
+    parser.add_argument("--shared", required=required, action="store_true", help=text)
+
+
+def add_snipit_format_param(parser, required=False):
+    text = "snipit format extension for figures"
+    parser.add_argument(
+        "--snipit-format",
+        required=required,
+        default="pdf",
+        choices=["pdf", "png"],
+        type=str,
+        help=text,
+    )
+
+
+def add_subs_param(parser, required=False):
+    text = "Input subs tsv, from `subs` subcommand."
+    parser.add_argument("--subs", required=required, type=str, help=text)
+
+
+def add_threads_param(parser, required=False):
+    text = "Number of threads to use (Default: 1)."
+    parser.add_argument("--threads", required=required, type=int, default=1, help=text)
+
+
+def add_tree_param(parser, required=False):
+    text = "Input newick tree, from `tree` subcommand."
+    parser.add_argument("--tree", required=required, type=str, help=text)
+
+
 def add_params(parser, subcommand=None):
 
     required = parser.add_argument_group("required arguments")
 
     # Universal to all subcommands, optional
-    parser.add_argument(
-        "--threads",
-        required=False,
-        type=int,
-        default=1,
-        help="Number of threads to use.",
-    )
-    parser.add_argument("--log", required=False, type=str, help="Log file path.")
-    parser.add_argument(
-        "--outdir",
-        required=False,
-        type=str,
-        default=".",
-        help="Output directory for results.",
-    )
+    add_debug_param(parser, required=False)
+    add_log_param(parser, required=False)
+    add_outdir_param(parser, required=False)
+    add_threads_param(parser, required=False)
 
-    if subcommand in ["subs", "run", "validate"]:
-        required.add_argument(
-            "--reference", required=True, type=str, help="Path to reference fasta."
-        )
-        parser.add_argument(
-            "--mask",
-            required=False,
-            default=200,
-            type=int,
-            help="Number of bases to mask at 5' and 3' end of genome.",
-        )
+    # Note: tree has no specific subcommands
 
-    if subcommand in ["recombination"]:
-        required.add_argument(
-            "--tree",
-            required=True,
-            type=str,
-            help="Input newick tree, from `tree` subcommand.",
-        )
-        required.add_argument(
-            "--barcodes",
-            required=True,
-            type=str,
-            help="Input barcodes csv, from `barcodes` subcommand.",
-        )
-        required.add_argument(
-            "--subs",
-            required=True,
-            type=str,
-            help="Input subs tsv, from `subs` subcommand.",
-        )
+    if subcommand == "test":
+        add_lineages_param(parser=required, required=True)
 
-    if subcommand in ["recombination", "run", "validate"]:
-        parser.add_argument(
-            "--include-shared",
-            required=False,
-            action="store_true",
-            help="Include mutations shared by all parents when exporting.",
-        )
-        parser.add_argument(
-            "--max-depth",
-            required=False,
-            default=5,
-            type=int,
-            help="The maximum search depth to look for parents through the top lineage matches.",
-        )
-        parser.add_argument(
-            "--min-subs",
-            required=False,
-            default=2,
-            type=int,
-            help="The minimum number of consecutive barcode positions from each parent.",
-        )
-        parser.add_argument(
-            "--min-length",
-            required=False,
-            default=1,
-            type=int,
-            help="The minimum genomic region length each parent must contribute.",
-        )
-        parser.add_argument(
-            "--exclude-non-recomb",
-            required=False,
-            action="store_true",
-            help="Exclude non-recombinant samples from output files",
-        )
-        parser.add_argument(
-            "--snipit-format",
-            required=False,
-            default="pdf",
-            choices=["pdf", "png"],
-            type=str,
-            help="snipit format extension for figures",
-        )
+    # subs subcommand
+    if subcommand == "subs":
+        add_alignment_param(parser=required, required=True)
+        add_reference_param(parser=required, required=True)
 
-    if subcommand in ["subs", "recombination", "run"]:
-        required.add_argument(
-            "--alignment", required=True, type=str, help="Path to alignment fasta."
-        )
+        add_mask_param(parser=parser, required=False)
 
-    if subcommand in ["validate"]:
-        parser.add_argument(
-            "--alignment", required=False, type=str, help="Path to alignment fasta."
-        )
-        required.add_argument(
-            "--tree",
-            required=False,
-            type=str,
-            help="Input newick tree, from `tree` subcommand.",
-        )
-        required.add_argument(
-            "--barcodes",
-            required=False,
-            type=str,
-            help="Input barcodes csv, from `barcodes` subcommand.",
-        )
-        required.add_argument(
-            "--subs",
-            required=False,
-            type=str,
-            help="Input subs tsv, from `subs` subcommand.",
-        )
+    if subcommand == "recombination":
+        add_barcodes_param(parser=required, required=True)
+        add_subs_param(parser=required, required=True)
+        add_tree_param(parser=required, required=True)
+
+        add_exclude_non_recomb_param(parser=parser, required=False)
+        add_max_depth_param(parser=parser, required=False)
+        add_min_length_param(parser=parser, required=False)
+        add_min_subs_param(parser=parser, required=False)
+        add_shared_param(parser=parser, required=False)
+        add_snipit_format_param(parser=parser, required=False)
+
+    # for run, alignment is mandatory
+    if subcommand == "run":
+        add_alignment_param(parser=required, required=True)
+    # for validate, alignment is optional
+    if subcommand == "validate":
+        add_alignment_param(parser=required, required=False)
+
+    # run, validate, and test need everything
+    if subcommand in ["run", "validate", "test"]:
+
+        add_reference_param(parser=required, required=True)
+
+        add_barcodes_param(parser=required, required=False)
+        add_subs_param(parser=required, required=False)
+        add_tree_param(parser=required, required=False)
+
+        add_exclude_non_recomb_param(parser=parser, required=False)
+        add_mask_param(parser=parser, required=False)
+        add_max_depth_param(parser=parser, required=False)
+        add_min_length_param(parser=parser, required=False)
+        add_min_subs_param(parser=parser, required=False)
+        add_shared_param(parser=parser, required=False)
+        add_snipit_format_param(parser=parser, required=False)
 
 
 # -----------------------------------------------------------------------------
@@ -200,6 +237,12 @@ def make_parser():
     recombination_parser = subparsers.add_parser("recombination", description=rec_desc)
     add_params(recombination_parser, subcommand="recombination")
     recombination_parser.set_defaults(func=detect_recombination)
+
+    # test
+    test_desc = "Test rebar on select lineages.\n\n"
+    test_parser = subparsers.add_parser("test", description=test_desc)
+    add_params(test_parser, subcommand="test")
+    test_parser.set_defaults(func=run_test)
 
     # validate
     validate_desc = "Validate rebar on all designated lineages.\n\n"

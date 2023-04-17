@@ -2,7 +2,9 @@ test/
 data/
 build/
 validate/
+output/
 *.egg-info
 
 *.zip
 rebar/__pycache__
+snipit/

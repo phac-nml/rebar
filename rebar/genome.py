@@ -1,6 +1,7 @@
 # Standard Libraries
 import copy
 import yaml
+from datetime import datetime
 
 # PyPI libraries
 import pandas as pd
@@ -34,6 +35,8 @@ class Genome:
         min_subs=1,
         min_length=1,
         mask=0,
+        debug=False,
+        logger=None,
     ):
         """
         Genome constructor. Parses genomic features from a sequence records or
@@ -54,6 +57,9 @@ class Genome:
         barcodes : pd.core.frame.DataFrame
             Dataframe of lineage barcodes, from `rebar barcodes` subcommand
         """
+        # Debugging option
+        self.debug = debug
+        self.logger = logger
 
         # Generic genomic features
         self.id = None
@@ -73,6 +79,10 @@ class Genome:
         # Entry point #1, from fasta alignment
         if record:
             self.id = record.id
+            if self.debug:
+                self.logger.info(
+                    str(datetime.now()) + "\t\tParsing sample: " + record.id
+                )
             self.seq = str(record.seq)
 
             # Mask genome sequence
@@ -95,6 +105,8 @@ class Genome:
         # Entry point #2, from subs dataframe
         if type(subs_row) == pd.core.series.Series:
             self.id = subs_row["strain"]
+            if self.debug:
+                self.logger.info(str(datetime.now()) + "\tParsing sample: " + self.id)
             self.genome_length = subs_row["genome_length"]
             self.substitutions = self.parse_substitutions(subs_row=subs_row)
             self.deletions = self.ranges_to_coords(values=subs_row["deletions"])
@@ -111,6 +123,8 @@ class Genome:
             and recombinant_lineages
             and recombinant_tree
         ):
+            if self.debug:
+                self.logger.info(str(datetime.now()) + "\t\t" + "LINEAGE ASSIGNMENT:")
             self.lineage = self.lineage_assignment(
                 barcode_summary=self.barcode_summary,
                 barcodes=barcodes,
@@ -118,6 +132,7 @@ class Genome:
                 recombinant_lineages=recombinant_lineages,
                 recombinant_tree=recombinant_tree,
             )
+
             self.parent_assignment(
                 barcodes=barcodes,
                 tree=tree,
@@ -397,7 +412,12 @@ class Genome:
         return genome_yaml
 
     def lineage_assignment(
-        self, barcode_summary, barcodes, tree, recombinant_lineages, recombinant_tree
+        self,
+        barcode_summary,
+        barcodes,
+        tree,
+        recombinant_lineages,
+        recombinant_tree,
     ):
         """
         Assign genome to a lineage based on the top barcode matches.
@@ -427,6 +447,10 @@ class Genome:
             recombinant_lineages=recombinant_lineages,
             recombinant_tree=recombinant_tree,
         )
+
+        if self.debug:
+            lineage_str = barcode.to_yaml().replace("\n", "\n" + "\t" * 6)
+            self.logger.info(str(datetime.now()) + "\t\t\t" + lineage_str)
 
         return barcode
 
@@ -471,9 +495,7 @@ class Genome:
 
         # Save a copy of the barcode summary, before we modify it
         barcode_summary = self.barcode_summary
-        # print(self.to_yaml())
-        # print("barcode_summary_initial:")
-        # print(barcode_summary)
+        exclude_lineages = []
 
         # Option 1. Definitely not a recursive recombinant.
         #           Exclude all recombinant lineages from new search.
@@ -481,20 +503,22 @@ class Genome:
         #           If we remove all recombinant lineages from it's barcode summary
         #           the top lineage will become BJ.1.1 (BA.2.10*)
         if not self.lineage.recursive:
-            barcode_summary = barcode_summary[
-                ~barcode_summary["lineage"].isin(recombinant_lineages)
-            ]
+            exclude_lineages += recombinant_lineages
         # Option 2. Potentially recursive recombinant
         #           Exclude only original backbone lineages from new search.
         #           Ex. XBL is a recursive recombinant (XBB.1* and BA.2.75*)
         else:
-            barcode_summary = barcode_summary[
-                ~barcode_summary["lineage"].isin(self.lineage.top_lineages)
-            ]
+            exclude_lineages += self.lineage.top_lineages
         # print("barcode_summary_filter:")
         # print(barcode_summary)
 
+        barcode_summary = barcode_summary[
+            ~barcode_summary["lineage"].isin(exclude_lineages)
+        ]
+
         # Assign parent_1
+        if self.debug:
+            self.logger.info(str(datetime.now()) + "\t\tPARENT 1:")
         self.recombination.parent_1 = self.lineage_assignment(
             barcode_summary=barcode_summary,
             barcodes=barcodes,
@@ -502,22 +526,21 @@ class Genome:
             recombinant_lineages=recombinant_lineages,
             recombinant_tree=recombinant_tree,
         )
-        # print("parent_1")
-        # print(self.recombination.parent_1)
+
+        # If parent_1 has no conflict_refs, don't search for more parents
+        if len(self.recombination.parent_1.conflict_ref) == 0:
+            return 0
 
         # Assign parent_2
-        # Exclude the backbone and parent_1 lineages, to start out with
-        # exclude_lineages = (
-        #     self.lineage.top_lineages + self.recombination.parent_1.top_lineages
-        # )
         # Exclude the backbone and all descendants of parent_1
         parent_1_tree = next(tree.find_clades(self.recombination.parent_1.lineage))
         parent_1_descendants = [c.name for c in parent_1_tree.find_clades()]
-        exclude_lineages = self.lineage.top_lineages + parent_1_descendants
-        # print("exclude_lineages:")
-        # print(exclude_lineages)
+        exclude_lineages += parent_1_descendants
         recombination_detected = False
         depth = 0
+
+        # Just alt or ref?
+        conflict_subs = self.recombination.parent_1.conflict_alt
 
         # Search through the top lineages for a suitable parent 2
         # Keep searching unless we max out the depth counter or find recombination
@@ -528,11 +551,22 @@ class Genome:
             barcode_summary = barcode_summary[
                 ~barcode_summary["lineage"].isin(exclude_lineages)
             ]
-            # print("-" * 80)
-            # print("DEPTH:", depth)
-            # print(barcode_summary)
+
+            # Focus on the conflict_subs in barcodes
+            conflict_cols = ["lineage"] + [str(s) for s in conflict_subs]
+            barcodes_conflict = barcodes[conflict_cols]
+            barcode_summary = self.summarise_barcodes(barcodes_conflict)
+            # Exclude the previous loops lineages
+            barcode_summary = barcode_summary[
+                ~barcode_summary["lineage"].isin(exclude_lineages)
+            ]
 
             # Summarize the barcode support for the next top lineages
+            if self.debug:
+                self.logger.info(
+                    str(datetime.now())
+                    + "\t\tPARENT 2 | DEPTH: {} / {}".format(depth, max_depth)
+                )
             parent_2 = self.lineage_assignment(
                 barcode_summary=barcode_summary,
                 barcodes=barcodes,
@@ -540,8 +574,6 @@ class Genome:
                 recombinant_lineages=recombinant_lineages,
                 recombinant_tree=recombinant_tree,
             )
-            # print("parent_2:")
-            # print(parent_2)
 
             # Detect recombination
             recombination = Recombination(

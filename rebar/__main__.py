@@ -33,7 +33,7 @@ def main():
             params.logger.info(
                 str(datetime.now()) + "\tCreating output directory: " + params.outdir
             )
-            os.mkdir(params.outdir)
+            os.makedirs(params.outdir)
 
         # Initialize system resources for multiprocessing
         available_cpus = cpu_count()

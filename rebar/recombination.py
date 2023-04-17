@@ -1,6 +1,8 @@
 import yaml
 import pandas as pd
 from .barcode import Barcode
+from datetime import datetime
+from .substitution import Substitution
 
 
 class Recombination:
@@ -74,37 +76,90 @@ class Recombination:
         parent_1_subs = [s for s in parent_1.barcode if s not in parent_2.barcode]
         parent_2_subs = [s for s in parent_2.barcode if s not in parent_1.barcode]
 
-        # Store the origin of each mutation
-        all_subs_origin = [
-            parent_1.lineage
-            if s in parent_1_subs
-            else parent_2.lineage
-            if s in parent_2_subs
-            else "shared"
-            for s in all_subs
-        ]
-
         # Organize into a dataframe where rows are substitutions
         subs_df = pd.DataFrame(
             {
-                "substitution": all_subs,
-                "parent": all_subs_origin,
+                # "substitution": all_subs,
+                "coord": [s.coord for s in all_subs],
+                "Reference": [s.ref for s in all_subs],
+                parent_1.lineage: [
+                    s.alt if s in parent_1_subs else s.ref for s in all_subs
+                ],
+                parent_2.lineage: [
+                    s.alt if s in parent_2_subs else s.ref for s in all_subs
+                ],
+                genome.id: [
+                    "N"
+                    if s.coord in genome.missing
+                    else "-"
+                    if s.coord in genome.deletions
+                    else s.alt
+                    if s in genome.substitutions
+                    else s.ref
+                    for s in all_subs
+                ],
             }
-        ).sort_values(by="substitution")
+        ).sort_values(by="coord")
 
-        # print(list(subs_df["substitution"]))
-        # print(list(subs_df["parent"]))
+        # Identify private genome substitutions and exclude
+        private_sub_coords = list(
+            subs_df[
+                (subs_df[genome.id] != subs_df[parent_1.lineage])
+                & (subs_df[genome.id] != subs_df[parent_2.lineage])
+                & (subs_df[genome.id] != subs_df["Reference"])
+            ]["coord"]
+        )
+        subs_df = subs_df[~subs_df["coord"].isin(private_sub_coords)]
+
+        # Identify genome sub origins by parent, this is not an efficient method
+        genome_subs_origin = []
+        for rec in subs_df.iterrows():
+            genome_base = rec[1][genome.id]
+            parent_1_base = rec[1][parent_1.lineage]
+            parent_2_base = rec[1][parent_2.lineage]
+            if genome_base == parent_1_base and genome_base == parent_2_base:
+                origin = "shared"
+            elif genome_base == parent_1_base:
+                origin = parent_1.lineage
+            elif genome_base == parent_2_base:
+                origin = parent_2.lineage
+
+            genome_subs_origin.append(origin)
+
+        subs_df.insert(loc=1, column="parent", value=genome_subs_origin)
+
+        # There has to be at least x min_length barcodes from each parent
+        parent_1_num_subs = len(subs_df[subs_df["parent"] == parent_1.lineage])
+        parent_2_num_subs = len(subs_df[subs_df["parent"] == parent_2.lineage])
+        if (parent_1_num_subs < min_length) or (parent_2_num_subs < min_length):
+            return None
+
+        # Each parent must have at least x min_subs lineage-determining
+        parent_1_uniq = subs_df[
+            (subs_df["parent"] == parent_1.lineage)
+            & (subs_df[parent_1.lineage] != subs_df["Reference"])
+            & (subs_df[parent_1.lineage] != subs_df[parent_2.lineage])
+        ]
+        parent_1_num_uniq = len(parent_1_uniq)
+        parent_2_uniq = subs_df[
+            (subs_df["parent"] == parent_2.lineage)
+            & (subs_df[parent_2.lineage] != subs_df["Reference"])
+            & (subs_df[parent_2.lineage] != subs_df[parent_1.lineage])
+        ]
+        parent_2_num_uniq = len(parent_2_uniq)
+
+        if (parent_1_num_uniq < min_subs) or (parent_2_num_uniq < min_subs):
+            return None
+
         # Search for genomic blocks from each parent
         # Just look at the subs that are uniq to one parent and detected in sample
-        subs_uniq_df = subs_df[
-            (subs_df["parent"] != "shared")
-            & (subs_df["substitution"].isin(genome.substitutions))
-        ]
-        # print(subs_uniq_df)
+        subs_uniq_df = subs_df[(subs_df["parent"] != "shared")]
 
-        # The subs_df has to have at minimum these uniq subs from each parent
-        if len(subs_uniq_df) < (min_subs * 2):
-            return None
+        if genome.debug:
+            genome.logger.info(str(datetime.now()) + "\t\t\tBARCODE ORIGINS:")
+            subs_md = subs_uniq_df.to_markdown(index=False)
+            subs_str = subs_md.replace("\n", "\n" + "\t" * 7)
+            genome.logger.info(str(datetime.now()) + "\t\t\t\t" + subs_str)
 
         # Identifying breakpoint regions
         regions = {}
@@ -114,7 +169,9 @@ class Recombination:
 
         for rec in subs_uniq_df.iterrows():
             p_curr = rec[1]["parent"]
-            sub = rec[1]["substitution"]
+            sub = Substitution(
+                "{}{}{}".format(rec[1]["Reference"], rec[1]["coord"], rec[1][genome.id])
+            )
             # First region
             if not p_prev:
                 start = sub.coord
@@ -147,14 +204,38 @@ class Recombination:
         #   - At least X consecutive subs per region
         #   - At least X bases per region
         regions_filter = {}
+        prev_start = None
+        prev_parent = None
+
         for start in regions:
-            num_subs = len(regions[start]["subs"])
-            region_len = (regions[start]["end"] - start) + 1
-            if num_subs < min_subs:
+            parent = regions[start]["parent"]
+            end = regions[start]["end"]
+            length_subs = len(regions[start]["subs"])
+
+            if length_subs < min_length:
                 continue
-            if region_len < min_length:
+
+            # First filtered region
+            if not prev_parent:
+                regions_filter[start] = regions[start]
+
+            # A region that continues the previous parent
+            # intermissions from other parents were skipped over
+            elif prev_parent == parent:
+                # Update the end coordinates
+                regions_filter[prev_start]["end"] = end
                 continue
-            regions_filter[start] = regions[start]
+            elif prev_parent != parent:
+                # start new region
+                regions_filter[start] = regions[start]
+
+            prev_parent = parent
+            prev_start = start
+
+        if genome.debug:
+            genome.logger.info(
+                str(datetime.now()) + "\t\t\tREGIONS: " + str(regions_filter)
+            )
 
         # If we're left with one filtered parental region, no recombination
         if len(regions_filter) < 2:
@@ -178,25 +259,6 @@ class Recombination:
 
             prev_start_coord = start_coord
             prev_end_coord = end_coord
-
-        # Add bases for reference, parents, and genome
-        subs_df["Reference"] = [s.ref for s in all_subs]
-        subs_df[parent_1.lineage] = [
-            s.alt if s in parent_1_subs else s.ref for s in all_subs
-        ]
-        subs_df[parent_2.lineage] = [
-            s.alt if s in parent_2_subs else s.ref for s in all_subs
-        ]
-        subs_df[genome.id] = [
-            "N"
-            if s.coord in genome.missing
-            else "-"
-            if s.coord in genome.deletions
-            else s.alt
-            if s in genome.substitutions
-            else s.ref
-            for s in all_subs
-        ]
 
         self.dataframe = subs_df
         self.regions = regions_filter

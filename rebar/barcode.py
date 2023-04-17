@@ -1,5 +1,7 @@
 import pandas as pd
 from .substitution import Substitution
+import yaml
+import numpy as np
 
 
 class Barcode:
@@ -15,6 +17,7 @@ class Barcode:
         # Initialize attributes
         self.lineage = None
         self.top_lineages = []
+        self.outlier_lineages = []
         self.recombinant = None
         self.recursive = None
         self.barcode = []
@@ -50,6 +53,8 @@ class Barcode:
             + str(self.lineage)
             + "\ntop_lineages: "
             + str(self.top_lineages)
+            + "\noutlier_lineages: "
+            + str(self.outlier_lineages)
             + "\nbarcode:      "
             + str(self.barcode)
             + "\nsupport:      "
@@ -68,6 +73,7 @@ class Barcode:
         barcode_dict = {
             "lineage": self.lineage,
             "top_lineages": ",".join(self.top_lineages),
+            "outlier_lineages": ",".join(self.outlier_lineages),
             "barcode": ",".join([str(s) for s in self.barcode]),
             "support": ",".join([str(s) for s in self.support]),
             "missing": ",".join([str(s) for s in self.missing]),
@@ -76,6 +82,24 @@ class Barcode:
         }
         return barcode_dict
 
+    def to_yaml(self, indent=2):
+        """
+        Convert Barcode object to yaml.
+
+        Returns
+        -------
+        genome_yaml : yaml
+            YAML representation of Barcode.
+        """
+
+        barcode_yaml = (
+            yaml.dump(self.to_dict(), sort_keys=False, indent=indent)
+            .replace("null", "")
+            .replace("''", "")
+            + "\n"
+        )
+        return barcode_yaml
+
     def search(self, genome, barcode_summary, barcodes, tree, max_lineages=10):
 
         # Identify the lineages with the largest number of barcode matches
@@ -83,9 +107,28 @@ class Barcode:
         top_lineages = list(
             barcode_summary[barcode_summary["total"] == max_barcodes]["lineage"]
         )
+
         # top_lineages = top_lineages[0:max_lineages]
 
         # Get MRCA of all top_lineages
+        lineage = tree.common_ancestor(top_lineages).name
+        distances = {}
+        # Check for top lineage outliers
+        # Based on the traditional IQR outlier formula
+        # More than 1.5 IQR above Q3 (aka 75 percentile)
+        for l in top_lineages:
+            distances[l] = tree.distance(lineage, l)
+
+        # IQR implementation using numpy
+        # Credit: @Jaime
+        # Source: https://stackoverflow.com/a/23229224
+        q75, q25 = np.percentile(list(distances.values()), [75, 25])
+        iqr = q75 - q25
+        outlier_threshold = q75 + (iqr * 1.5)
+
+        # Redo top lineages, outlier lineages, and MRCA
+        outlier_lineages = [l for l in top_lineages if distances[l] > outlier_threshold]
+        top_lineages = [l for l in top_lineages if l not in self.outlier_lineages]
         lineage = tree.common_ancestor(top_lineages).name
 
         # Query the levels of support/conflict in this barcode
@@ -135,6 +178,7 @@ class Barcode:
 
         self.lineage = lineage
         self.top_lineages = top_lineages
+        self.outlier_lineages = outlier_lineages
         self.barcode = lineage_subs
         self.support = support
         self.missing = missing

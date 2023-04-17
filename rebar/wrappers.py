@@ -8,7 +8,6 @@ import re
 from io import StringIO
 
 # PyPI libraries
-import zstandard as zstd
 import pandas as pd
 from tqdm import tqdm
 from multiprocess import Pool  # Note that we are importing "multiprocess", no "ing"!
@@ -18,11 +17,11 @@ from Bio.Phylo.BaseTree import Clade
 
 # rebar objects
 from .utils import (
+    download_consensus_sequences,
     NO_DATA_CHAR,
     LINEAGES_URL,
     BARCODES_USHER_URL,
     BARCODES_NEXTCLADE_URL,
-    PANGO_SEQUENCES_URL,
 )
 from .genome import genome_mp
 from .export import Export
@@ -69,6 +68,47 @@ def run(params):
     return 0
 
 
+def run_test(params):
+    """
+    Test rebar on select lineages.
+    """
+    logger = params.logger
+    logger.info(str(datetime.now()) + "\t" + "-" * 40)
+    logger.info(str(datetime.now()) + "\tBEGINNING SUBCOMMAND: test.")
+
+    # Download latest lineage consensus sequences
+    logger.info(str(datetime.now()) + "\tDownloading lineage consensus sequences.")
+    consensus_path = download_consensus_sequences(outdir=params.outdir)
+
+    # Search consensus sequences for target lineages
+    lineage_list = params.lineages.split(",")
+    logger.info(
+        str(datetime.now()) + "\tSearching consensus sequences for: " + params.lineages
+    )
+    fasta_lines = []
+    records = SeqIO.parse(consensus_path, "fasta")
+    for record in records:
+        if record.id in lineage_list:
+            fasta_lines.append(">" + str(record.id))
+            fasta_lines.append(str(record.seq))
+
+    alignment_path = os.path.join(params.outdir, "alignment.fasta")
+    logger.info(str(datetime.now()) + "\tExporting alignment to: " + alignment_path)
+    with open(alignment_path, "w") as outfile:
+        outfile.write("\n".join(fasta_lines) + "\n")
+
+    # Delete the consensus sequences file
+    os.remove(consensus_path)
+
+    # Run pipeline
+    params.alignment = alignment_path
+    run(params)
+
+    # Finish
+    logger.info(str(datetime.now()) + "\t" + "-" * 40)
+    logger.info(str(datetime.now()) + "\tFINISHED SUBCOMMAND: test.")
+
+
 def validate(params):
     """
     Validate rebar on all designated lineages.
@@ -78,18 +118,10 @@ def validate(params):
     logger.info(str(datetime.now()) + "\tBEGINNING SUBCOMMAND: validate.")
 
     # Download latest lineage consensus sequences
-    if not params.alignment:
-        logger.info(str(datetime.now()) + "\tDownloading lineage consensus sequences.")
-        file_name = PANGO_SEQUENCES_URL.split("/")[-1]
-        # The sequences are a .fasta.zst file, remove the .zst as we're decompressing
-        fasta_path = os.path.join(params.outdir, os.path.splitext(file_name)[0])
-        response = requests.get(PANGO_SEQUENCES_URL, stream=True)
+    logger.info(str(datetime.now()) + "\tDownloading lineage consensus sequences.")
+    consensus_path = download_consensus_sequences(outdir=params.outdir)
 
-        decomp = zstd.ZstdDecompressor()
-        with open(fasta_path, "wb") as outfile:
-            decomp.copy_stream(response.raw, outfile)
-
-        params.alignment = fasta_path
+    params.alignment = consensus_path
 
     run(params)
 
@@ -339,7 +371,13 @@ def analyze_subs(params):
     # Process genomes in parallel
     pool = Pool(params.threads)
     iterator = records
-    task = functools.partial(genome_mp, reference=ref_rec, mask=params.mask)
+    task = functools.partial(
+        genome_mp,
+        reference=ref_rec,
+        mask=params.mask,
+        debug=params.debug,
+        logger=params.logger,
+    )
     total = num_records
     genomes = list(tqdm(pool.imap_unordered(task, iterator), total=total))
 
@@ -445,7 +483,7 @@ def detect_recombination(params):
     iterator = subs_df.iterrows()
     total = len(subs_df)
 
-    # Debuging
+    # Debugging
     iterator = [rec for rec in subs_df.iterrows() if rec[1]["strain"].startswith("X")]
     # iterator = [rec for rec in subs_df.iterrows() if rec[1]["strain"] == "XD"]
     iterator = iterator[0:10]
@@ -453,6 +491,8 @@ def detect_recombination(params):
 
     task = functools.partial(
         genome_mp,
+        debug=params.debug,
+        logger=params.logger,
         barcodes=barcodes_df,
         tree=tree,
         recombinant_tree=recombinant_tree,
@@ -461,8 +501,8 @@ def detect_recombination(params):
         min_subs=params.min_subs,
         min_length=params.min_length,
     )
+
     genomes = list(tqdm(pool.imap(task, iterator), total=total))
-    print(genomes)
     # Pool memory management, don't accept new tasks and wait
     pool.close()
     pool.join()
@@ -475,9 +515,7 @@ def detect_recombination(params):
     # If requested, exclude non-recombinants from output
     if params.exclude_non_recomb:
         genomes = [g for g in genomes if len(g.recombination.breakpoints) > 0]
-    export = Export(
-        genomes=genomes, outdir=params.outdir, include_shared=params.include_shared
-    )
+    export = Export(genomes=genomes, outdir=params.outdir, include_shared=params.shared)
 
     # YAML
     logger.info(str(datetime.now()) + "\tExporting YAML.")
