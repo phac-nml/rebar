@@ -57,12 +57,19 @@ def add_max_depth_param(parser, required=False):
     )
 
 
-def add_min_length_param(parser, required=False):
+def add_min_consecutive_param(parser, required=False):
     text = (
         "Minimum number of consecutive barcode positions from each parent (Default: 3)."
     )
     parser.add_argument(
-        "--min-length", required=required, default=3, type=int, help=text
+        "--min-consecutive", required=required, default=3, type=int, help=text
+    )
+
+
+def add_min_length_param(parser, required=False):
+    text = "Minimum length of regions contributed by each parent (Default: 100)."
+    parser.add_argument(
+        "--min-length", required=required, default=100, type=int, help=text
     )
 
 
@@ -145,6 +152,7 @@ def add_params(parser, subcommand=None):
         add_exclude_non_recomb_param(parser=parser, required=False)
         add_max_depth_param(parser=parser, required=False)
         add_min_length_param(parser=parser, required=False)
+        add_min_consecutive_param(parser=parser, required=False)
         add_min_subs_param(parser=parser, required=False)
         add_shared_param(parser=parser, required=False)
         add_snipit_format_param(parser=parser, required=False)
@@ -169,6 +177,7 @@ def add_params(parser, subcommand=None):
         add_mask_param(parser=parser, required=False)
         add_max_depth_param(parser=parser, required=False)
         add_min_length_param(parser=parser, required=False)
+        add_min_consecutive_param(parser=parser, required=False)
         add_min_subs_param(parser=parser, required=False)
         add_shared_param(parser=parser, required=False)
         add_snipit_format_param(parser=parser, required=False)

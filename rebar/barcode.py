@@ -2,6 +2,7 @@ import pandas as pd
 from .substitution import Substitution
 import yaml
 import numpy as np
+import statistics
 
 
 class Barcode:
@@ -100,7 +101,15 @@ class Barcode:
         )
         return barcode_yaml
 
-    def search(self, genome, barcode_summary, barcodes, tree, max_lineages=10):
+    def search(
+        self,
+        genome,
+        barcode_summary,
+        barcodes,
+        tree,
+        max_lineages=10,
+        outlier_method="prefix",
+    ):
 
         # Identify the lineages with the largest number of barcode matches
         max_barcodes = barcode_summary["total"].max()
@@ -114,21 +123,47 @@ class Barcode:
         lineage = tree.common_ancestor(top_lineages).name
         distances = {}
         # Check for top lineage outliers
-        # Based on the traditional IQR outlier formula
-        # More than 1.5 IQR above Q3 (aka 75 percentile)
         for l in top_lineages:
             distances[l] = tree.distance(lineage, l)
 
-        # IQR implementation using numpy
-        # Credit: @Jaime
-        # Source: https://stackoverflow.com/a/23229224
-        q75, q25 = np.percentile(list(distances.values()), [75, 25])
-        iqr = q75 - q25
-        outlier_threshold = q75 + (iqr * 1.5)
+        if outlier_method == "iqr":
+            # Based on the traditional IQR outlier formula
+            # More than 1.5 IQR above Q3 (aka 75 percentile
+            # IQR implementation using numpy
+            # Credit: @Jaime
+            # Source: https://stackoverflow.com/a/23229224
+            q75, q25 = np.percentile(list(distances.values()), [75, 25])
+            iqr = q75 - q25
+            outlier_threshold_upper = q75 + (iqr * 1.5)
+            outlier_threshold_lower = q25 - (iqr * 1.5)
+            # print("IQR:", outlier_threshold_lower, outlier_threshold_upper)
+            outlier_lineages = [
+                l
+                for l in top_lineages
+                if distances[l] > outlier_threshold_upper
+                or distances[l] < outlier_threshold_lower
+            ]
+
+        elif outlier_method == "prefix":
+            # Majority letter prefixes
+            # What is the most common lineage letter prefix?
+            prefixes = [l.split(".")[0] for l in top_lineages]
+            top_prefix = statistics.mode(prefixes)
+            outlier_lineages = [
+                l for l in top_lineages if not l.split(".")[0] == top_prefix
+            ]
+
+        elif outlier_method == "mode":
+            # Mode implementation
+            outlier_threshold = statistics.mode(distances.values())
+            outlier_lineages = [
+                l
+                for l in top_lineages
+                if distances[l] > outlier_threshold or distances[l] < outlier_threshold
+            ]
 
         # Redo top lineages, outlier lineages, and MRCA
-        outlier_lineages = [l for l in top_lineages if distances[l] > outlier_threshold]
-        top_lineages = [l for l in top_lineages if l not in self.outlier_lineages]
+        top_lineages = [l for l in top_lineages if l not in outlier_lineages]
         lineage = tree.common_ancestor(top_lineages).name
 
         # Query the levels of support/conflict in this barcode

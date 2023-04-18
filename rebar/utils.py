@@ -24,6 +24,8 @@ PANGO_SEQUENCES_URL = (
     "main/data/pango-consensus-sequences_genome-nuc.fasta.zst"
 )
 
+PROBLEMATIC_LINEAGES = ["BA.2.85"]
+
 
 def create_logger(logfile=None):
     # create logger

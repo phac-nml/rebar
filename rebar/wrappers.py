@@ -22,6 +22,7 @@ from .utils import (
     LINEAGES_URL,
     BARCODES_USHER_URL,
     BARCODES_NEXTCLADE_URL,
+    PROBLEMATIC_LINEAGES,
 )
 from .genome import genome_mp
 from .export import Export
@@ -154,6 +155,25 @@ def download_barcodes(params):
         lineage: barcodes_data[lineage]["nucSubstitutions"] for lineage in barcodes_data
     }
 
+    # -------------------------------------------------------------------------
+    # UShER Barcodes
+
+    logger.info(str(datetime.now()) + "\tDownloading UShER barcodes.")
+    r = requests.get(BARCODES_USHER_URL)
+    barcodes_text = r.text
+    barcodes_usher_df = pd.read_csv(StringIO(barcodes_text), sep=",")
+    # Rename the empty first column that should be lineage
+    barcodes_usher_df.rename(columns={"Unnamed: 0": "lineage"}, inplace=True)
+    # # Convert to dict
+    # for rec in barcodes_usher_df.iterrows():
+    #     lineage = rec[1]["lineage"]
+    #     print(lineage)
+    #     print(type(rec[1]))
+    #     print(dir(rec[1]))
+    #     x = rec[1].apply(lambda col: col.sum() == 1)
+    #     print(x)
+    #     break
+
     # Convert to dataframe
     logger.info(str(datetime.now()) + "\tConverting barcodes to dataframe.")
 
@@ -209,6 +229,13 @@ def download_barcodes(params):
     subs_order_str = [str(s) for s in subs_order]
     cols_order = ["lineage"] + subs_order_str
     barcodes_df = barcodes_nextclade_df[cols_order]
+
+    logger.info(
+        str(datetime.now())
+        + "\tRemoving problematic lineages: "
+        + ",".join(PROBLEMATIC_LINEAGES)
+    )
+    barcodes_df = barcodes_df[~barcodes_df["lineage"].isin(PROBLEMATIC_LINEAGES)]
 
     # Export
     barcodes_path = os.path.join(params.outdir, "barcodes.csv")
@@ -499,6 +526,7 @@ def detect_recombination(params):
         recombinant_lineages=recombinant_lineages,
         max_depth=params.max_depth,
         min_subs=params.min_subs,
+        min_consecutive=params.min_consecutive,
         min_length=params.min_length,
     )
 

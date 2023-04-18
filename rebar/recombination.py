@@ -7,7 +7,13 @@ from .substitution import Substitution
 
 class Recombination:
     def __init__(
-        self, genome=None, parent_1=None, parent_2=None, min_subs=1, min_length=1
+        self,
+        genome=None,
+        parent_1=None,
+        parent_2=None,
+        min_subs=1,
+        min_length=1,
+        min_consecutive=1,
     ):
 
         self.parent_1 = Barcode()
@@ -69,7 +75,9 @@ class Recombination:
         )
         return recombination_yaml
 
-    def search(self, genome, parent_1, parent_2, min_subs=1, min_length=1):
+    def search(
+        self, genome, parent_1, parent_2, min_subs=1, min_length=1, min_consecutive=1
+    ):
 
         # Identify barcode subs which uniq to each parent
         all_subs = sorted(list(set(parent_1.barcode + parent_2.barcode)))
@@ -210,9 +218,10 @@ class Recombination:
         for start in regions:
             parent = regions[start]["parent"]
             end = regions[start]["end"]
-            length_subs = len(regions[start]["subs"])
+            num_consecutive = len(regions[start]["subs"])
+            region_length = (end - start) + 1
 
-            if length_subs < min_length:
+            if region_length < min_length or num_consecutive < min_consecutive:
                 continue
 
             # First filtered region

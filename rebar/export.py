@@ -129,5 +129,4 @@ class Export:
                 parent_2=parent_2,
                 ext=ext,
             )
-            print(cmd_str)
             subprocess.run(cmd_str, shell=True)
