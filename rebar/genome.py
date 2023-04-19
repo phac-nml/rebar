@@ -8,7 +8,7 @@ import pandas as pd
 from Bio.SeqRecord import SeqRecord
 
 # rebar custom
-from .utils import NO_DATA_CHAR
+from .constants import NO_DATA_CHAR
 from .substitution import Substitution
 from .barcode import Barcode
 from .recombination import Recombination
@@ -31,6 +31,7 @@ class Genome:
         tree=None,
         recombinant_tree=None,
         recombinant_lineages=None,
+        lineage_to_clade=None,
         max_depth=1,
         min_subs=1,
         min_length=1,
@@ -120,6 +121,7 @@ class Genome:
         # Perform lineage and parent assignment
         if (
             type(self.barcode_summary) == pd.core.frame.DataFrame
+            and type(lineage_to_clade) == pd.core.frame.DataFrame
             and tree
             and recombinant_lineages
             and recombinant_tree
@@ -132,6 +134,7 @@ class Genome:
                 tree=tree,
                 recombinant_lineages=recombinant_lineages,
                 recombinant_tree=recombinant_tree,
+                lineage_to_clade=lineage_to_clade,
             )
 
             self.parent_assignment(
@@ -139,6 +142,7 @@ class Genome:
                 tree=tree,
                 recombinant_lineages=recombinant_lineages,
                 recombinant_tree=recombinant_tree,
+                lineage_to_clade=lineage_to_clade,
                 max_depth=max_depth,
                 min_subs=min_subs,
                 min_length=min_length,
@@ -247,8 +251,10 @@ class Genome:
             barcodes_subs = [
                 str(s) for s in barcodes_subs if str(s) in barcodes.columns
             ]
+
         # Count up barcode mutations by lineage
-        df = copy(barcodes[["lineage"] + barcodes_subs])
+        cols = ["lineage"] + barcodes_subs
+        df = copy(barcodes[cols])
         df["total"] = df[barcodes_subs].sum(axis=1)
         summary_df = (
             df[["lineage", "total"]]
@@ -337,7 +343,7 @@ class Genome:
 
         return coords
 
-    def to_dataframe(self, df_type="subs"):
+    def to_dataframe(self, df_type="subs", lineage_to_clade=None):
         """
         Convert Genome object to dataframe.
 
@@ -361,11 +367,16 @@ class Genome:
 
             # only write parents if recombination detected:
             if not self.recombination.parent_2.lineage:
-                parents = ""
+                parents_lineage = ""
+                parents_clade = ""
             else:
-                parents = "{},{}".format(
+                parents_lineage = "{},{}".format(
                     self.recombination.parent_1.lineage,
                     self.recombination.parent_2.lineage,
+                )
+                parents_clade = "{},{}".format(
+                    self.recombination.parent_1.clade,
+                    self.recombination.parent_2.clade,
                 )
 
             genome_dataframe = pd.DataFrame(
@@ -373,11 +384,13 @@ class Genome:
                     "strain": [self.id],
                     "lineage": [self.lineage.lineage],
                     "recombinant": [self.lineage.recombinant],
-                    "parents": parents,
+                    "parents_lineage": parents_lineage,
+                    "parents_clade": parents_clade,
                     "breakpoints": recombination_dict["breakpoints"],
                     "regions": recombination_dict["regions"],
                 }
             )
+
         return genome_dataframe
 
     def to_dict(self):
@@ -425,6 +438,7 @@ class Genome:
         tree,
         recombinant_lineages,
         recombinant_tree,
+        lineage_to_clade,
     ):
         """
         Assign genome to a lineage based on the top barcode matches.
@@ -453,6 +467,7 @@ class Genome:
             tree=tree,
             recombinant_lineages=recombinant_lineages,
             recombinant_tree=recombinant_tree,
+            lineage_to_clade=lineage_to_clade,
         )
 
         if self.debug:
@@ -467,6 +482,7 @@ class Genome:
         tree,
         recombinant_lineages,
         recombinant_tree,
+        lineage_to_clade,
         max_depth=1,
         min_subs=1,
         min_length=1,
@@ -549,11 +565,18 @@ class Genome:
             tree=tree,
             recombinant_lineages=recombinant_lineages,
             recombinant_tree=recombinant_tree,
+            lineage_to_clade=lineage_to_clade,
         )
 
         # If parent_1 has no conflict_refs, don't search for more parents
         # i.e. it's a perfect match, no evidence of recombination
         if len(self.recombination.parent_1.conflict_ref) == 0:
+            self.logger.info(
+                str(datetime.now())
+                + "\t\t"
+                + self.recombination.parent_1.lineage
+                + " is a perfect match, halting recombinant search."
+            )
             return 0
 
         # ---------------------------------------------------------------------
@@ -569,23 +592,28 @@ class Genome:
         conflict_alt_summary = self.summarise_barcodes(
             barcodes=barcodes, barcodes_subs=self.recombination.parent_1.conflict_alt
         )
-        print("conflict_alt_summary:")
+        include_lineages = list(conflict_alt_summary["lineage"])
+        print("conflict_alt_summary (INCLUDE):")
         print(conflict_alt_summary)
+        print(include_lineages)
         # Remove lineages with the conflict_ref (ref bases
         # where parent_1 has a mutation)
         conflict_ref_summary = self.summarise_barcodes(
             barcodes=barcodes, barcodes_subs=self.recombination.parent_1.conflict_ref
         )
-        print("conflict_ref_summary:")
+        print("conflict_ref_summary (EXCLUDE):")
         print(conflict_ref_summary)
         exclude_lineages += list(conflict_ref_summary["lineage"])
-        print(exclude_lineages)
+        print("exclude_lineages:", exclude_lineages)
 
         # The new barcode_summary is just lineages that will help
         # us resolve these conflicts
+        print("barcode_summary before:")
         barcode_summary = conflict_alt_summary[
             ~conflict_alt_summary["lineage"].isin(exclude_lineages)
         ]
+        print("barcode_summary after:")
+        print(barcode_summary)
 
         # Now, we search through the barcodes
         recombination_detected = False
@@ -603,6 +631,7 @@ class Genome:
 
             # If we've run out of barcodes, no recombination!
             if len(barcode_summary) == 0:
+                self.logger.info(str(datetime.now()) + "\t\tNo more barcodes to parse.")
                 break
 
             # Summarize the barcode support for the next top lineages
@@ -619,6 +648,7 @@ class Genome:
                 tree=tree,
                 recombinant_lineages=recombinant_lineages,
                 recombinant_tree=recombinant_tree,
+                lineage_to_clade=lineage_to_clade,
             )
 
             # Detect recombination

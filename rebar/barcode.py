@@ -1,8 +1,12 @@
-import pandas as pd
-from .substitution import Substitution
 import yaml
-import numpy as np
 import statistics
+import random
+
+import pandas as pd
+
+from .substitution import Substitution
+
+random.seed(123456)
 
 
 class Barcode:
@@ -14,9 +18,11 @@ class Barcode:
         tree=None,
         recombinant_lineages=None,
         recombinant_tree=None,
+        lineage_to_clade=None,
     ):
         # Initialize attributes
         self.lineage = None
+        self.clade = None
         self.top_lineages = []
         self.outlier_lineages = []
         self.recombinant = None
@@ -33,12 +39,14 @@ class Barcode:
             and tree
             and type(barcode_summary) == pd.core.frame.DataFrame
             and type(barcodes) == pd.core.frame.DataFrame
+            and type(lineage_to_clade) == pd.core.frame.DataFrame
         ):
             self.search(
                 genome,
                 barcode_summary,
                 barcodes,
                 tree,
+                lineage_to_clade,
             )
 
         # Set recombinant status (self.recombinant and self.recursive)
@@ -52,6 +60,8 @@ class Barcode:
         text = (
             "lineage:      "
             + str(self.lineage)
+            + "clade:      "
+            + str(self.clade)
             + "\ntop_lineages: "
             + str(self.top_lineages)
             + "\noutlier_lineages: "
@@ -73,6 +83,7 @@ class Barcode:
     def to_dict(self):
         barcode_dict = {
             "lineage": self.lineage,
+            "clade": self.clade,
             "top_lineages": ",".join(self.top_lineages),
             "outlier_lineages": ",".join(self.outlier_lineages),
             "barcode": ",".join([str(s) for s in self.barcode]),
@@ -107,8 +118,9 @@ class Barcode:
         barcode_summary,
         barcodes,
         tree,
-        max_lineages=10,
-        outlier_method="prefix",
+        lineage_to_clade,
+        max_top_lineages=10,
+        outlier_method="distance",
     ):
 
         # Identify the lineages with the largest number of barcode matches
@@ -117,8 +129,6 @@ class Barcode:
             barcode_summary[barcode_summary["total"] == max_barcodes]["lineage"]
         )
 
-        # top_lineages = top_lineages[0:max_lineages]
-
         # Get MRCA of all top_lineages
         lineage = tree.common_ancestor(top_lineages).name
         distances = {}
@@ -126,45 +136,45 @@ class Barcode:
         for l in top_lineages:
             distances[l] = tree.distance(lineage, l)
 
-        if outlier_method == "iqr":
-            # Based on the traditional IQR outlier formula
-            # More than 1.5 IQR above Q3 (aka 75 percentile
-            # IQR implementation using numpy
-            # Credit: @Jaime
-            # Source: https://stackoverflow.com/a/23229224
-            q75, q25 = np.percentile(list(distances.values()), [75, 25])
-            iqr = q75 - q25
-            outlier_threshold_upper = q75 + (iqr * 1.5)
-            outlier_threshold_lower = q25 - (iqr * 1.5)
-            # print("IQR:", outlier_threshold_lower, outlier_threshold_upper)
-            outlier_lineages = [
-                l
-                for l in top_lineages
-                if distances[l] > outlier_threshold_upper
-                or distances[l] < outlier_threshold_lower
-            ]
+        outlier_lineages = []
 
-        elif outlier_method == "prefix":
-            # Majority letter prefixes
-            # What is the most common lineage letter prefix?
-            prefixes = [l.split(".")[0] for l in top_lineages]
-            top_prefix = statistics.mode(prefixes)
-            outlier_lineages = [
-                l for l in top_lineages if not l.split(".")[0] == top_prefix
-            ]
+        # if there's only one top lineages, there's no outliers
+        if len(top_lineages) == 1:
+            outlier_lineages = []
 
-        elif outlier_method == "mode":
-            # Mode implementation
-            outlier_threshold = statistics.mode(distances.values())
-            outlier_lineages = [
-                l
-                for l in top_lineages
-                if distances[l] > outlier_threshold or distances[l] < outlier_threshold
-            ]
+        elif outlier_method == "distance":
 
-        # Redo top lineages, outlier lineages, and MRCA
-        top_lineages = [l for l in top_lineages if l not in outlier_lineages]
-        lineage = tree.common_ancestor(top_lineages).name
+            # If there are a large number of top_lineages, subsample down for speed
+            top_lineages_subsample = top_lineages
+            if len(top_lineages) > max_top_lineages:
+                top_lineages_subsample = random.choices(
+                    top_lineages, k=max_top_lineages
+                )
+
+            distances_summary = {}
+            for l1 in top_lineages_subsample:
+                distances = []
+                for l2 in top_lineages_subsample:
+                    if l1 == l2:
+                        continue
+                    distances.append(tree.distance(l1, l2))
+                distances_summary[l1] = statistics.mean(distances)
+
+            distances_mode = statistics.mode(distances_summary.values())
+
+            # Redo top lineages, outlier lineages, and MRCA
+            keep_lineages = [
+                l for l, d in distances_summary.items() if d <= distances_mode
+            ]
+            lineage_tree = tree.common_ancestor(keep_lineages)
+            lineage = lineage_tree.name
+            lineage_descendants = [c.name for c in lineage_tree.find_clades()]
+            outlier_lineages = [l for l in top_lineages if l not in lineage_descendants]
+
+        # Get clade of lineage
+        clade = lineage_to_clade[lineage_to_clade["lineage"] == lineage][
+            "nextstrainClade"
+        ].values[0]
 
         # Query the levels of support/conflict in this barcode
         lineage_row = barcodes.query("lineage == @lineage")
@@ -212,6 +222,7 @@ class Barcode:
         conflict_alt = [s for s in conflict_alt if s in conflict_subs]
 
         self.lineage = lineage
+        self.clade = clade
         self.top_lineages = top_lineages
         self.outlier_lineages = outlier_lineages
         self.barcode = lineage_subs

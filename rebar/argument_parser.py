@@ -1,15 +1,7 @@
 #!/usr/bin/env python3
 
 import argparse
-from .wrappers import (
-    run,
-    run_test,
-    validate,
-    lineage_tree,
-    download_barcodes,
-    detect_recombination,
-    analyze_subs,
-)
+from .wrappers import dataset, run
 from . import version
 
 
@@ -21,6 +13,18 @@ def add_alignment_param(parser, required=False):
 def add_barcodes_param(parser, required=False):
     text = "Input barcodes csv, from `barcodes` subcommand."
     parser.add_argument("--barcodes", required=required, type=str, help=text)
+
+
+def add_dataset_param(parser, required=False):
+    text = "Path to dataset directory, output of `dataset` subcommand ."
+    parser.add_argument("--dataset", required=required, type=str, help=text)
+
+
+def add_dataset_name_param(parser, required=False):
+    text = "Dataset name."
+    parser.add_argument(
+        "--name", required=required, type=str, choices=["sars-cov-2"], help=text
+    )
 
 
 def add_debug_param(parser, required=False):
@@ -67,9 +71,9 @@ def add_min_consecutive_param(parser, required=False):
 
 
 def add_min_length_param(parser, required=False):
-    text = "Minimum length of regions contributed by each parent (Default: 100)."
+    text = "Minimum length of regions contributed by each parent (Default: 1000)."
     parser.add_argument(
-        "--min-length", required=required, default=100, type=int, help=text
+        "--min-length", required=required, default=1000, type=int, help=text
     )
 
 
@@ -78,11 +82,16 @@ def add_min_subs_param(parser, required=False):
     parser.add_argument("--min-subs", required=required, default=1, type=int, help=text)
 
 
-def add_outdir_param(parser, required=False):
-    text = "Output directory for results (Default: output)."
+def add_outdir_param(parser, required=False, default="output"):
+    text = "Output directory for results (Default: {}).".format(default)
     parser.add_argument(
-        "--outdir", required=required, default="output", type=str, help=text
+        "--outdir", required=required, default=default, type=str, help=text
     )
+
+
+def add_plot_param(parser, required=False):
+    text = "Create snipit plots."
+    parser.add_argument("--plot", required=required, action="store_true", help=text)
 
 
 def add_reference_param(parser, required=False):
@@ -132,137 +141,150 @@ def add_params(parser, subcommand=None):
     add_outdir_param(parser, required=False)
     add_threads_param(parser, required=False)
 
+    if subcommand == "dataset":
+        add_dataset_name_param(parser=required, required=True)
+
     # Note: tree has no specific subcommands
 
-    if subcommand == "test":
-        add_lineages_param(parser=required, required=True)
-
-    # subs subcommand
-    if subcommand == "subs":
-        add_alignment_param(parser=required, required=True)
-        add_reference_param(parser=required, required=True)
-
-        add_mask_param(parser=parser, required=False)
-
-    if subcommand == "recombination":
-        add_barcodes_param(parser=required, required=True)
-        add_subs_param(parser=required, required=True)
-        add_tree_param(parser=required, required=True)
-
-        add_exclude_non_recomb_param(parser=parser, required=False)
-        add_max_depth_param(parser=parser, required=False)
-        add_min_length_param(parser=parser, required=False)
-        add_min_consecutive_param(parser=parser, required=False)
-        add_min_subs_param(parser=parser, required=False)
-        add_shared_param(parser=parser, required=False)
-        add_snipit_format_param(parser=parser, required=False)
-
-    # for run, alignment is mandatory
     if subcommand == "run":
-        add_alignment_param(parser=required, required=True)
-    # for validate, alignment is optional
-    if subcommand == "validate":
-        add_alignment_param(parser=required, required=False)
+        add_dataset_param(parser=required, required=True)
 
-    # run, validate, and test need everything
-    if subcommand in ["run", "validate", "test"]:
+        # One of these must be specified
+        add_lineages_param(parser=parser, required=False)
+        add_alignment_param(parser=parser, required=False)
 
-        add_reference_param(parser=required, required=True)
-
-        add_barcodes_param(parser=required, required=False)
-        add_subs_param(parser=required, required=False)
-        add_tree_param(parser=required, required=False)
-
-        add_exclude_non_recomb_param(parser=parser, required=False)
         add_mask_param(parser=parser, required=False)
+        add_exclude_non_recomb_param(parser=parser, required=False)
         add_max_depth_param(parser=parser, required=False)
         add_min_length_param(parser=parser, required=False)
         add_min_consecutive_param(parser=parser, required=False)
         add_min_subs_param(parser=parser, required=False)
+        add_plot_param(parser=parser, required=False)
         add_shared_param(parser=parser, required=False)
         add_snipit_format_param(parser=parser, required=False)
+
+    # # subs subcommand
+    # if subcommand == "subs":
+    #     add_alignment_param(parser=required, required=True)
+    #     add_reference_param(parser=required, required=True)
+
+    #     add_mask_param(parser=parser, required=False)
+
+    # if subcommand == "recombination":
+    #     add_barcodes_param(parser=required, required=True)
+    #     add_subs_param(parser=required, required=True)
+    #     add_tree_param(parser=required, required=True)
+
+    #     add_exclude_non_recomb_param(parser=parser, required=False)
+    #     add_max_depth_param(parser=parser, required=False)
+    #     add_min_length_param(parser=parser, required=False)
+    #     add_min_consecutive_param(parser=parser, required=False)
+    #     add_min_subs_param(parser=parser, required=False)
+    #     add_shared_param(parser=parser, required=False)
+    #     add_snipit_format_param(parser=parser, required=False)
+
+    # # for run, alignment is mandatory
+    # if subcommand == "run":
+    #     add_alignment_param(parser=required, required=True)
+    # # for validate, alignment is optional
+    # if subcommand == "validate":
+    #     add_alignment_param(parser=required, required=False)
+
+    # # run, validate, and test need everything
+    # if subcommand in ["run", "validate", "test"]:
+
+    #     add_reference_param(parser=required, required=True)
+
+    #     add_barcodes_param(parser=required, required=False)
+    #     add_subs_param(parser=required, required=False)
+    #     add_tree_param(parser=required, required=False)
+
+    #     add_exclude_non_recomb_param(parser=parser, required=False)
+    #     add_mask_param(parser=parser, required=False)
+    #     add_max_depth_param(parser=parser, required=False)
+    #     add_min_length_param(parser=parser, required=False)
+    #     add_min_consecutive_param(parser=parser, required=False)
+    #     add_min_subs_param(parser=parser, required=False)
+    #     add_shared_param(parser=parser, required=False)
+    #     add_snipit_format_param(parser=parser, required=False)
 
 
 # -----------------------------------------------------------------------------
 def make_parser():
 
-    rebar_desc = "rebar: REcombination BARcode detection\n\n"
+    # descriptions
+    rebar_desc = "rebar: REcombination BARcode detection"
+    dataset_desc = "Download and create the rebar data model."
+    run_desc = "Run rebar on alignment or user-specified lineages."
+    version_desc = "Print version."
+    help_desc = "Print subcommands."
     parser = argparse.ArgumentParser(description="", usage=rebar_desc)
 
     rebar_subcommand_desc = (
-        "rebar implements the following sub-commands:\n\n"
-        "\trun\t\tRun all subcommands.\n"
-        "\tvalidate\tValidate rebar on all designated lineages.\n"
-        "\ttree\t\tCreate nomenclature tree of designated pango lineages.\n"
-        "\tbarcodes\tDownload lineage barcodes from freyja-data.\n"
-        "\tsubs\t\tSummarize substitutions observed in alignment.\n"
-        "\trecombination\tDetect recombination from nextclade output.\n"
-        "\thelp\t\tPrint rebar subcommands.\n"
-        "\tversion\t\tPrint rebar version.\n"
-        "\n"
+        "\n\n"
+        + "\tdataset\t\t"
+        + dataset_desc
+        + "\n"
+        + "\trun\t\t"
+        + run_desc
+        + "\n"
+        + "\thelp\t\t"
+        + help_desc
+        + "\n"
+        + "\tversion\t\t"
+        + version_desc
+        + "\n"
     )
     parser.set_defaults(func=lambda x: print(rebar_desc + rebar_subcommand_desc))
 
     subparsers = parser.add_subparsers()
 
     # help
-    help_parser = subparsers.add_parser("help", description="Print rebar subcommands.")
+    help_parser = subparsers.add_parser("help", description=help_desc)
     help_parser.set_defaults(func=lambda x: print(rebar_desc + rebar_subcommand_desc))
 
     # version
-    version_parser = subparsers.add_parser(
-        "version", description="Print rebar version."
-    )
+    version_parser = subparsers.add_parser("version", description=version_desc)
     version_parser.set_defaults(func=lambda x: print("rebar v" + version))
 
-    # barcodes
-    barcodes_desc = (
-        "Download barcodes csv of mutations observed in each pango-lineage."
-        " Uses the usher_barcodes.csv from https://github.com/andersen-lab/Freyja-data\n\n"
-    )
-    barcodes_parser = subparsers.add_parser("barcodes", description=barcodes_desc)
-    add_params(barcodes_parser, subcommand="barcodes")
-    barcodes_parser.set_defaults(func=download_barcodes)
-
-    # tree
-    tree_desc = (
-        "Creates a nomenclature tree of designated pango lineages."
-        " Uses the lineages_notes.txt from"
-        " https://github.com/cov-lineages/pango-designation"
-        " and the pango_aliasor library to resolve descendants and aliases.\n\n"
-    )
-    tree_parser = subparsers.add_parser("tree", description=tree_desc)
-    add_params(tree_parser, subcommand="tree")
-    tree_parser.set_defaults(func=lineage_tree)
-
-    # subs
-    subs_desc = "Create nextclade-like TSV output from alignment."
-    subs_parser = subparsers.add_parser("subs", description=subs_desc)
-    add_params(subs_parser, subcommand="subs")
-    subs_parser.set_defaults(func=analyze_subs)
-
-    # recombination
-    rec_desc = "Detect recombination."
-    recombination_parser = subparsers.add_parser("recombination", description=rec_desc)
-    add_params(recombination_parser, subcommand="recombination")
-    recombination_parser.set_defaults(func=detect_recombination)
-
-    # test
-    test_desc = "Test rebar on select lineages.\n\n"
-    test_parser = subparsers.add_parser("test", description=test_desc)
-    add_params(test_parser, subcommand="test")
-    test_parser.set_defaults(func=run_test)
-
-    # validate
-    validate_desc = "Validate rebar on all designated lineages.\n\n"
-    validate_parser = subparsers.add_parser("validate", description=validate_desc)
-    add_params(validate_parser, subcommand="validate")
-    validate_parser.set_defaults(func=validate)
+    # dataset
+    dataset_parser = subparsers.add_parser("dataset", description=dataset_desc)
+    add_params(dataset_parser, subcommand="dataset")
+    dataset_parser.set_defaults(func=dataset)
 
     # run
-    run_desc = "Run the full rebar pipeline."
     run_parser = subparsers.add_parser("run", description=run_desc)
     add_params(run_parser, subcommand="run")
     run_parser.set_defaults(func=run)
+
+    # # subs
+    # subs_desc = "Create nextclade-like TSV output from alignment."
+    # subs_parser = subparsers.add_parser("subs", description=subs_desc)
+    # add_params(subs_parser, subcommand="subs")
+    # subs_parser.set_defaults(func=analyze_subs)
+
+    # # recombination
+    # rec_desc = "Detect recombination."
+    # recombination_parser = subparsers.add_parser("recombination", description=rec_desc)
+    # add_params(recombination_parser, subcommand="recombination")
+    # recombination_parser.set_defaults(func=detect_recombination)
+
+    # # test
+    # test_desc = "Test rebar on select lineages.\n\n"
+    # test_parser = subparsers.add_parser("test", description=test_desc)
+    # add_params(test_parser, subcommand="test")
+    # test_parser.set_defaults(func=run_test)
+
+    # # validate
+    # validate_desc = "Validate rebar on all designated lineages.\n\n"
+    # validate_parser = subparsers.add_parser("validate", description=validate_desc)
+    # add_params(validate_parser, subcommand="validate")
+    # validate_parser.set_defaults(func=validate)
+
+    # # run
+    # run_desc = "Run the full rebar pipeline."
+    # run_parser = subparsers.add_parser("run", description=run_desc)
+    # add_params(run_parser, subcommand="run")
+    # run_parser.set_defaults(func=run)
 
     return parser

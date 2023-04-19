@@ -29,7 +29,9 @@ class Recombination:
             self.parent_2 = parent_2
 
         if genome and parent_1 and parent_2:
-            self.search(genome, parent_1, parent_2, min_subs, min_length)
+            self.search(
+                genome, parent_1, parent_2, min_subs, min_length, min_consecutive
+            )
 
     def __repr__(self):
         """
@@ -84,7 +86,8 @@ class Recombination:
         parent_1_subs = [s for s in parent_1.barcode if s not in parent_2.barcode]
         parent_2_subs = [s for s in parent_2.barcode if s not in parent_1.barcode]
 
-        # Organize into a dataframe where rows are substitutions
+        # Organize into a dataframe where rows are substitutions, and columns
+        # will indicate strain and parental origin
         subs_df = pd.DataFrame(
             {
                 # "substitution": all_subs,
@@ -109,7 +112,7 @@ class Recombination:
             }
         ).sort_values(by="coord")
 
-        # Identify private genome substitutions and exclude
+        # Identify private genome substitutions and exclude these
         private_sub_coords = list(
             subs_df[
                 (subs_df[genome.id] != subs_df[parent_1.lineage])
@@ -136,13 +139,17 @@ class Recombination:
 
         subs_df.insert(loc=1, column="parent", value=genome_subs_origin)
 
-        # There has to be at least x min_length barcodes from each parent
-        parent_1_num_subs = len(subs_df[subs_df["parent"] == parent_1.lineage])
-        parent_2_num_subs = len(subs_df[subs_df["parent"] == parent_2.lineage])
-        if (parent_1_num_subs < min_length) or (parent_2_num_subs < min_length):
-            return None
+        # Search for genomic blocks from each parent
+        # Just look at the subs that are uniq to one parent and detected in sample
+        subs_uniq_df = subs_df[(subs_df["parent"] != "shared")]
 
-        # Each parent must have at least x min_subs lineage-determining
+        if genome.debug:
+            genome.logger.info(str(datetime.now()) + "\t\t\tBARCODE ORIGINS:")
+            subs_md = subs_uniq_df.to_markdown(index=False)
+            subs_str = subs_md.replace("\n", "\n" + "\t" * 7)
+            genome.logger.info(str(datetime.now()) + "\t\t\t\t" + subs_str)
+
+        # Each parent must have at least x min_subs that are lineage-determining
         parent_1_uniq = subs_df[
             (subs_df["parent"] == parent_1.lineage)
             & (subs_df[parent_1.lineage] != subs_df["Reference"])
@@ -157,17 +164,11 @@ class Recombination:
         parent_2_num_uniq = len(parent_2_uniq)
 
         if (parent_1_num_uniq < min_subs) or (parent_2_num_uniq < min_subs):
+            if genome.debug:
+                genome.logger.info(
+                    str(datetime.now()) + "\t\t\tInsufficient unique substitutions."
+                )
             return None
-
-        # Search for genomic blocks from each parent
-        # Just look at the subs that are uniq to one parent and detected in sample
-        subs_uniq_df = subs_df[(subs_df["parent"] != "shared")]
-
-        if genome.debug:
-            genome.logger.info(str(datetime.now()) + "\t\t\tBARCODE ORIGINS:")
-            subs_md = subs_uniq_df.to_markdown(index=False)
-            subs_str = subs_md.replace("\n", "\n" + "\t" * 7)
-            genome.logger.info(str(datetime.now()) + "\t\t\t\t" + subs_str)
 
         # Identifying breakpoint regions
         regions = {}
@@ -248,6 +249,10 @@ class Recombination:
 
         # If we're left with one filtered parental region, no recombination
         if len(regions_filter) < 2:
+            if genome.debug:
+                genome.logger.info(
+                    str(datetime.now()) + "\t\t\t" + "No breakpoints detected."
+                )
             return None
 
         # Identify breakpoints
@@ -268,6 +273,11 @@ class Recombination:
 
             prev_start_coord = start_coord
             prev_end_coord = end_coord
+
+        if genome.debug:
+            genome.logger.info(
+                str(datetime.now()) + "\t\t\tBREAKPOINTS: " + str(breakpoints)
+            )
 
         self.dataframe = subs_df
         self.regions = regions_filter
