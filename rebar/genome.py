@@ -39,6 +39,7 @@ class Genome:
         mask=0,
         debug=False,
         logger=None,
+        edge_cases=False,
     ):
         """
         Genome constructor. Parses genomic features from a sequence records or
@@ -81,10 +82,11 @@ class Genome:
         # Entry point #1, from fasta alignment
         if record:
             self.id = record.id
-            if self.debug:
-                self.logger.info(
-                    str(datetime.now()) + "\t\tParsing sample: " + record.id
-                )
+            # This debugging is very noisy, and not useful?
+            # if self.debug:
+            #     self.logger.info(
+            #         str(datetime.now()) + "\t\tParsing sample: " + record.id
+            #     )
             self.seq = str(record.seq)
 
             # Mask genome sequence
@@ -147,6 +149,7 @@ class Genome:
                 min_subs=min_subs,
                 min_length=min_length,
                 min_consecutive=min_consecutive,
+                edge_cases=edge_cases,
             )
 
     def __repr__(self):
@@ -259,8 +262,9 @@ class Genome:
         summary_df = (
             df[["lineage", "total"]]
             .query("total > 0")
-            .sort_values(by="total", ascending=False)
+            .sort_values(by=["total", "lineage"], ascending=False)
         )
+
         return summary_df
 
     def coords_to_ranges(self, attr=None, values=None):
@@ -288,7 +292,11 @@ class Genome:
         if attr:
             values = getattr(self, attr)
         elif not values:
-            raise RebarError("coords_to_ranges: attr or values must be specified.")
+            raise SystemExit(
+                RebarError(
+                    "RebarError: coords_to_ranges: attr or values must be specified."
+                )
+            )
 
         if len(values) == 0:
             return values
@@ -327,7 +335,11 @@ class Genome:
         if attr:
             values = getattr(self, attr)
         elif not values:
-            raise RebarError("ranges_to_coords: attr or values must be specified.")
+            raise SystemExit(
+                RebarError(
+                    "RebarError: ranges_to_coords: attr or values must be specified."
+                )
+            )
         values_split = values.split(",")
         coords = []
 
@@ -343,7 +355,7 @@ class Genome:
 
         return coords
 
-    def to_dataframe(self, df_type="subs", lineage_to_clade=None):
+    def to_dataframe(self, df_type="subs"):
         """
         Convert Genome object to dataframe.
 
@@ -383,6 +395,7 @@ class Genome:
                 {
                     "strain": [self.id],
                     "lineage": [self.lineage.lineage],
+                    "clade": [self.lineage.clade],
                     "recombinant": [self.lineage.recombinant],
                     "parents_lineage": parents_lineage,
                     "parents_clade": parents_clade,
@@ -487,6 +500,7 @@ class Genome:
         min_subs=1,
         min_length=1,
         min_consecutive=1,
+        edge_cases=False,
     ):
         """
         Assign genome to a lineage based on the top barcode matches.
@@ -543,15 +557,55 @@ class Genome:
 
         # ---------------------------------------------------------------------
         # EDGE CASES
+        # This section is for legacy detection of SARS-CoV-2 lineages
 
         max_barcodes = barcode_summary["total"].max()
         top_lineages = list(
             barcode_summary[barcode_summary["total"] == max_barcodes]["lineage"]
         )
 
-        # XB: top_lineages are exactly B.1.631 and B.1.634
-        if top_lineages == ["B.1.631", "B.1.634"]:
-            barcode_summary = barcode_summary[barcode_summary["lineage"] != "B.1.634"]
+        edge_case_lineages = ["XB", "XR", "XAS", "XBK", "XBQ", "XBZ"]
+
+        if edge_cases and self.lineage.recombinant in edge_case_lineages:
+
+            self.lineage.edge_case = True
+
+            # XB: top_lineages are exactly B.1.631 and B.1.634
+            if self.lineage.recombinant == "XB" and top_lineages == [
+                "B.1.631",
+                "B.1.634",
+            ]:
+                barcode_summary = barcode_summary[
+                    barcode_summary["lineage"] != "B.1.634"
+                ]
+
+            # Lineages with extermely small number of subs from a second parent
+            if self.lineage.recombinant == "XR":
+                min_subs = 0
+                min_consecutive = 2
+
+            if self.lineage.recombinant in ["XBK", "XBQ", "XBZ"]:
+                min_consecutive = 2
+                min_length = 300
+
+            # XP second parent comes from one barcode position: A29510C
+            # This is flagged as a conflict_alt, but otherwise, BA.1.1 is called
+            # a perfect match
+
+            # XAE
+
+            # Lineages that require deletions to resolve parents
+            #
+            # XAS: The pango designation required deletions to resolve the first parent
+            #      as BA.4 vs. BA.5. Manually intervene by removing BA.4 as a candidate.
+            if self.lineage.recombinant == "XAS":
+                ba4_tree = next(tree.find_clades("BA.4"))
+                ba4_descendants = [c.name for c in ba4_tree.find_clades()]
+                barcode_summary = barcode_summary[
+                    ~barcode_summary["lineage"].isin(ba4_descendants)
+                ]
+
+            # XAZ
 
         # ---------------------------------------------------------------------
         # Assign parent_1
@@ -589,31 +643,30 @@ class Genome:
 
         # Next, restrict barcodes to only lineages with the
         # conflict_alt (subs that are not in parent_1's barcode)
+        # keep lineages that have ANY number of these substitutions, which means
+        # the final retained lineages will be very permissive/sensitive.
         conflict_alt_summary = self.summarise_barcodes(
             barcodes=barcodes, barcodes_subs=self.recombination.parent_1.conflict_alt
         )
-        include_lineages = list(conflict_alt_summary["lineage"])
-        print("conflict_alt_summary (INCLUDE):")
-        print(conflict_alt_summary)
-        print(include_lineages)
+
         # Remove lineages with the conflict_ref (ref bases
         # where parent_1 has a mutation)
         conflict_ref_summary = self.summarise_barcodes(
             barcodes=barcodes, barcodes_subs=self.recombination.parent_1.conflict_ref
         )
-        print("conflict_ref_summary (EXCLUDE):")
-        print(conflict_ref_summary)
+        # exclude lineages that have ALL ref bases, which means the final
+        # retained lineages are very permissive/sensitive.
+        conflict_ref_summary = conflict_ref_summary[
+            conflict_ref_summary["total"]
+            == len(self.recombination.parent_1.conflict_alt)
+        ]
         exclude_lineages += list(conflict_ref_summary["lineage"])
-        print("exclude_lineages:", exclude_lineages)
 
         # The new barcode_summary is just lineages that will help
         # us resolve these conflicts
-        print("barcode_summary before:")
         barcode_summary = conflict_alt_summary[
             ~conflict_alt_summary["lineage"].isin(exclude_lineages)
         ]
-        print("barcode_summary after:")
-        print(barcode_summary)
 
         # Now, we search through the barcodes
         recombination_detected = False
@@ -631,7 +684,10 @@ class Genome:
 
             # If we've run out of barcodes, no recombination!
             if len(barcode_summary) == 0:
-                self.logger.info(str(datetime.now()) + "\t\tNo more barcodes to parse.")
+                if self.debug:
+                    self.logger.info(
+                        str(datetime.now()) + "\t\tNo more barcodes to parse."
+                    )
                 break
 
             # Summarize the barcode support for the next top lineages
@@ -666,13 +722,12 @@ class Genome:
             if len(recombination.breakpoints) > 0:
                 recombination_detected = True
                 self.recombination = recombination
-                self.lineage.recombinant = True
 
             # Otherwise, update our exclude lineages for the next search
             else:
                 exclude_lineages += parent_2.top_lineages
 
-        if not recombination_detected:
+        if not recombination_detected and not self.lineage.recombinant:
             self.lineage.recombinant = False
 
         return 0

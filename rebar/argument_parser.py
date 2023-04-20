@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 
 import argparse
-from .wrappers import dataset, run
+from .wrappers import dataset, run, validate
 from . import version
 
 
@@ -32,6 +32,13 @@ def add_debug_param(parser, required=False):
     parser.add_argument("--debug", required=required, action="store_true", help=text)
 
 
+def add_edge_cases_param(parser, required=False):
+    text = "Enable sensitive edge case handling for recombinants with few mutations."
+    parser.add_argument(
+        "--edge-cases", required=required, action="store_true", help=text
+    )
+
+
 def add_exclude_non_recomb_param(parser, required=False):
     text = "Exclude non-recombinant samples from output files"
     parser.add_argument(
@@ -55,9 +62,9 @@ def add_mask_param(parser, required=False):
 
 
 def add_max_depth_param(parser, required=False):
-    text = "Maximum search depth to look for parents (Default: 20)."
+    text = "Maximum search depth to look for parents (Default: 3)."
     parser.add_argument(
-        "--max-depth", required=required, default=20, type=int, help=text
+        "--max-depth", required=required, default=3, type=int, help=text
     )
 
 
@@ -153,6 +160,7 @@ def add_params(parser, subcommand=None):
         add_lineages_param(parser=parser, required=False)
         add_alignment_param(parser=parser, required=False)
 
+        add_edge_cases_param(parser=parser, required=False)
         add_mask_param(parser=parser, required=False)
         add_exclude_non_recomb_param(parser=parser, required=False)
         add_max_depth_param(parser=parser, required=False)
@@ -163,50 +171,20 @@ def add_params(parser, subcommand=None):
         add_shared_param(parser=parser, required=False)
         add_snipit_format_param(parser=parser, required=False)
 
-    # # subs subcommand
-    # if subcommand == "subs":
-    #     add_alignment_param(parser=required, required=True)
-    #     add_reference_param(parser=required, required=True)
+    if subcommand == "validate":
+        add_dataset_param(parser=required, required=True)
 
-    #     add_mask_param(parser=parser, required=False)
-
-    # if subcommand == "recombination":
-    #     add_barcodes_param(parser=required, required=True)
-    #     add_subs_param(parser=required, required=True)
-    #     add_tree_param(parser=required, required=True)
-
-    #     add_exclude_non_recomb_param(parser=parser, required=False)
-    #     add_max_depth_param(parser=parser, required=False)
-    #     add_min_length_param(parser=parser, required=False)
-    #     add_min_consecutive_param(parser=parser, required=False)
-    #     add_min_subs_param(parser=parser, required=False)
-    #     add_shared_param(parser=parser, required=False)
-    #     add_snipit_format_param(parser=parser, required=False)
-
-    # # for run, alignment is mandatory
-    # if subcommand == "run":
-    #     add_alignment_param(parser=required, required=True)
-    # # for validate, alignment is optional
-    # if subcommand == "validate":
-    #     add_alignment_param(parser=required, required=False)
-
-    # # run, validate, and test need everything
-    # if subcommand in ["run", "validate", "test"]:
-
-    #     add_reference_param(parser=required, required=True)
-
-    #     add_barcodes_param(parser=required, required=False)
-    #     add_subs_param(parser=required, required=False)
-    #     add_tree_param(parser=required, required=False)
-
-    #     add_exclude_non_recomb_param(parser=parser, required=False)
-    #     add_mask_param(parser=parser, required=False)
-    #     add_max_depth_param(parser=parser, required=False)
-    #     add_min_length_param(parser=parser, required=False)
-    #     add_min_consecutive_param(parser=parser, required=False)
-    #     add_min_subs_param(parser=parser, required=False)
-    #     add_shared_param(parser=parser, required=False)
-    #     add_snipit_format_param(parser=parser, required=False)
+        add_alignment_param(parser=parser, required=False)
+        add_mask_param(parser=parser, required=False)
+        add_edge_cases_param(parser=parser, required=False)
+        add_exclude_non_recomb_param(parser=parser, required=False)
+        add_max_depth_param(parser=parser, required=False)
+        add_min_length_param(parser=parser, required=False)
+        add_min_consecutive_param(parser=parser, required=False)
+        add_min_subs_param(parser=parser, required=False)
+        add_plot_param(parser=parser, required=False)
+        add_shared_param(parser=parser, required=False)
+        add_snipit_format_param(parser=parser, required=False)
 
 
 # -----------------------------------------------------------------------------
@@ -216,6 +194,7 @@ def make_parser():
     rebar_desc = "rebar: REcombination BARcode detection"
     dataset_desc = "Download and create the rebar data model."
     run_desc = "Run rebar on alignment or user-specified lineages."
+    validate_desc = "Validate rebar on all designated lineages."
     version_desc = "Print version."
     help_desc = "Print subcommands."
     parser = argparse.ArgumentParser(description="", usage=rebar_desc)
@@ -257,34 +236,9 @@ def make_parser():
     add_params(run_parser, subcommand="run")
     run_parser.set_defaults(func=run)
 
-    # # subs
-    # subs_desc = "Create nextclade-like TSV output from alignment."
-    # subs_parser = subparsers.add_parser("subs", description=subs_desc)
-    # add_params(subs_parser, subcommand="subs")
-    # subs_parser.set_defaults(func=analyze_subs)
-
-    # # recombination
-    # rec_desc = "Detect recombination."
-    # recombination_parser = subparsers.add_parser("recombination", description=rec_desc)
-    # add_params(recombination_parser, subcommand="recombination")
-    # recombination_parser.set_defaults(func=detect_recombination)
-
-    # # test
-    # test_desc = "Test rebar on select lineages.\n\n"
-    # test_parser = subparsers.add_parser("test", description=test_desc)
-    # add_params(test_parser, subcommand="test")
-    # test_parser.set_defaults(func=run_test)
-
-    # # validate
-    # validate_desc = "Validate rebar on all designated lineages.\n\n"
-    # validate_parser = subparsers.add_parser("validate", description=validate_desc)
-    # add_params(validate_parser, subcommand="validate")
-    # validate_parser.set_defaults(func=validate)
-
-    # # run
-    # run_desc = "Run the full rebar pipeline."
-    # run_parser = subparsers.add_parser("run", description=run_desc)
-    # add_params(run_parser, subcommand="run")
-    # run_parser.set_defaults(func=run)
+    # validate
+    validate_parser = subparsers.add_parser("validate", description=validate_desc)
+    add_params(validate_parser, subcommand="validate")
+    validate_parser.set_defaults(func=validate)
 
     return parser

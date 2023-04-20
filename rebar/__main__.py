@@ -5,7 +5,7 @@ from datetime import datetime
 from multiprocess import cpu_count
 import sys
 from .utils import create_logger
-from rebar import make_parser
+from rebar import make_parser, RebarError
 
 """
 Stub function and module used as a setuptools entry point.
@@ -21,8 +21,23 @@ def main():
     if not hasattr(params, "log"):
         return_code = params.func(params)
 
+    # Check for conflicting use of --debug and --threads
+    elif params.debug and params.threads > 1:
+        raise SystemExit(
+            RebarError(
+                "RebarError: Debugging mode (--debug) and multithreading mode"
+                "(--threads) are incompatible. Please specify only one or the other."
+            )
+        )
     # Otherwise, run an actual analysis subcommand
     else:
+
+        # Create log directory if it doesn't increase
+        if params.log:
+            logdir = os.path.dirname(params.log)
+            if not os.path.exists(logdir) and logdir != "":
+                os.makedirs(logdir)
+
         # Create log
         params.logger = create_logger(params.log)
 

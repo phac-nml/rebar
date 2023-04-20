@@ -163,10 +163,20 @@ class Recombination:
         ]
         parent_2_num_uniq = len(parent_2_uniq)
 
-        if (parent_1_num_uniq < min_subs) or (parent_2_num_uniq < min_subs):
+        if parent_1_num_uniq < min_subs:
             if genome.debug:
                 genome.logger.info(
-                    str(datetime.now()) + "\t\t\tInsufficient unique substitutions."
+                    str(datetime.now())
+                    + "\t\t\tInsufficient unique substitutions from parent_1: "
+                    + parent_1.lineage
+                )
+            return None
+        if parent_2_num_uniq < min_subs:
+            if genome.debug:
+                genome.logger.info(
+                    str(datetime.now())
+                    + "\t\t\tInsufficient unique substitutions from parent_2: "
+                    + parent_2.lineage
                 )
             return None
 
@@ -222,11 +232,14 @@ class Recombination:
             num_consecutive = len(regions[start]["subs"])
             region_length = (end - start) + 1
 
-            if region_length < min_length or num_consecutive < min_consecutive:
+            if num_consecutive < min_consecutive:
                 continue
 
             # First filtered region
             if not prev_parent:
+                # Is the first region long enough?
+                if region_length < min_length:
+                    continue
                 regions_filter[start] = regions[start]
 
             # A region that continues the previous parent
@@ -236,7 +249,9 @@ class Recombination:
                 regions_filter[prev_start]["end"] = end
                 continue
             elif prev_parent != parent:
-                # start new region
+                # start new region, if long enough
+                if region_length < min_length:
+                    continue
                 regions_filter[start] = regions[start]
 
             prev_parent = parent

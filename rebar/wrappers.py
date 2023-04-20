@@ -81,7 +81,11 @@ def run(params):
 
     # Check for either lineages or alignment
     if not params.lineages and not params.alignment:
-        raise RebarError("Either --lineages or --alignment must be specified.")
+        raise SystemExit(
+            RebarError(
+                "RebarError: Either --lineages or --alignment must be specified."
+            )
+        )
 
     reference_path = os.path.join(params.dataset, "reference.fasta")
     consensus_path = os.path.join(params.dataset, "sequences.fasta")
@@ -93,7 +97,9 @@ def run(params):
     # Check all dataset files exist
     for file_path in required_files:
         if not os.path.exists(file_path):
-            raise RebarError("Can't find dataset file: " + file_path)
+            raise SystemExit(
+                RebarError("RebarError: Can't find dataset file " + file_path)
+            )
 
     # Search consensus sequences for target lineages
     if params.lineages:
@@ -111,7 +117,9 @@ def run(params):
                 fasta_lines.append(str(record.seq))
 
         if len(fasta_lines) == 0:
-            raise RebarError("No sequences were found for input lineages.")
+            raise SystemExit(
+                RebarError("RebarError: No sequences were found for input lineages.")
+            )
 
         alignment_path = os.path.join(params.outdir, "alignment.fasta")
         logger.info(
@@ -133,9 +141,29 @@ def run(params):
     parse_alignment(params)
 
     # Check if recombination was already run
+    params.edge_cases = True
     detect_recombination(params)
     # run(params)
 
     # Finish
     logger.info(str(datetime.now()) + "\t" + "-" * 40)
     logger.info(str(datetime.now()) + "\tFINISHED SUBCOMMAND: run.")
+
+
+def validate(params):
+    """
+    Validate rebar on all designated lineages.
+    """
+    logger = params.logger
+    logger.info(str(datetime.now()) + "\t" + "-" * 40)
+    logger.info(str(datetime.now()) + "\tBEGINNING SUBCOMMAND: validate.")
+
+    consensus_path = os.path.join(params.dataset, "sequences.fasta")
+    params.lineages = None
+    params.alignment = consensus_path
+
+    run(params)
+
+    # Finish
+    logger.info(str(datetime.now()) + "\t" + "-" * 40)
+    logger.info(str(datetime.now()) + "\tFINISHED SUBCOMMAND: validate.")

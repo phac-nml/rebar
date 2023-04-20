@@ -489,7 +489,10 @@ def parse_alignment(params):
         logger=params.logger,
     )
     total = num_records
-    genomes = list(tqdm(pool.imap_unordered(task, iterator), total=total))
+    task_progress = tqdm(pool.imap_unordered(task, iterator), total=total)
+    task_description = str(datetime.now()) + "      Substitution parsing progress"
+    task_progress.set_description(task_description, refresh=True)
+    genomes = list(task_progress)
 
     # Pool memory management, don't accept anymore new tasks and wait
     pool.close()
@@ -589,8 +592,9 @@ def detect_recombination(params):
 
     # Debugging
     iterator = [rec for rec in subs_df.iterrows() if rec[1]["strain"].startswith("X")]
-    # iterator = [rec for rec in subs_df.iterrows() if rec[1]["strain"] == "XD"]
-    iterator = iterator[0:10]
+    # iterator = [rec for rec in subs_df.iterrows()]
+    # if len(iterator) > 1500:
+    #    iterator = iterator[1540:]
     total = len(iterator)
 
     task = functools.partial(
@@ -606,9 +610,14 @@ def detect_recombination(params):
         min_subs=params.min_subs,
         min_consecutive=params.min_consecutive,
         min_length=params.min_length,
+        edge_cases=params.edge_cases,
     )
 
-    genomes = list(tqdm(pool.imap(task, iterator), total=total))
+    task_progress = tqdm(pool.imap_unordered(task, iterator), total=total)
+    task_description = str(datetime.now()) + "      Recombination detection progress"
+    task_progress.set_description(task_description, refresh=True)
+    genomes = list(task_progress)
+
     # Pool memory management, don't accept new tasks and wait
     pool.close()
     pool.join()

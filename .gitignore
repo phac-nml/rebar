@@ -1,5 +1,6 @@
 test/
-data/
+dataset/
+logs/
 build/
 validate/
 output/
