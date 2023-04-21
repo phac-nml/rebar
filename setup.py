@@ -18,11 +18,11 @@ with open("requirements.txt", "r") as r:
     require_list = r.read().strip().split("\n")
 
 setup(
-    name="rebar",
+    name="ncov-rebar",
     version=get_version(),
     author="Katherine Eaton",
     author_email="katherine.eaton@phac-aspc.gc.ca",
-    description=("SARS-CoV-2 recombination detection from lineage barcodes."),
+    description=("REcombination BARcode detection for SARS-CoV-2."),
     long_description=long_description,
     long_description_content_type="text/markdown",
     license="MIT",
