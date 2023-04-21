@@ -1,4 +1,3 @@
-test/
 dataset/
 logs/
 build/
@@ -10,3 +9,9 @@ output/
 slurm*
 rebar/__pycache__
 snipit/
+
+# testing
+htmlcov/
+test/tmp
+coverage.xml
+.coverage*

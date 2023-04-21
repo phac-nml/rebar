@@ -30,6 +30,16 @@ from .constants import (
 from .export import Export
 
 # -----------------------------------------------------------------------------
+# Classes
+# -----------------------------------------------------------------------------
+
+
+class Namespace:
+    def __init__(self, **kwargs):
+        self.__dict__.update(kwargs)
+
+
+# -----------------------------------------------------------------------------
 # Functions
 # -----------------------------------------------------------------------------
 
@@ -200,8 +210,6 @@ def create_barcodes(params):
             logging object for messages
         output : str
             file path for output barcodes csv.
-        log : str
-            file path for output log.
     """
 
     info = {}
@@ -363,8 +371,6 @@ def create_tree(params):
             logging object for messages
         output : str
             file path for output newick tree.
-        log : str
-            file path for output log.
     """
 
     info = {}
@@ -491,6 +497,8 @@ def parse_alignment(params):
             file path to reference genome.
         alignment : str
             file_path to alignment.
+        mask : int
+            number of bases to mask at 5' and 3' end.
         logger : logging.RootLogger
             logging object for messages
         threads : int
@@ -561,10 +569,14 @@ def detect_recombination(params):
             file path of input barcodes csv.
         subs : str
             file path of input subs tsv.
-        genome_length : int
-            length of genome, only required if using nextclade TSV.
-        logger : str
-            output logging object (created in __main__.py).
+        lineage_to_clade : str
+            file path of mapping lineages to clades.
+        logger : logging.RootLogger
+            logging object for messages.
+        threads : int
+            number of CPUs to use.
+        outdir : str
+            directory path for output files.
     """
 
     logger = params.logger

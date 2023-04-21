@@ -647,6 +647,7 @@ class Genome:
                 + self.recombination.parent_1.lineage
                 + " is a perfect match, halting recombinant search."
             )
+            self.recombinant = False
             return 0
 
         # ---------------------------------------------------------------------

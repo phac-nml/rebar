@@ -30,11 +30,11 @@ jobs:
           python-version: '3.9'
 
       - name: install package
-        run: pip install .[dev]
+        run: pip install -r dev-requirements.txt
 
-      # - name: pytest modules
-      #   run: |
-      #     python test/test.py
+      - name: pytest modules
+        run: |
+          python test/test.py
 
       # - name: codecov upload
       #   if: matrix.python-version == '3.9'
