@@ -20,6 +20,7 @@ def main():
     # If params doesn't have a log object, this is the help subcommand
     if not hasattr(params, "log"):
         return_code = params.func(params)
+        sys.exit(return_code)
 
     # Check for at least one output type specified
     if hasattr(params, "output_all"):

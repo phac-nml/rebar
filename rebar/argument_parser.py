@@ -264,6 +264,9 @@ def make_parser():
         + "\trun\t\t"
         + run_desc
         + "\n"
+        + "\tvalidate\t"
+        + validate_desc
+        + "\n"
         + "\thelp\t\t"
         + help_desc
         + "\n"
