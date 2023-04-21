@@ -606,11 +606,8 @@ def detect_recombination(params):
     total = len(subs_df)
 
     # Debugging
-    iterator = [rec for rec in subs_df.iterrows() if rec[1]["strain"].startswith("X")]
-    # iterator = [rec for rec in subs_df.iterrows()]
-    # if len(iterator) > 1500:
-    #    iterator = iterator[1540:]
-    total = len(iterator)
+    # iterator = [rec for rec in subs_df.iterrows() if rec[1]["strain"].startswith("X")]
+    # total = len(iterator)
 
     task = functools.partial(
         genome_mp,
