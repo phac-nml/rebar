@@ -22,4 +22,12 @@ PANGO_SEQUENCES_URL = (
     "main/data/pango-consensus-sequences_genome-nuc.fasta.zst"
 )
 
+# Lineages that produce undesireable results across all recombinants.
 PROBLEMATIC_LINEAGES = ["BA.2.85"]
+
+BARCODE_MANUAL_EDITS = {
+    # This substitution is found in the UShER tree, but missing from Nextclade
+    "XAE": {"A26530G": 1}
+}
+
+EDGE_CASE_LINEAGES = ["XB", "XP", "XR", "XAE", "XAS", "XAV", "XAZ", "XBK", "XBQ", "XBZ"]

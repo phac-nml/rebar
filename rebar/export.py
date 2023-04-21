@@ -14,7 +14,7 @@ class Export:
 
     def to_yaml(self):
         yaml_data = "\n".join([genome.to_yaml() for genome in self.genomes])
-        file_path = os.path.join(self.outdir, "recombination.yaml")
+        file_path = os.path.join(self.outdir, "summary.yaml")
         with open(file_path, "w") as outfile:
             outfile.write(yaml_data + "\n")
 
@@ -26,7 +26,7 @@ class Export:
                 dataframe = genome_dataframe
             else:
                 dataframe = pd.concat([dataframe, genome_dataframe], ignore_index=True)
-        file_path = os.path.join(self.outdir, "recombination.tsv")
+        file_path = os.path.join(self.outdir, "summary.tsv")
         dataframe.to_csv(file_path, sep="\t", index=False)
 
     def collect_parents(self):
@@ -49,7 +49,7 @@ class Export:
             result[parents].append(genome)
         return result
 
-    def to_dataframes(self):
+    def to_barcodes(self):
 
         for parents in self.parents:
             first_genome = self.parents[parents][0]
@@ -64,16 +64,14 @@ class Export:
                 df = df[df["parent"] != "shared"]
 
             self.dataframes[parents] = df
-            file_path = os.path.join(
-                self.outdir, "recombination_{}.tsv".format(parents)
-            )
+            file_path = os.path.join(self.outdir, "barcode_{}.tsv".format(parents))
             df.to_csv(file_path, sep="\t", index=False)
 
     def to_alignments(self):
 
         # Create dataframes first
         if len(self.dataframes) == 0:
-            self.to_dataframes()
+            self.to_barcodes()
 
         for parents in self.parents:
 
@@ -94,9 +92,7 @@ class Export:
                 aln_lines.append(">" + header)
                 aln_lines.append("".join(seq))
 
-            file_path = os.path.join(
-                self.outdir, "recombination_{}.fasta".format(parents)
-            )
+            file_path = os.path.join(self.outdir, "alignment_{}.fasta".format(parents))
             with open(file_path, "w") as outfile:
                 outfile.write("\n".join(aln_lines) + "\n")
 
@@ -112,7 +108,7 @@ class Export:
             parent_1 = parents.split("_")[0]
             parent_2 = parents.split("_")[1]
             fasta_path = self.alignments[parents]
-            fig_prefix = os.path.join(self.outdir, "recombination_{}".format(parents))
+            fig_prefix = os.path.join(self.outdir, "snipit_{}".format(parents))
 
             cmd_str = (
                 "snipit {fasta_path}"
@@ -122,6 +118,7 @@ class Export:
                 " --reference Reference"
                 " --flip-vertical"
                 " --format {ext}"
+                " --solid-background"
             ).format(
                 fasta_path=fasta_path,
                 fig_prefix=fig_prefix,

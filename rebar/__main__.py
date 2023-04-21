@@ -21,14 +21,32 @@ def main():
     if not hasattr(params, "log"):
         return_code = params.func(params)
 
+    # Check for at least one output type specified
+    if hasattr(params, "output_all"):
+        if (
+            not params.output_all
+            and not params.output_fasta
+            and not params.output_barcode
+            and not params.output_plot
+            and not params.output_tsv
+            and not params.output_yaml
+        ):
+            raise SystemExit(
+                RebarError(
+                    "RebarError: At least one output type must be specified"
+                    " with --output-TYPE."
+                )
+            )
+
     # Check for conflicting use of --debug and --threads
-    elif params.debug and params.threads > 1:
+    if params.debug and params.threads > 1:
         raise SystemExit(
             RebarError(
                 "RebarError: Debugging mode (--debug) and multithreading mode"
-                "(--threads) are incompatible. Please specify only one or the other."
+                " (--threads) are incompatible. Please specify only one or the other."
             )
         )
+
     # Otherwise, run an actual analysis subcommand
     else:
 
@@ -66,6 +84,12 @@ def main():
             )
         else:
             params.threads = 1
+
+        # Reverse the no_edge_cases parameter
+        if hasattr(params, "no_edge_cases"):
+            params.edge_cases = True
+            if params.no_edge_cases:
+                params.edge_cases = False
 
         return_code = params.func(params)
     sys.exit(return_code)

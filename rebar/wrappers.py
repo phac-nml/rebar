@@ -48,18 +48,22 @@ def dataset(params):
     # Initialize tag
     if params.name == "sars-cov-2":
 
-        accession = "MN908947.3"
-        info["reference"] = download_reference_sequence(params, accession)
-        info["sequences"] = download_consensus_sequences(params)
-        info["tree"] = create_tree(params)
-        info["barcodes"] = create_barcodes(params)
+        if params.tag == "latest":
 
-    # Summarize dataset in yaml file
-    info_yaml = yaml.dump(info, sort_keys=False, indent=2)
-    info_path = os.path.join(params.outdir, "dataset.yaml")
-    logger.info(str(datetime.now()) + "\tExporting dataset summary: " + info_path)
-    with open(info_path, "w") as outfile:
-        outfile.write(info_yaml + "\n")
+            accession = "MN908947.3"
+            info["reference"] = download_reference_sequence(params, accession)
+            info["sequences"] = download_consensus_sequences(params)
+            info["tree"] = create_tree(params)
+            info["barcodes"] = create_barcodes(params)
+
+            # Summarize dataset in yaml file
+            info_yaml = yaml.dump(info, sort_keys=False, indent=2)
+            info_path = os.path.join(params.outdir, "dataset.yaml")
+            logger.info(
+                str(datetime.now()) + "\tExporting dataset summary: " + info_path
+            )
+            with open(info_path, "w") as outfile:
+                outfile.write(info_yaml + "\n")
 
     # Finish
     logger.info(str(datetime.now()) + "\t" + "-" * 40)

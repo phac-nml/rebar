@@ -34,8 +34,5 @@ jobs:
       - name: run help
         run: rebar help
 
-      - name: tree
-        run: rebar tree --output tree.nwk
-
-      - name: barcodes
-        run: rebar barcodes --output barcodes.csv
+      - name: dataset
+        run: rebar dataset --name sars-cov-2 --outdir dataset/sars-cov-2

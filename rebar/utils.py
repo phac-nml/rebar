@@ -23,6 +23,7 @@ from .constants import (
     PANGO_SEQUENCES_URL,
     BARCODES_NEXTCLADE_URL,
     BARCODES_USHER_URL,
+    BARCODE_MANUAL_EDITS,
     PROBLEMATIC_LINEAGES,
     LINEAGE_SUMMARY_URL,
 )
@@ -149,11 +150,36 @@ def download_consensus_sequences(params):
 
     # Decompress the zstd format
     decomp = zstd.ZstdDecompressor()
-
-    # Write decompressed contents to file
-    logger.info(str(datetime.now()) + "\tExporting sequences: " + fasta_path)
+    # Write decompressed contents to file (tmp)
     with open(fasta_path, "wb") as outfile:
         decomp.copy_stream(response.raw, outfile)
+
+    records = SeqIO.parse(fasta_path, "fasta")
+    logger.info(str(datetime.now()) + "\tApplying edge-case curation.")
+    fasta_lines = []
+
+    for record in records:
+        for lineage in BARCODE_MANUAL_EDITS:
+            if record.id != lineage:
+                continue
+            for sub in BARCODE_MANUAL_EDITS[lineage]:
+                logger.info(
+                    str(datetime.now())
+                    + "\t\tAdding "
+                    + lineage
+                    + " barcode "
+                    + str(sub)
+                )
+                sub = Substitution(sub)
+                # genome coordinates are 1 based
+                sub_i = sub.coord - 1
+                record.seq = record.seq[:sub_i] + sub.alt + record.seq[sub_i + 1 :]
+        fasta_lines.append(">" + str(record.id))
+        fasta_lines.append(str(record.seq))
+
+    logger.info(str(datetime.now()) + "\tExported lineage sequences: " + fasta_path)
+    with open(fasta_path, "w") as outfile:
+        outfile.write("\n".join(fasta_lines) + "\n")
 
     # Finish
     logger.info(str(datetime.now()) + "\tFinished downloading lineage sequences.")
@@ -225,15 +251,6 @@ def create_barcodes(params):
     barcodes_usher_df = pd.read_csv(StringIO(barcodes_text), sep=",")
     # Rename the empty first column that should be lineage
     barcodes_usher_df.rename(columns={"Unnamed: 0": "lineage"}, inplace=True)
-    # # Convert to dict
-    # for rec in barcodes_usher_df.iterrows():
-    #     lineage = rec[1]["lineage"]
-    #     print(lineage)
-    #     print(type(rec[1]))
-    #     print(dir(rec[1]))
-    #     x = rec[1].apply(lambda col: col.sum() == 1)
-    #     print(x)
-    #     break
 
     # Convert to dataframe
     logger.info(str(datetime.now()) + "\tConverting barcodes to dataframe.")
@@ -282,6 +299,27 @@ def create_barcodes(params):
         detections = list(df.columns[df.apply(lambda col: col.sum() == 1)])
         for sub in detections:
             if sub not in barcodes_nextclade_df:
+                barcodes_nextclade_df[sub] = 0
+            barcodes_nextclade_df.at[lineage_i, sub] = 1
+
+    logger.info(str(datetime.now()) + "\tApplying edge-case curation.")
+
+    for lineage in BARCODE_MANUAL_EDITS:
+        lineage_i = barcodes_nextclade_df[
+            barcodes_nextclade_df["lineage"] == lineage
+        ].index.values[0]
+
+        for sub, value in BARCODE_MANUAL_EDITS[lineage].items():
+            logger.info(
+                str(datetime.now())
+                + "\t\tAdding "
+                + lineage
+                + " barcode "
+                + sub
+                + "="
+                + str(value)
+            )
+            if sub not in barcodes_nextclade_df.columns:
                 barcodes_nextclade_df[sub] = 0
             barcodes_nextclade_df.at[lineage_i, sub] = 1
 
@@ -476,9 +514,8 @@ def parse_alignment(params):
     records = SeqIO.parse(params.alignment, "fasta")
 
     # Parse substitutions
-    logger.info(str(datetime.now()) + "\tParsing substitutions from alignment.")
-
-    # Process genomes in parallel
+    # Process genomes in parallel, `genome_mp` is a multiprocessing wrapper
+    # function for the `Genome` class.
     pool = Pool(params.threads)
     iterator = records
     task = functools.partial(
@@ -489,8 +526,10 @@ def parse_alignment(params):
         logger=params.logger,
     )
     total = num_records
-    task_progress = tqdm(pool.imap_unordered(task, iterator), total=total)
-    task_description = str(datetime.now()) + "      Substitution parsing progress"
+    task_progress = tqdm(pool.imap(task, iterator), total=total)
+    task_description = (
+        str(datetime.now()) + "      Parsing substitutions from alignment"
+    )
     task_progress.set_description(task_description, refresh=True)
     genomes = list(task_progress)
 
@@ -532,13 +571,6 @@ def detect_recombination(params):
     logger.info(str(datetime.now()) + "\t" + "-" * 40)
     logger.info(str(datetime.now()) + "\tDetecting recombination.")
 
-    # -------------------------------------------------------------------------
-    # PHASE 1: SETUP
-    # Objectives:
-    #   1. Import the substitutions dataframe of each sample.
-    #   2. Import the lineage-determining mutation barcodes dataframe.
-    #   3. Import the lineage nomenclature tree, to identify designated recombinants.
-
     # Import the dataframe from the `subs` module, or alternatively from nextclade
     logger.info(str(datetime.now()) + "\tImporting substitutions: " + params.subs)
     subs_df = pd.read_csv(params.subs, sep="\t").fillna(NO_DATA_CHAR)
@@ -553,6 +585,7 @@ def detect_recombination(params):
     logger.info(str(datetime.now()) + "\tImporting tree: " + params.tree)
     tree = Phylo.read(params.tree, "newick")
 
+    # Import mapping of lineages to clades
     logger.info(
         str(datetime.now())
         + "\tImporting lineage to clade mapping: "
@@ -561,32 +594,14 @@ def detect_recombination(params):
     lineage_to_clade = pd.read_csv(params.lineage_to_clade, sep="\t")
 
     # Identify which lineages are known recombinants
+    # ie. descended from the "X" recombinant MRCA node
     recombinant_tree = [c for c in tree.find_clades("X")][0]
     recombinant_lineages = [c.name for c in recombinant_tree.find_clades()]
 
-    # -------------------------------------------------------------------------
-    # PHASE 2: DETECT RECOMBINATION
-    # Objectives:
-    #   1. Store substitutions, deletions, and missing data as class attributes.
-    #     - Ex. `genome.substitutions`, `genome.deletions`
-    #   2. Summarize matches to lineage barcodes.
-    #     - Ex. `genome.barcode_summary`
-    #   3. Assign a lineage to each genome based on the highest barcode matches.
-    #   4. Flag any samples that are definitively not recombinants.
-    #     - Based on a perfect match to a non-recombinant lineage barcode.
-    #     - These will be excluded from downstream processing to save time.
-    #   5. Flag any samples that are recursive recombinants.
-    #     - A perfect match to XBB.1.5 (BA.2.75 x BA.2.10) is not recursive.
-    #     - A perfect match to XBL (XBB.1 x BA.2.75) is a recursive recombinant.
-    #     - All other cases will have recursive set to `None`, for uncertainty
-    #     - This will determine whether we allow recombinants to be the original
-    #       parents in subsequent phases.
-
-    logger.info(str(datetime.now()) + "\tDetecting recombination.")
-
-    # Process genomes in parallel
+    # Detect recombination in samples.
+    # Process genomes in parallel, `genome_mp` is a multiprocessing wrapper
+    # function for the `Genome` class.
     pool = Pool(params.threads)
-
     iterator = subs_df.iterrows()
     total = len(subs_df)
 
@@ -613,8 +628,8 @@ def detect_recombination(params):
         edge_cases=params.edge_cases,
     )
 
-    task_progress = tqdm(pool.imap_unordered(task, iterator), total=total)
-    task_description = str(datetime.now()) + "      Recombination detection progress"
+    task_progress = tqdm(pool.imap(task, iterator), total=total)
+    task_description = str(datetime.now()) + "      Detecting recombination"
     task_progress.set_description(task_description, refresh=True)
     genomes = list(task_progress)
 
@@ -633,22 +648,33 @@ def detect_recombination(params):
     export = Export(genomes=genomes, outdir=params.outdir, include_shared=params.shared)
 
     # YAML
-    logger.info(str(datetime.now()) + "\tExporting YAML.")
-    export.to_yaml()
+    if params.output_all or params.output_yaml:
+        outpath = os.path.join(params.outdir, "summary.yaml")
+        logger.info(str(datetime.now()) + "\tExporting YAML: " + outpath)
+        export.to_yaml()
 
-    logger.info(str(datetime.now()) + "\tExporting dataframe.")
-    export.to_dataframe()
+    if params.output_all or params.output_tsv:
+        outpath = os.path.join(params.outdir, "summary.tsv")
+        logger.info(str(datetime.now()) + "\tExporting TSV: " + outpath)
+        export.to_dataframe()
 
-    logger.info(str(datetime.now()) + "\tExporting dataframes by parent.")
-    export.to_dataframes()
+    if params.output_all or params.output_barcode:
+        outpath = os.path.join(params.outdir, "barcode_<parent_1>_<parent_2>.tsv")
+        logger.info(str(datetime.now()) + "\tExporting barcode mutations: " + outpath)
+        export.to_barcodes()
 
     # Dataframe
-    logger.info(str(datetime.now()) + "\tExporting alignments by parent.")
-    export.to_alignments()
+    if params.output_all or params.output_fasta:
+        outpath = os.path.join(params.outdir, "alignment_<parent_1>_<parent_2>.fasta")
+        logger.info(str(datetime.now()) + "\tExporting FASTA alignments: " + outpath)
+        export.to_alignments()
 
-    # Snipit figures
-    if params.plot:
-        logger.info(str(datetime.now()) + "\tExporting snipit by parent.")
+    # Snipit plots
+    if params.output_all or params.output_plot:
+        outpath = os.path.join(
+            params.outdir, "snipit_<parent_1>_<parent_2>." + params.snipit_format
+        )
+        logger.info(str(datetime.now()) + "\tExporting snipit plots: " + outpath)
         export.to_snipit(ext=params.snipit_format)
 
     # Finish

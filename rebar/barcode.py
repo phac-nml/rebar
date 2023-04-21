@@ -6,8 +6,7 @@ from datetime import datetime
 import pandas as pd
 
 from .substitution import Substitution
-
-random.seed(123456)
+from .constants import EDGE_CASE_LINEAGES
 
 
 class Barcode:
@@ -165,6 +164,8 @@ class Barcode:
 
         elif outlier_method == "distance":
 
+            # Fix the seed, so that results are the same every rerun
+            random.seed(123456)
             # If there are a large number of top_lineages, subsample down for speed
             if len(top_lineages) > max_top_lineages:
                 top_lineages_subsample = random.choices(
@@ -186,10 +187,15 @@ class Barcode:
             keep_lineages = [
                 l for l, d in distances_summary.items() if d <= distances_mode
             ]
+            outlier_lineages = [
+                l for l, d in distances_summary.items() if d > distances_mode
+            ]
             lineage_tree = tree.common_ancestor(keep_lineages)
             lineage = lineage_tree.name
             lineage_descendants = [c.name for c in lineage_tree.find_clades()]
-            outlier_lineages = [l for l in top_lineages if l not in lineage_descendants]
+            outlier_lineages += [
+                l for l in top_lineages if l not in lineage_descendants
+            ]
 
         # Get clade of lineage
         if lineage in list(lineage_to_clade["lineage"]):
@@ -318,5 +324,9 @@ class Barcode:
         # Option 2: Perfect match to non-recombinant
         elif len(self.conflict_ref) == 0:
             self.recombinant = False
+
+        # set edge case status
+        if self.recombinant in EDGE_CASE_LINEAGES:
+            self.edge_case = True
 
         return 0

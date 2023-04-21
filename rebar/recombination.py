@@ -219,6 +219,11 @@ class Recombination:
             end = sub.coord
             p_prev = p_curr
 
+        if genome.debug:
+            genome.logger.info(
+                str(datetime.now()) + "\t\t\tREGIONS UNFILTERED: " + str(regions)
+            )
+
         # Filter recombination regions
         #   - At least X consecutive subs per region
         #   - At least X bases per region
@@ -232,13 +237,10 @@ class Recombination:
             num_consecutive = len(regions[start]["subs"])
             region_length = (end - start) + 1
 
-            if num_consecutive < min_consecutive:
-                continue
-
             # First filtered region
             if not prev_parent:
                 # Is the first region long enough?
-                if region_length < min_length:
+                if num_consecutive < min_consecutive or region_length < min_length:
                     continue
                 regions_filter[start] = regions[start]
 
@@ -250,7 +252,7 @@ class Recombination:
                 continue
             elif prev_parent != parent:
                 # start new region, if long enough
-                if region_length < min_length:
+                if num_consecutive < min_consecutive or region_length < min_length:
                     continue
                 regions_filter[start] = regions[start]
 
@@ -259,7 +261,7 @@ class Recombination:
 
         if genome.debug:
             genome.logger.info(
-                str(datetime.now()) + "\t\t\tREGIONS: " + str(regions_filter)
+                str(datetime.now()) + "\t\t\tREGIONS FILTERED: " + str(regions_filter)
             )
 
         # If we're left with one filtered parental region, no recombination

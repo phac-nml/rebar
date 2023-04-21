@@ -27,15 +27,22 @@ def add_dataset_name_param(parser, required=False):
     )
 
 
+def add_dataset_tag_param(parser, required=False):
+    text = "Dataset tag."
+    parser.add_argument(
+        "--tag", required=required, type=str, choices=["latest"], help=text
+    )
+
+
 def add_debug_param(parser, required=False):
     text = "Log debugging output."
     parser.add_argument("--debug", required=required, action="store_true", help=text)
 
 
-def add_edge_cases_param(parser, required=False):
-    text = "Enable sensitive edge case handling for recombinants with few mutations."
+def add_no_edge_cases_param(parser, required=False):
+    text = "Disable sensitive edge case handling for recombinants with few mutations."
     parser.add_argument(
-        "--edge-cases", required=required, action="store_true", help=text
+        "--no-edge-cases", required=required, action="store_true", help=text
     )
 
 
@@ -78,9 +85,9 @@ def add_min_consecutive_param(parser, required=False):
 
 
 def add_min_length_param(parser, required=False):
-    text = "Minimum length of regions contributed by each parent (Default: 1000)."
+    text = "Minimum length of regions contributed by each parent (Default: 500)."
     parser.add_argument(
-        "--min-length", required=required, default=1000, type=int, help=text
+        "--min-length", required=required, default=500, type=int, help=text
     )
 
 
@@ -96,9 +103,46 @@ def add_outdir_param(parser, required=False, default="output"):
     )
 
 
-def add_plot_param(parser, required=False):
-    text = "Create snipit plots."
-    parser.add_argument("--plot", required=required, action="store_true", help=text)
+def add_output_all_param(parser, required=False):
+    text = "Produce all possible output files."
+    parser.add_argument(
+        "--output-all", required=required, action="store_true", help=text
+    )
+
+
+def add_output_fasta_param(parser, required=False):
+    text = "Output FASTA results (alignments with non-barcode positions masked)."
+    parser.add_argument(
+        "--output-fasta", required=required, action="store_true", help=text
+    )
+
+
+def add_output_plot_param(parser, required=False):
+    text = "Output snipit plots."
+    parser.add_argument(
+        "--output-plot", required=required, action="store_true", help=text
+    )
+
+
+def add_output_barcode_param(parser, required=False):
+    text = "Output barcode mutations as table."
+    parser.add_argument(
+        "--output-barcode", required=required, action="store_true", help=text
+    )
+
+
+def add_output_tsv_param(parser, required=False):
+    text = "Output TSV summary."
+    parser.add_argument(
+        "--output-tsv", required=required, action="store_true", help=text
+    )
+
+
+def add_output_yaml_param(parser, required=False):
+    text = "Output YAML summary."
+    parser.add_argument(
+        "--output-yaml", required=required, action="store_true", help=text
+    )
 
 
 def add_reference_param(parser, required=False):
@@ -116,7 +160,7 @@ def add_snipit_format_param(parser, required=False):
     parser.add_argument(
         "--snipit-format",
         required=required,
-        default="pdf",
+        default="png",
         choices=["pdf", "png"],
         type=str,
         help=text,
@@ -150,6 +194,7 @@ def add_params(parser, subcommand=None):
 
     if subcommand == "dataset":
         add_dataset_name_param(parser=required, required=True)
+        add_dataset_tag_param(parser=required, required=True)
 
     # Note: tree has no specific subcommands
 
@@ -160,31 +205,43 @@ def add_params(parser, subcommand=None):
         add_lineages_param(parser=parser, required=False)
         add_alignment_param(parser=parser, required=False)
 
-        add_edge_cases_param(parser=parser, required=False)
+        add_no_edge_cases_param(parser=parser, required=False)
         add_mask_param(parser=parser, required=False)
         add_exclude_non_recomb_param(parser=parser, required=False)
         add_max_depth_param(parser=parser, required=False)
         add_min_length_param(parser=parser, required=False)
         add_min_consecutive_param(parser=parser, required=False)
         add_min_subs_param(parser=parser, required=False)
-        add_plot_param(parser=parser, required=False)
         add_shared_param(parser=parser, required=False)
         add_snipit_format_param(parser=parser, required=False)
+
+        add_output_all_param(parser=parser, required=False)
+        add_output_fasta_param(parser=parser, required=False)
+        add_output_plot_param(parser=parser, required=False)
+        add_output_barcode_param(parser=parser, required=False)
+        add_output_tsv_param(parser=parser, required=False)
+        add_output_yaml_param(parser=parser, required=False)
 
     if subcommand == "validate":
         add_dataset_param(parser=required, required=True)
 
         add_alignment_param(parser=parser, required=False)
         add_mask_param(parser=parser, required=False)
-        add_edge_cases_param(parser=parser, required=False)
+        add_no_edge_cases_param(parser=parser, required=False)
         add_exclude_non_recomb_param(parser=parser, required=False)
         add_max_depth_param(parser=parser, required=False)
         add_min_length_param(parser=parser, required=False)
         add_min_consecutive_param(parser=parser, required=False)
         add_min_subs_param(parser=parser, required=False)
-        add_plot_param(parser=parser, required=False)
         add_shared_param(parser=parser, required=False)
         add_snipit_format_param(parser=parser, required=False)
+
+        add_output_all_param(parser=parser, required=False)
+        add_output_fasta_param(parser=parser, required=False)
+        add_output_plot_param(parser=parser, required=False)
+        add_output_barcode_param(parser=parser, required=False)
+        add_output_tsv_param(parser=parser, required=False)
+        add_output_yaml_param(parser=parser, required=False)
 
 
 # -----------------------------------------------------------------------------
