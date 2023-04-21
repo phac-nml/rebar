@@ -36,10 +36,10 @@ jobs:
         run: rebar help
 
       - name: dataset
-        run: rebar dataset --name sars-cov-2 --tag --outdir dataset/sars-cov-2-latest
+        run: rebar dataset --name sars-cov-2 --tag latest --outdir dataset/sars-cov-2-latest
 
       - name: run
         run: rebar run --dataset dataset/sars-cov-2-latest --output-all --lineages XA
 
       - name: validate
-        run: rebar validate --dataset dataset/sars-cov-2-latest --output-tsv --outdir validate
+        run: rebar validate --dataset dataset/sars-cov-2-latest --output-tsv --outdir validate --threads 2
