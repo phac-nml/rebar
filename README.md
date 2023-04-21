@@ -8,7 +8,7 @@
 [![GitHub issues](https://img.shields.io/github/issues/phac-nml/rebar.svg)](https://github.com/phac-nml/rebar/issues)
 [![Install CI](https://github.com/phac-nml/rebar/actions/workflows/install.yaml/badge.svg)](https://github.com/phac-nml/rebar/actions/workflows/install.yaml)
 
-REcombination detection using BARcodes for SARS-CoV-2.
+**RE**combination detection using **BAR**codes for SARS-CoV-2.
 
 ## Install
 
@@ -33,7 +33,7 @@ REcombination detection using BARcodes for SARS-CoV-2.
 1. First, download and build the `rebar` dataset model.
 
     ```bash
-    rebar dataset --name sars-cov-2 --outdir dataset/sars-cov-2
+    rebar dataset --name sars-cov-2 --outdir dataset/sars-cov-2-latest --tag latest
     ```
 
     The `dataset` subcommand performs the following tasks:
@@ -47,7 +47,7 @@ REcombination detection using BARcodes for SARS-CoV-2.
     **Option 1**: From user-specified lineage names.
 
     ```bash
-    rebar run --dataset dataset/sars-cov-2 --outdir test --output-all --lineages AY.4,BA.5.2,XD,XBB.1.5.1,XBL
+    rebar run --dataset dataset/sars-cov-2-latest --outdir test --output-all --lineages AY.4,BA.5.2,XD,XBB.1.5.1,XBL
     ```
 
     - THe `--lineages` can include any designated lineage found in `dataset/sars-cov-2/sequences.fasta`.
@@ -55,7 +55,7 @@ REcombination detection using BARcodes for SARS-CoV-2.
     **Option 2**: From an input alignment.
 
     ```bash
-    rebar run --dataset dataset/sars-cov-2 --outdir test --output-all --alignment alignment.fasta
+    rebar run --dataset dataset/sars-cov-2-latest --outdir test --output-all --alignment alignment.fasta
     ```
 
     - The `--alignment` must be aligned to the same reference as `dataset/sars-cov-2/reference.fasta`.
