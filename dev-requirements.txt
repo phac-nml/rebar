@@ -1,0 +1,10 @@
+pre-commit==2.17.0
+coverage
+codecov
+pytest
+pytest-cov
+check-manifest
+twine
+flake8
+flake8-bugbear
+black

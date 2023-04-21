@@ -7,6 +7,7 @@
 [![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](https://github.com/phac-nml/rebar/blob/master/LICENSE)
 [![GitHub issues](https://img.shields.io/github/issues/phac-nml/rebar.svg)](https://github.com/phac-nml/rebar/issues)
 [![Install CI](https://github.com/phac-nml/rebar/actions/workflows/install.yaml/badge.svg)](https://github.com/phac-nml/rebar/actions/workflows/install.yaml)
+[![Pipeline CI](https://github.com/phac-nml/rebar/actions/workflows/pipeline.yaml/badge.svg)](https://github.com/phac-nml/rebar/actions/workflows/pipeline.yaml)
 
 **RE**combination detection using **BAR**codes for SARS-CoV-2.
 
