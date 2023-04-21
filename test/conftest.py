@@ -27,8 +27,10 @@ def params():
         output_fasta=True,
         output_tsv=True,
         output_barcode=True,
-        output_snipit=True,
+        output_plot=True,
         output_yaml=True,
         exclude_non_recomb=False,
+        shared=False,
+        snipit_format="png",
     )
     return params
