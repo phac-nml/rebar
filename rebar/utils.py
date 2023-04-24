@@ -549,8 +549,15 @@ def parse_alignment(params):
     task_elapsed = task_progress.format_dict["elapsed"]
     task_iter = task_progress.format_dict["total"]
     sec_per_iter = round(task_elapsed / task_iter, 5)
-    iter_per_sec = round(task_iter/ task_elapsed, 5)
-    logger.info(str(datetime.now()) + "\tParsing substitutions benchmark: " + str(sec_per_iter) + " s/seq, " + str(iter_per_sec) + " seq/s")
+    iter_per_sec = round(task_iter / task_elapsed, 5)
+    logger.info(
+        str(datetime.now())
+        + "\tParsing substitutions benchmark: "
+        + str(sec_per_iter)
+        + " s/seq, "
+        + str(iter_per_sec)
+        + " seq/s"
+    )
 
     # Export
     subs_path = os.path.join(params.outdir, "subs.tsv")
@@ -658,8 +665,15 @@ def detect_recombination(params):
     task_elapsed = task_progress.format_dict["elapsed"]
     task_iter = task_progress.format_dict["total"]
     sec_per_iter = round(task_elapsed / task_iter, 5)
-    iter_per_sec = round(task_iter/ task_elapsed, 5)
-    logger.info(str(datetime.now()) + "\tDetecting recombination benchmark: " + str(sec_per_iter) + " s/seq, " + str(iter_per_sec) + " seq/s")
+    iter_per_sec = round(task_iter / task_elapsed, 5)
+    logger.info(
+        str(datetime.now())
+        + "\tDetecting recombination benchmark: "
+        + str(sec_per_iter)
+        + " s/seq, "
+        + str(iter_per_sec)
+        + " seq/s"
+    )
 
     # -------------------------------------------------------------------------
     # Pass 3: Export

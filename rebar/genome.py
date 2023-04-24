@@ -2,7 +2,6 @@
 import yaml
 from datetime import datetime
 from copy import copy
-import sys
 
 # PyPI libraries
 import pandas as pd
@@ -648,7 +647,7 @@ class Genome:
 
         # If parent_1 has no conflict_refs, don't search for more parents
         # i.e. it's a perfect match, no evidence of recombination
-        if len(self.recombination.parent_1.conflict_ref) == 0:
+        if self.debug and len(self.recombination.parent_1.conflict_ref) == 0:
             self.logger.info(
                 str(datetime.now())
                 + "\t\t"
@@ -794,23 +793,23 @@ class Genome:
                 expected = "negative"
             # Correct positive
             if self.lineage.recombinant and expected == "positive":
-                status="positive"
+                status = "positive"
             # Correct negative
             elif not self.lineage.recombinant and expected == "negative":
-                status="negative"
+                status = "negative"
             # False positive
             elif self.lineage.recombinant and expected == "negative":
-                status="false_positive"
-                warn=True
+                status = "false_positive"
+                warn = True
             # False negative
             elif not self.lineage.recombinant and expected == "positive":
-                status="false_negative"
-                warn=True
+                status = "false_negative"
+                warn = True
 
-            msg = "Validation fail for {strain}, expected='{expected}', actual='{status}'".format(
-                strain = self.id,
-                expected=expected,
-                status=status,
+            msg = (
+                "Validation fail for {}".format(self.id)
+                + ", expected='{}'".format(expected)
+                + ", actual='{}'".format(status)
             )
             if warn:
                 self.logger.info(str(datetime.now()) + "\t\tWARNING: " + msg)
@@ -819,7 +818,7 @@ class Genome:
                 # if self.validate_fail:
                 #     raise SystemExit(RebarError("RebarError: " + msg))
                 # Just a warning
-                #else:
+                # else:
                 #    self.logger.info(str(datetime.now()) + "\t\tWARNING: " + msg)
 
         return status

@@ -14,6 +14,7 @@ def add_barcodes_param(parser, required=False):
     text = "Input barcodes csv, from `barcodes` subcommand."
     parser.add_argument("--barcodes", required=required, type=str, help=text)
 
+
 def add_dataset_param(parser, required=False):
     text = "Path to dataset directory, output of `dataset` subcommand ."
     parser.add_argument("--dataset", required=required, type=str, help=text)
@@ -180,18 +181,20 @@ def add_tree_param(parser, required=False):
     text = "Input newick tree, from `tree` subcommand."
     parser.add_argument("--tree", required=required, type=str, help=text)
 
+
 def add_validate_param(parser, required=False):
     text = "Validate lineages against expected values."
     parser.add_argument("--validate", required=required, action="store_true", help=text)
 
+
 def add_params(parser, subcommand=None):
 
     parser._action_groups.pop()
-    required = parser.add_argument_group('required arguments')
-    optional = parser.add_argument_group('optional arguments')
+    required = parser.add_argument_group("required arguments")
+    optional = parser.add_argument_group("optional arguments")
 
     if subcommand == "dataset":
-        
+
         # Mandatory
         add_dataset_name_param(parser=required, required=True)
         add_dataset_tag_param(parser=required, required=True)
@@ -215,7 +218,7 @@ def add_params(parser, subcommand=None):
         add_debug_param(parser=optional, required=False)
         add_log_param(parser=optional, required=False)
         add_outdir_param(parser=optional, required=False)
-        add_threads_param(parser=optional, required=False)        
+        add_threads_param(parser=optional, required=False)
 
         # Optional Specific
         add_no_edge_cases_param(parser=optional, required=False)
@@ -236,6 +239,7 @@ def add_params(parser, subcommand=None):
         add_output_barcode_param(parser=optional, required=False)
         add_output_tsv_param(parser=optional, required=False)
         add_output_yaml_param(parser=optional, required=False)
+
 
 # -----------------------------------------------------------------------------
 def make_parser():

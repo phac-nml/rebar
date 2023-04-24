@@ -6,7 +6,6 @@ from multiprocess import cpu_count
 import sys
 from .utils import create_logger
 from rebar import make_parser, RebarError
-import timeit
 
 """
 Stub function and module used as a setuptools entry point.
@@ -48,15 +47,15 @@ def main():
                 " (--threads) are incompatible. Please specify only one or the other."
             )
         )
-    
-    # Check for validate mode and missing tsv output  
+
+    # Check for validate mode and missing tsv output
     if hasattr(params, "validate"):
         if params.validate and not (params.output_all or params.output_tsv):
             raise SystemExit(
                 RebarError(
-                    "RebarError: --validate requires either --output-all or --output-tsv."
+                    "RebarError: --validate requires --output-all or --output-tsv."
                 )
-            )    
+            )
 
     # Otherwise, run an actual analysis subcommand
     # Create log directory if it doesn't increase

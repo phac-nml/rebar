@@ -12,6 +12,7 @@ import os
 
 #     wrappers.dataset(params)
 
+
 def test_run_sarscov2_latest(params):
     """Test function wrappers.run."""
     params.outdir = "test/tmp/run"

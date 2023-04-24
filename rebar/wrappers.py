@@ -6,7 +6,6 @@ import yaml
 
 # PyPI libraries
 from Bio import SeqIO
-import pandas as pd
 
 
 # rebar objects
@@ -41,7 +40,7 @@ def dataset(params):
             file path for output log.
     """
     start_time = datetime.now()
-    
+
     logger = params.logger
     logger.info(str(datetime.now()) + "\t" + "-" * 40)
     logger.info(str(datetime.now()) + "\tBEGINNING SUBCOMMAND: dataset.")
@@ -69,7 +68,7 @@ def dataset(params):
                 outfile.write(info_yaml + "\n")
 
     # Runtime
-    end_time = datetime.now()    
+    end_time = datetime.now()
     runtime = end_time - start_time
     # more than an hour
     if runtime.seconds > 3600:
@@ -99,7 +98,7 @@ def run(params):
     Run rebar on an alignment or user-specified lineages.
     """
     start_time = datetime.now()
-    
+
     logger = params.logger
     logger.info(str(datetime.now()) + "\t" + "-" * 40)
     logger.info(str(datetime.now()) + "\tBEGINNING SUBCOMMAND: run.")
@@ -116,7 +115,7 @@ def run(params):
             RebarError(
                 "RebarError: Both --lineages and --alignment cannot be specified."
             )
-        )        
+        )
 
     reference_path = os.path.join(params.dataset, "reference.fasta")
     consensus_path = os.path.join(params.dataset, "alignment.fasta")
@@ -174,7 +173,7 @@ def run(params):
     detect_recombination(params)
 
     # Runtime
-    end_time = datetime.now()    
+    end_time = datetime.now()
     runtime = end_time - start_time
     # more than an hour
     if runtime.seconds > 3600:
@@ -188,10 +187,7 @@ def run(params):
         runtime = round(runtime.seconds, 1)
         units = "seconds"
 
-
     # Finish
     logger.info(str(datetime.now()) + "\t" + "-" * 40)
-    logger.info(str(datetime.now()) + "\tRUNTIME: " + str(runtime) + " " + units)    
+    logger.info(str(datetime.now()) + "\tRUNTIME: " + str(runtime) + " " + units)
     logger.info(str(datetime.now()) + "\tFINISHED SUBCOMMAND: run.")
-
-  
