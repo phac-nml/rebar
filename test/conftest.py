@@ -32,5 +32,11 @@ def params():
         exclude_non_recomb=False,
         shared=False,
         snipit_format="png",
+        # dataset
+        name="sars-cov-2",
+        tag="latest",
+        # run
+        lineages="AY.4,BA.5.2,XD,XBB.1.5.1,XBL",
+        dataset="test/tmp/dataset/sars-cov-2-latest",
     )
     return params

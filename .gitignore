@@ -5,9 +5,11 @@ validate/
 output/
 *.egg-info
 
+example*/
+
 *.zip
 slurm*
-*/__pycache__
+*/__pycache__/
 
 # testing
 htmlcov/

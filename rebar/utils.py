@@ -146,7 +146,7 @@ def download_consensus_sequences(params):
     info = {}
 
     # The sequences are a .fasta.zst file, remove the .zst as we're decompressing
-    fasta_name = "sequences.fasta"
+    fasta_name = "alignment.fasta"
     fasta_path = os.path.join(params.outdir, fasta_name)
 
     logger.info(str(datetime.now()) + "\t" + "-" * 40)
@@ -545,6 +545,13 @@ def parse_alignment(params):
     pool.close()
     pool.join()
 
+    # Benchmark summary
+    task_elapsed = task_progress.format_dict["elapsed"]
+    task_iter = task_progress.format_dict["total"]
+    sec_per_iter = round(task_elapsed / task_iter, 5)
+    iter_per_sec = round(task_iter/ task_elapsed, 5)
+    logger.info(str(datetime.now()) + "\tParsing substitutions benchmark: " + str(sec_per_iter) + " s/seq, " + str(iter_per_sec) + " seq/s")
+
     # Export
     subs_path = os.path.join(params.outdir, "subs.tsv")
     logger.info(str(datetime.now()) + "\tExporting results to: " + subs_path)
@@ -635,6 +642,7 @@ def detect_recombination(params):
         min_consecutive=params.min_consecutive,
         min_length=params.min_length,
         edge_cases=params.edge_cases,
+        validate=params.validate,
     )
 
     task_progress = tqdm(pool.imap(task, iterator), total=total)
@@ -645,6 +653,13 @@ def detect_recombination(params):
     # Pool memory management, don't accept new tasks and wait
     pool.close()
     pool.join()
+
+    # Benchmark summary
+    task_elapsed = task_progress.format_dict["elapsed"]
+    task_iter = task_progress.format_dict["total"]
+    sec_per_iter = round(task_elapsed / task_iter, 5)
+    iter_per_sec = round(task_iter/ task_elapsed, 5)
+    logger.info(str(datetime.now()) + "\tDetecting recombination benchmark: " + str(sec_per_iter) + " s/seq, " + str(iter_per_sec) + " seq/s")
 
     # -------------------------------------------------------------------------
     # Pass 3: Export

@@ -1,4 +1,4 @@
-name: Pipeline
+name: Examples
 
 on:
   push:
@@ -38,8 +38,11 @@ jobs:
       - name: dataset
         run: rebar dataset --name sars-cov-2 --tag latest --outdir dataset/sars-cov-2-latest
 
-      - name: run
-        run: rebar run --dataset dataset/sars-cov-2-latest --output-all --lineages XA
+      - name: example 1
+        run: rebar run --dataset dataset/sars-cov-2-latest --lineages AY.4,BA.5.2,XD,XBB.1.5.1,XBL --output-all --outdir example1
 
-      - name: validate
-        run: rebar validate --dataset dataset/sars-cov-2-latest --output-tsv --outdir validate --threads 2
+      - name: example 2
+        run: rebar run --dataset dataset/sars-cov-2-latest --alignment test/alignment.fasta --output-all --outdir example2
+
+      - name: example 3
+        run: rebar run --dataset dataset/sars-cov-2-latest --alignment dataset/sars-cov-2-latest/alignment.fasta --validate --threads 2 --output-all --outdir example3

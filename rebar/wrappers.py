@@ -6,6 +6,7 @@ import yaml
 
 # PyPI libraries
 from Bio import SeqIO
+import pandas as pd
 
 
 # rebar objects
@@ -39,6 +40,8 @@ def dataset(params):
         log : str
             file path for output log.
     """
+    start_time = datetime.now()
+    
     logger = params.logger
     logger.info(str(datetime.now()) + "\t" + "-" * 40)
     logger.info(str(datetime.now()) + "\tBEGINNING SUBCOMMAND: dataset.")
@@ -65,8 +68,24 @@ def dataset(params):
             with open(info_path, "w") as outfile:
                 outfile.write(info_yaml + "\n")
 
+    # Runtime
+    end_time = datetime.now()    
+    runtime = end_time - start_time
+    # more than an hour
+    if runtime.seconds > 3600:
+        runtime = round(runtime.seconds / 3600, 1)
+        units = "hours"
+    # more than a minute
+    elif runtime.seconds > 60:
+        runtime = round(runtime.seconds / 60, 1)
+        units = "minutes"
+    else:
+        runtime = round(runtime.seconds, 1)
+        units = "seconds"
+
     # Finish
     logger.info(str(datetime.now()) + "\t" + "-" * 40)
+    logger.info(str(datetime.now()) + "\tRUNTIME: " + str(runtime) + " " + units)
     logger.info(str(datetime.now()) + "\tFINISHED SUBCOMMAND: dataset.")
 
 
@@ -79,6 +98,8 @@ def run(params):
     """
     Run rebar on an alignment or user-specified lineages.
     """
+    start_time = datetime.now()
+    
     logger = params.logger
     logger.info(str(datetime.now()) + "\t" + "-" * 40)
     logger.info(str(datetime.now()) + "\tBEGINNING SUBCOMMAND: run.")
@@ -90,9 +111,15 @@ def run(params):
                 "RebarError: Either --lineages or --alignment must be specified."
             )
         )
+    if params.lineages and params.alignment:
+        raise SystemExit(
+            RebarError(
+                "RebarError: Both --lineages and --alignment cannot be specified."
+            )
+        )        
 
     reference_path = os.path.join(params.dataset, "reference.fasta")
-    consensus_path = os.path.join(params.dataset, "sequences.fasta")
+    consensus_path = os.path.join(params.dataset, "alignment.fasta")
     tree_path = os.path.join(params.dataset, "tree.nwk")
     barcodes_path = os.path.join(params.dataset, "barcodes.tsv")
     clade_path = os.path.join(params.dataset, "lineage_to_clade.tsv")
@@ -140,34 +167,31 @@ def run(params):
     params.tree = tree_path
     params.lineage_to_clade = clade_path
 
-    # Check if alignment was already parsed
     params.subs = os.path.join(params.outdir, "subs.tsv")
     parse_alignment(params)
 
-    # Check if recombination was already run
     params.edge_cases = True
     detect_recombination(params)
-    # run(params)
+
+    # Runtime
+    end_time = datetime.now()    
+    runtime = end_time - start_time
+    # more than an hour
+    if runtime.seconds > 3600:
+        runtime = round(runtime.seconds / 3600, 1)
+        units = "hours"
+    # more than a minute
+    elif runtime.seconds > 60:
+        runtime = round(runtime.seconds / 60, 1)
+        units = "minutes"
+    else:
+        runtime = round(runtime.seconds, 1)
+        units = "seconds"
+
 
     # Finish
     logger.info(str(datetime.now()) + "\t" + "-" * 40)
+    logger.info(str(datetime.now()) + "\tRUNTIME: " + str(runtime) + " " + units)    
     logger.info(str(datetime.now()) + "\tFINISHED SUBCOMMAND: run.")
 
-
-def validate(params):
-    """
-    Validate rebar on all designated lineages.
-    """
-    logger = params.logger
-    logger.info(str(datetime.now()) + "\t" + "-" * 40)
-    logger.info(str(datetime.now()) + "\tBEGINNING SUBCOMMAND: validate.")
-
-    consensus_path = os.path.join(params.dataset, "sequences.fasta")
-    params.lineages = None
-    params.alignment = consensus_path
-
-    run(params)
-
-    # Finish
-    logger.info(str(datetime.now()) + "\t" + "-" * 40)
-    logger.info(str(datetime.now()) + "\tFINISHED SUBCOMMAND: validate.")
+  

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 
 import argparse
-from .wrappers import dataset, run, validate
+from .wrappers import dataset, run
 from . import version
 
 
@@ -14,28 +14,27 @@ def add_barcodes_param(parser, required=False):
     text = "Input barcodes csv, from `barcodes` subcommand."
     parser.add_argument("--barcodes", required=required, type=str, help=text)
 
-
 def add_dataset_param(parser, required=False):
     text = "Path to dataset directory, output of `dataset` subcommand ."
     parser.add_argument("--dataset", required=required, type=str, help=text)
 
 
 def add_dataset_name_param(parser, required=False):
-    text = "Dataset name."
+    text = "Dataset name (Default: sars-cov-2)."
     parser.add_argument(
         "--name", required=required, type=str, choices=["sars-cov-2"], help=text
     )
 
 
 def add_dataset_tag_param(parser, required=False):
-    text = "Dataset tag."
+    text = "Dataset tag (Default: latest)."
     parser.add_argument(
         "--tag", required=required, type=str, choices=["latest"], help=text
     )
 
 
 def add_debug_param(parser, required=False):
-    text = "Log debugging output."
+    text = "Enable debugging mode."
     parser.add_argument("--debug", required=required, action="store_true", help=text)
 
 
@@ -181,68 +180,62 @@ def add_tree_param(parser, required=False):
     text = "Input newick tree, from `tree` subcommand."
     parser.add_argument("--tree", required=required, type=str, help=text)
 
+def add_validate_param(parser, required=False):
+    text = "Validate lineages against expected values."
+    parser.add_argument("--validate", required=required, action="store_true", help=text)
 
 def add_params(parser, subcommand=None):
 
-    required = parser.add_argument_group("required arguments")
-
-    # Universal to all subcommands, optional
-    add_debug_param(parser, required=False)
-    add_log_param(parser, required=False)
-    add_outdir_param(parser, required=False)
-    add_threads_param(parser, required=False)
+    parser._action_groups.pop()
+    required = parser.add_argument_group('required arguments')
+    optional = parser.add_argument_group('optional arguments')
 
     if subcommand == "dataset":
+        
+        # Mandatory
         add_dataset_name_param(parser=required, required=True)
         add_dataset_tag_param(parser=required, required=True)
+        add_outdir_param(parser=optional, required=False)
 
-    # Note: tree has no specific subcommands
+        # Optional General
+        add_debug_param(parser=optional, required=False)
+        add_log_param(parser=optional, required=False)
+        add_threads_param(parser=optional, required=False)
 
-    if subcommand == "run":
+    elif subcommand == "run":
+
+        # Mandatory
         add_dataset_param(parser=required, required=True)
 
-        # One of these must be specified
-        add_lineages_param(parser=parser, required=False)
-        add_alignment_param(parser=parser, required=False)
+        # Mutually exclusive arguments
+        add_lineages_param(parser=optional, required=False)
+        add_alignment_param(parser=optional, required=False)
 
-        add_no_edge_cases_param(parser=parser, required=False)
-        add_mask_param(parser=parser, required=False)
-        add_exclude_non_recomb_param(parser=parser, required=False)
-        add_max_depth_param(parser=parser, required=False)
-        add_min_length_param(parser=parser, required=False)
-        add_min_consecutive_param(parser=parser, required=False)
-        add_min_subs_param(parser=parser, required=False)
-        add_shared_param(parser=parser, required=False)
-        add_snipit_format_param(parser=parser, required=False)
+        # Optional General
+        add_debug_param(parser=optional, required=False)
+        add_log_param(parser=optional, required=False)
+        add_outdir_param(parser=optional, required=False)
+        add_threads_param(parser=optional, required=False)        
 
-        add_output_all_param(parser=parser, required=False)
-        add_output_fasta_param(parser=parser, required=False)
-        add_output_plot_param(parser=parser, required=False)
-        add_output_barcode_param(parser=parser, required=False)
-        add_output_tsv_param(parser=parser, required=False)
-        add_output_yaml_param(parser=parser, required=False)
+        # Optional Specific
+        add_no_edge_cases_param(parser=optional, required=False)
+        add_mask_param(parser=optional, required=False)
+        add_exclude_non_recomb_param(parser=optional, required=False)
+        add_max_depth_param(parser=optional, required=False)
+        add_min_length_param(parser=optional, required=False)
+        add_min_consecutive_param(parser=optional, required=False)
+        add_min_subs_param(parser=optional, required=False)
+        add_shared_param(parser=optional, required=False)
+        add_snipit_format_param(parser=optional, required=False)
+        add_validate_param(parser=optional, required=False)
 
-    if subcommand == "validate":
-        add_dataset_param(parser=required, required=True)
-
-        add_alignment_param(parser=parser, required=False)
-        add_mask_param(parser=parser, required=False)
-        add_no_edge_cases_param(parser=parser, required=False)
-        add_exclude_non_recomb_param(parser=parser, required=False)
-        add_max_depth_param(parser=parser, required=False)
-        add_min_length_param(parser=parser, required=False)
-        add_min_consecutive_param(parser=parser, required=False)
-        add_min_subs_param(parser=parser, required=False)
-        add_shared_param(parser=parser, required=False)
-        add_snipit_format_param(parser=parser, required=False)
-
-        add_output_all_param(parser=parser, required=False)
-        add_output_fasta_param(parser=parser, required=False)
-        add_output_plot_param(parser=parser, required=False)
-        add_output_barcode_param(parser=parser, required=False)
-        add_output_tsv_param(parser=parser, required=False)
-        add_output_yaml_param(parser=parser, required=False)
-
+        # Optional Output
+        add_output_all_param(parser=optional, required=False)
+        add_output_fasta_param(parser=optional, required=False)
+        add_output_plot_param(parser=optional, required=False)
+        add_output_barcode_param(parser=optional, required=False)
+        add_output_tsv_param(parser=optional, required=False)
+        add_output_yaml_param(parser=optional, required=False)
 
 # -----------------------------------------------------------------------------
 def make_parser():
@@ -250,8 +243,7 @@ def make_parser():
     # descriptions
     rebar_desc = "rebar: REcombination BARcode detection"
     dataset_desc = "Download and create the rebar data model."
-    run_desc = "Run rebar on alignment or user-specified lineages."
-    validate_desc = "Validate rebar on all designated lineages."
+    run_desc = "Run rebar on an alignment or user-specified lineages."
     version_desc = "Print version."
     help_desc = "Print subcommands."
     parser = argparse.ArgumentParser(description="", usage=rebar_desc)
@@ -263,9 +255,6 @@ def make_parser():
         + "\n"
         + "\trun\t\t"
         + run_desc
-        + "\n"
-        + "\tvalidate\t"
-        + validate_desc
         + "\n"
         + "\thelp\t\t"
         + help_desc
@@ -295,10 +284,5 @@ def make_parser():
     run_parser = subparsers.add_parser("run", description=run_desc)
     add_params(run_parser, subcommand="run")
     run_parser.set_defaults(func=run)
-
-    # validate
-    validate_parser = subparsers.add_parser("validate", description=validate_desc)
-    add_params(validate_parser, subcommand="validate")
-    validate_parser.set_defaults(func=validate)
 
     return parser

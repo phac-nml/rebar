@@ -4,7 +4,8 @@ import os
 
 os.system(
     """
-    python -m coverage run -m pytest --cov=rebar --cov-report=xml \
-        test/test_utils.py
+    python -m coverage run -m pytest --cov=rebar --cov-report=html --cov-report=xml \
+        test/test_utils.py \
+        test/test_wrappers.py
     """
 )

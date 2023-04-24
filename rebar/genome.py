@@ -2,6 +2,7 @@
 import yaml
 from datetime import datetime
 from copy import copy
+import sys
 
 # PyPI libraries
 import pandas as pd
@@ -42,6 +43,7 @@ class Genome:
         debug=False,
         logger=None,
         edge_cases=False,
+        validate=None,
     ):
         """
         Genome constructor. Parses genomic features from a sequence records or
@@ -80,6 +82,7 @@ class Genome:
 
         # Recombination features
         self.recombination = Recombination()
+        self.validate = validate
 
         # Entry point #1, from fasta alignment
         if record:
@@ -153,6 +156,10 @@ class Genome:
                 min_consecutive=min_consecutive,
                 edge_cases=edge_cases,
             )
+
+        # Validate
+        if self.validate and tree and recombinant_lineages:
+            self.validate = self.validate_recombination(tree, recombinant_lineages)
 
     def __repr__(self):
         """
@@ -448,6 +455,7 @@ class Genome:
             genome_dataframe = pd.DataFrame(
                 {
                     "strain": [self.id],
+                    "validate": [self.validate],
                     "lineage": [self.lineage.lineage],
                     "clade": [self.lineage.clade],
                     "recombinant": [self.lineage.recombinant],
@@ -771,6 +779,50 @@ class Genome:
             self.lineage.recombinant = False
 
         return 0
+
+    def validate_recombination(self, tree, recombinant_lineages):
+        # Identify which lineages are known recombinants
+        # ie. descended from the "X" recombinant MRCA node
+        lineages = [c.name for c in tree.find_clades()]
+        status = None
+        warn = False
+
+        if self.id in lineages:
+            if self.id in recombinant_lineages:
+                expected = "positive"
+            else:
+                expected = "negative"
+            # Correct positive
+            if self.lineage.recombinant and expected == "positive":
+                status="positive"
+            # Correct negative
+            elif not self.lineage.recombinant and expected == "negative":
+                status="negative"
+            # False positive
+            elif self.lineage.recombinant and expected == "negative":
+                status="false_positive"
+                warn=True
+            # False negative
+            elif not self.lineage.recombinant and expected == "positive":
+                status="false_negative"
+                warn=True
+
+            msg = "Validation fail for {strain}, expected='{expected}', actual='{status}'".format(
+                strain = self.id,
+                expected=expected,
+                status=status,
+            )
+            if warn:
+                self.logger.info(str(datetime.now()) + "\t\tWARNING: " + msg)
+                # # Full error raise
+                # # has multiprocess hang complications
+                # if self.validate_fail:
+                #     raise SystemExit(RebarError("RebarError: " + msg))
+                # Just a warning
+                #else:
+                #    self.logger.info(str(datetime.now()) + "\t\tWARNING: " + msg)
+
+        return status
 
 
 def genome_mp(iterator, **kwargs):

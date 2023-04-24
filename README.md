@@ -31,42 +31,62 @@
 
 ## Usage
 
-1. First, download and build the `rebar` dataset model.
+Begin by downloading and building the `rebar` dataset model with:
 
-    ```bash
-    rebar dataset --name sars-cov-2 --outdir dataset/sars-cov-2-latest --tag latest
-    ```
+```bash
+rebar dataset \
+  --name sars-cov-2 \
+  --tag latest \
+  --outdir dataset/sars-cov-2-latest
+```
 
-    The `dataset` subcommand performs the following tasks:
+The `dataset` subcommand performs the following tasks:
 
-    - Downloads the latest _designated_ lineages from [pango-designation](https://github.com/cov-lineages/pango-designation).
-    - Creates a nomenclature tree of designated lineages.
-    - Downloads barcodes from [pango-sequences](https://github.com/corneliusroemer/pango-sequences) (Nextclade) and [Freyja-data](https://github.com/andersen-lab/Freyja-data) (UShER).
+- Downloads the latest _designated_ lineages from [pango-designation](https://github.com/cov-lineages/pango-designation).
+- Creates a nomenclature tree of designated lineages.
+- Downloads lineage barcodes from [pango-sequences](https://github.com/corneliusroemer/pango-sequences) (Nextclade) and [Freyja-data](https://github.com/andersen-lab/Freyja-data) (UShER).
 
-1. Second, use `rebar` to detect recombination.
+### Example 1
 
-    **Option 1**: From user-specified lineage names.
+Detect recombination in user-specified lineages.
 
-    ```bash
-    rebar run --dataset dataset/sars-cov-2-latest --outdir test --output-all --lineages AY.4,BA.5.2,XD,XBB.1.5.1,XBL
-    ```
+```bash
+rebar run \
+  --dataset dataset/sars-cov-2-latest \
+  --lineages AY.4,BA.5.2,XD,XBB.1.5.1,XBL \
+  --output-all \
+  --outdir example1
+```
 
-    - THe `--lineages` can include any designated lineage found in `dataset/sars-cov-2/sequences.fasta`.
+The `--lineages` can include any designated lineage found in the dataset `alignment.fasta`.
 
-    **Option 2**: From an input alignment.
+### Example 2
 
-    ```bash
-    rebar run --dataset dataset/sars-cov-2-latest --outdir test --output-all --alignment alignment.fasta
-    ```
+Detect recombination from an input alignment:
 
-    - The `--alignment` must be aligned to the same reference as `dataset/sars-cov-2/reference.fasta`.
-    - We strongly recommend [nextclade](https://github.com/nextstrain/nextclade).
+```bash
+rebar run \
+  --dataset dataset/sars-cov-2-latest \
+  --alignment test/alignment.fasta \
+  --output-all \
+  --outdir example2
+```
 
-1. Optional, validate `rebar` performance on all designated lineages.
+The `--alignment` must be aligned to the same reference as in the dataset `reference.fasta` (we strongly recommend [nextclade](https://github.com/nextstrain/nextclade)).
 
-    ```bash
-    rebar validate --dataset dataset/sars-cov-2 --outdir validate --output-all --threads 64 --log validate/rebar.log
-    ```
+### Example 3
+
+Detect recombination in all designated lineages in the dataset model.
+
+```bash
+rebar run \
+  --dataset dataset/sars-cov-2-latest \
+  --alignment dataset/sars-cov-2-latest/alignment.fasta \
+  --validate \
+  --threads 8 \
+  --output-all \
+  --outdir example3
+```
 
 ## Output
 
