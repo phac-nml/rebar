@@ -29,9 +29,9 @@
 
     \*\*Coming Soon\*\*
 
-## Usage
+## Examples
 
-Begin by downloading and building the `rebar` dataset model with:
+Download a `rebar` dataset.
 
 ```bash
 rebar dataset \
@@ -39,12 +39,6 @@ rebar dataset \
   --tag latest \
   --outdir dataset/sars-cov-2-latest
 ```
-
-The `dataset` subcommand performs the following tasks:
-
-- Downloads the latest _designated_ lineages from [pango-designation](https://github.com/cov-lineages/pango-designation).
-- Creates a nomenclature tree of designated lineages.
-- Downloads lineage barcodes from [pango-sequences](https://github.com/corneliusroemer/pango-sequences) (Nextclade) and [Freyja-data](https://github.com/andersen-lab/Freyja-data) (UShER).
 
 ### Example 1
 
@@ -62,7 +56,7 @@ The `--lineages` can include any designated lineage found in the dataset `alignm
 
 ### Example 2
 
-Detect recombination from an input alignment:
+Detect recombination from an input alignment.
 
 ```bash
 rebar run \

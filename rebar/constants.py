@@ -30,4 +30,15 @@ BARCODE_MANUAL_EDITS = {
     "XAE": {"A26530G": 1}
 }
 
-EDGE_CASE_LINEAGES = ["XB", "XP", "XR", "XAE", "XAS", "XAV", "XAZ", "XBK", "XBQ", "XBZ"]
+EDGE_CASE_LINEAGES = [
+    "XB",
+    "XP",
+    "XR",
+    "XAE",
+    "XAS",
+    "XAV",
+    "XAZ",
+    "XBK",
+    "XBQ",
+    "XBZ",
+]

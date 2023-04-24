@@ -45,7 +45,7 @@ def dataset(params):
     logger.info(str(datetime.now()) + "\t" + "-" * 40)
     logger.info(str(datetime.now()) + "\tBEGINNING SUBCOMMAND: dataset.")
 
-    info = {"name": params.name}
+    info = {"name": params.name, "tag": params.tag}
 
     # Initialize tag
     if params.name == "sars-cov-2":

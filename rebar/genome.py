@@ -43,6 +43,7 @@ class Genome:
         logger=None,
         edge_cases=False,
         validate=None,
+        dataset_info=None,
     ):
         """
         Genome constructor. Parses genomic features from a sequence records or
@@ -75,13 +76,15 @@ class Genome:
         self.missing = []
         self.genome_length = None
 
+        # Dataset information
+        self.dataset = dataset_info
         # Lineage features
         self.barcode_summary = None
         self.lineage = Barcode()
 
         # Recombination features
         self.recombination = Recombination()
-        self.validate = validate
+        self.validate = None
 
         # Entry point #1, from fasta alignment
         if record:
@@ -454,15 +457,24 @@ class Genome:
             genome_dataframe = pd.DataFrame(
                 {
                     "strain": [self.id],
-                    "validate": [self.validate],
                     "lineage": [self.lineage.lineage],
                     "clade": [self.lineage.clade],
                     "recombinant": [self.lineage.recombinant],
+                    "definition": [self.lineage.definition],
+                    "validate": [self.validate],
                     "parents_lineage": parents_lineage,
                     "parents_lineage_simplify": parents_lineage_simplify,
                     "parents_clade": parents_clade,
                     "breakpoints": recombination_dict["breakpoints"],
                     "regions": recombination_dict["regions"],
+                    "dataset_name": self.dataset["name"],
+                    "dataset_tag": self.dataset["tag"],
+                    "barcodes_date": self.dataset["barcodes"]["date"],
+                    "barcodes_tag": self.dataset["barcodes"]["tag"],
+                    "tree_date": self.dataset["tree"]["date"],
+                    "tree_tag": self.dataset["tree"]["tag"],
+                    "sequences_date": self.dataset["sequences"]["date"],
+                    "sequences_tag": self.dataset["sequences"]["tag"],
                 }
             )
 
@@ -598,14 +610,21 @@ class Genome:
         # Keep a list to exclude from parent search
         exclude_lineages = []
 
-        # Option 1. Definitely not a recursive recombinant.
+        # Option 1. Definitely a recursive recombinant.
+        #           Exclude recombinant lineages that are not the known parent
+        if self.lineage.recursive:
+            exclude_lineages += self.lineage.top_lineages
+            lineage_path = recombinant_tree.get_path(self.lineage.recombinant)
+            lineage_parent = lineage_path[-2].name
+            exclude_lineages += [l for l in recombinant_lineages if l != lineage_parent]
+        # Option 2. Definitely not a recursive recombinant.
         #           Exclude all recombinant lineages from new search.
         #           Ex. XBB.1.5 is not a recursive recombinant (BA.2.10* and BA.2.75*)
         #           If we remove all recombinant lineages from it's barcode summary
         #           the top lineage will become BJ.1.1 (BA.2.10*)
-        if not self.lineage.recursive:
+        elif not self.lineage.recursive:
             exclude_lineages += recombinant_lineages
-        # Option 2. Potentially recursive recombinant
+        # Option 3. Potentially recursive recombinant
         #           Exclude only original backbone lineages from new search.
         #           Ex. XBL is a recursive recombinant (XBB.1* and BA.2.75*)
         else:

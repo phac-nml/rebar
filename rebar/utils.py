@@ -8,6 +8,7 @@ import requests
 import urllib
 import functools
 
+import yaml
 import zstandard as zstd
 import pandas as pd
 from pango_aliasor.aliasor import Aliasor
@@ -80,7 +81,7 @@ def url_header_info(url):
 
     info["url"] = url
     info["date"] = str(file_date)
-    info["etag"] = headers["etag"].replace('"', "")
+    info["tag"] = headers["etag"].replace('"', "")
 
     return info
 
@@ -603,6 +604,12 @@ def detect_recombination(params):
     subs_df.set_index("strain", inplace=True)
     subs_df["strain"] = subs_df.index
 
+    # Import dataset info
+    dataset_info_path = os.path.join(params.dataset, "dataset.yaml")
+    logger.info(str(datetime.now()) + "\tImporting dataset info: " + dataset_info_path)
+    with open(dataset_info_path, "r") as infile:
+        dataset_info = yaml.safe_load(infile)
+
     # Import lineage barcodes
     logger.info(str(datetime.now()) + "\tImporting barcodes: " + params.barcodes)
     barcodes_df = pd.read_csv(params.barcodes, sep="\t")
@@ -639,6 +646,7 @@ def detect_recombination(params):
         genome_mp,
         debug=params.debug,
         logger=params.logger,
+        dataset_info=dataset_info,
         barcodes=barcodes_df,
         tree=tree,
         recombinant_tree=recombinant_tree,

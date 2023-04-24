@@ -51,7 +51,21 @@ def handle_edge_cases(
         # ---------------------------------------------------------------------
         # XBK, XBQ: only 2 consecutive barcodes
         elif genome.lineage.recombinant in ["XBK", "XBQ"]:
-            result["min_consecutive"] = 2
+            include_tree = next(tree.find_clades("BA.2"))
+            include_descendants = [c.name for c in include_tree.find_clades()]
+            result["barcode_summary"] = barcode_summary[
+                barcode_summary["lineage"].isin(include_descendants)
+            ]
+
+        # ---------------------------------------------------------------------
+        # XBL: recursive recombinant with XBB
+        # elif genome.lineage.recombinant in ["XBL"]:
+
+        #     include_tree = next(tree.find_clades("XBB.1.5"))
+        #     include_descendants = [c.name for c in include_tree.find_clades()]
+        #     result["barcode_summary"] = barcode_summary[
+        #         barcode_summary["lineage"].isin(include_descendants)
+        #     ]
 
         # ---------------------------------------------------------------------
         # XBZ: only 2 consecutive barcodes, extremely short parent 2 length

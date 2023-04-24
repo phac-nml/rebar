@@ -34,6 +34,7 @@ class Barcode:
         self.missing = []
         self.conflict_ref = []
         self.conflict_alt = []
+        self.definition = None
 
         # Run search
         if (
@@ -63,6 +64,8 @@ class Barcode:
         text = (
             "lineage:      "
             + str(self.lineage)
+            + "definition:      "
+            + str(self.definition)
             + "clade:      "
             + str(self.clade)
             + "\ntop_lineages: "
@@ -94,6 +97,7 @@ class Barcode:
     def to_dict(self):
         barcode_dict = {
             "lineage": self.lineage,
+            "definition": self.definition,
             "clade": self.clade,
             "top_lineages": ",".join(self.top_lineages),
             "top_lineages_subsample": ",".join(self.top_lineages_subsample),
@@ -282,7 +286,12 @@ class Barcode:
         conflict_ref = [s for s in conflict_ref if s in conflict_subs]
         conflict_alt = [s for s in conflict_alt if s in conflict_subs]
 
+        definition = lineage
+        if len(conflict_alt) > 0:
+            definition += "+" + ",".join([str(s) for s in conflict_alt])
+
         self.lineage = lineage
+        self.definition = definition
         self.clade = clade
         self.top_lineages = top_lineages
         self.top_lineages_subsample = top_lineages_subsample
