@@ -29,7 +29,7 @@
 
     \*\*Coming Soon\*\*
 
-## Examples
+## Usage
 
 Download a `rebar` dataset.
 
@@ -68,9 +68,9 @@ rebar run \
 
 The `--alignment` must be aligned to the same reference as in the dataset `reference.fasta` (we strongly recommend [nextclade](https://github.com/nextstrain/nextclade)).
 
-### Example 3
+## Validate
 
-Detect recombination in all designated lineages in the dataset model.
+Run `rebar` on all designated lineages, and validate against the expected results.
 
 ```bash
 rebar run \
@@ -79,7 +79,7 @@ rebar run \
   --validate \
   --threads 8 \
   --output-all \
-  --outdir example3
+  --outdir validate
 ```
 
 ## Output

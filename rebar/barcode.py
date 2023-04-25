@@ -6,7 +6,6 @@ from datetime import datetime
 import pandas as pd
 
 from .substitution import Substitution
-from .constants import EDGE_CASE_LINEAGES
 
 
 class Barcode:
@@ -21,7 +20,7 @@ class Barcode:
         lineage_to_clade=None,
     ):
         # Initialize attributes
-        self.lineage = None
+        self.name = None
         self.clade = None
         self.top_lineages = []
         self.top_lineages_subsample = []
@@ -63,7 +62,7 @@ class Barcode:
     def __repr__(self):
         text = (
             "lineage:      "
-            + str(self.lineage)
+            + str(self.name)
             + "definition:      "
             + str(self.definition)
             + "clade:      "
@@ -96,7 +95,7 @@ class Barcode:
 
     def to_dict(self):
         barcode_dict = {
-            "lineage": self.lineage,
+            "lineage": self.name,
             "definition": self.definition,
             "clade": self.clade,
             "top_lineages": ",".join(self.top_lineages),
@@ -290,7 +289,7 @@ class Barcode:
         if len(conflict_alt) > 0:
             definition += "+" + ",".join([str(s) for s in conflict_alt])
 
-        self.lineage = lineage
+        self.name = lineage
         self.definition = definition
         self.clade = clade
         self.top_lineages = top_lineages
@@ -306,15 +305,15 @@ class Barcode:
 
     def set_recombinant_status(self, genome, recombinant_lineages, recombinant_tree):
 
-        if self.lineage == "X":
+        if self.name == "X":
             self.recombinant = "X"
             self.recursive = False
 
         # Option 1: Top backbone lineage is s recombinant
-        elif self.lineage in recombinant_lineages:
+        elif self.name in recombinant_lineages:
 
             # Identify the generic recombinant type (XBB.1.5 = XBB)
-            recombinant_path = recombinant_tree.get_path(self.lineage)
+            recombinant_path = recombinant_tree.get_path(self.name)
             # Move backwards up the path, until we find a parental lineage that
             # starts with "X", because it might be an alias ("EK")
             for c in recombinant_path[::-1]:
@@ -333,9 +332,5 @@ class Barcode:
         # Option 2: Perfect match to non-recombinant
         elif len(self.conflict_ref) == 0:
             self.recombinant = False
-
-        # set edge case status
-        if self.recombinant in EDGE_CASE_LINEAGES:
-            self.edge_case = True
 
         return 0

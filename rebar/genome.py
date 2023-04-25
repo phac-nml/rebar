@@ -35,6 +35,7 @@ class Genome:
         recombinant_lineages=None,
         lineage_to_clade=None,
         max_depth=1,
+        max_breakpoints=1,
         min_subs=1,
         min_length=1,
         min_consecutive=1,
@@ -153,6 +154,7 @@ class Genome:
                 recombinant_tree=recombinant_tree,
                 lineage_to_clade=lineage_to_clade,
                 max_depth=max_depth,
+                max_breakpoints=max_breakpoints,
                 min_subs=min_subs,
                 min_length=min_length,
                 min_consecutive=min_consecutive,
@@ -160,7 +162,7 @@ class Genome:
             )
 
         # Validate
-        if self.validate and tree and recombinant_lineages:
+        if validate and tree and recombinant_lineages:
             self.validate = self.validate_recombination(tree, recombinant_lineages)
 
     def __repr__(self):
@@ -374,8 +376,8 @@ class Genome:
         --------
         "BA.5.2,BE.4.1" --> "BA.5.2,BA.5.3"
         """
-        parent_1 = self.recombination.parent_1.lineage
-        parent_2 = self.recombination.parent_2.lineage
+        parent_1 = self.recombination.parent_1.name
+        parent_2 = self.recombination.parent_2.name
 
         aliasor = Aliasor()
         parent_1_uncompress = aliasor.uncompress(parent_1)
@@ -435,14 +437,14 @@ class Genome:
             recombination_dict = self.recombination.to_dict()
 
             # only write parents if recombination detected:
-            if not self.recombination.parent_2.lineage:
+            if not self.recombination.parent_2.name:
                 parents_lineage = ""
                 parents_lineage_simplify = ""
                 parents_clade = ""
             else:
                 parents_lineage = "{},{}".format(
-                    self.recombination.parent_1.lineage,
-                    self.recombination.parent_2.lineage,
+                    self.recombination.parent_1.name,
+                    self.recombination.parent_2.name,
                 )
                 parent_1_simplify, parent_2_simplify = self.simplify_parents_lineage()
                 parents_lineage_simplify = "{},{}".format(
@@ -457,7 +459,7 @@ class Genome:
             genome_dataframe = pd.DataFrame(
                 {
                     "strain": [self.id],
-                    "lineage": [self.lineage.lineage],
+                    "lineage": [self.lineage.name],
                     "clade": [self.lineage.clade],
                     "recombinant": [self.lineage.recombinant],
                     "definition": [self.lineage.definition],
@@ -468,13 +470,13 @@ class Genome:
                     "breakpoints": recombination_dict["breakpoints"],
                     "regions": recombination_dict["regions"],
                     "dataset_name": self.dataset["name"],
-                    "dataset_tag": self.dataset["tag"],
+                    "dataset_tag": self.dataset["tag"][0:8],
                     "barcodes_date": self.dataset["barcodes"]["date"],
-                    "barcodes_tag": self.dataset["barcodes"]["tag"],
+                    "barcodes_tag": self.dataset["barcodes"]["tag"][0:8],
                     "tree_date": self.dataset["tree"]["date"],
-                    "tree_tag": self.dataset["tree"]["tag"],
+                    "tree_tag": self.dataset["tree"]["tag"][0:8],
                     "sequences_date": self.dataset["sequences"]["date"],
-                    "sequences_tag": self.dataset["sequences"]["tag"],
+                    "sequences_tag": self.dataset["sequences"]["tag"][0:8],
                 }
             )
 
@@ -571,13 +573,14 @@ class Genome:
         recombinant_tree,
         lineage_to_clade,
         max_depth=1,
+        max_breakpoints=1,
         min_subs=1,
         min_length=1,
         min_consecutive=1,
         edge_cases=False,
     ):
         """
-        Assign genome to a lineage based on the top barcode matches.
+        Assign genome to a parent_1 and parent_2 based on barcode matches and conflicts.
 
         Parameters
         ----------
@@ -602,41 +605,49 @@ class Genome:
         """
 
         # Skip clear non-recombinants
+        # We know this from the function lineage_assignment, where if the
+        # barcodes are a perfect match to a non-recombinant lineage.
         if self.lineage.recombinant == False:
             return 0
 
         # Save a copy of the barcode summary, before we modify it
         barcode_summary = copy(self.barcode_summary)
-        # Keep a list to exclude from parent search
+
+        # Keep a list to exclude from parent search, ex. eventually exclude parent_1
+        # lineages in order to find parent_2
         exclude_lineages = []
 
+        # What lineages should we exclude?
         # Option 1. Definitely a recursive recombinant.
-        #           Exclude recombinant lineages that are not the known parent
+        #           Exclude recombinant lineages that are NOT the known parent
         if self.lineage.recursive:
             exclude_lineages += self.lineage.top_lineages
             lineage_path = recombinant_tree.get_path(self.lineage.recombinant)
             lineage_parent = lineage_path[-2].name
             exclude_lineages += [l for l in recombinant_lineages if l != lineage_parent]
-        # Option 2. Definitely not a recursive recombinant.
+        # Option 2. Definitely NOT a recursive recombinant.
         #           Exclude all recombinant lineages from new search.
         #           Ex. XBB.1.5 is not a recursive recombinant (BA.2.10* and BA.2.75*)
         #           If we remove all recombinant lineages from it's barcode summary
         #           the top lineage will become BJ.1.1 (BA.2.10*)
         elif not self.lineage.recursive:
             exclude_lineages += recombinant_lineages
-        # Option 3. Potentially recursive recombinant
+        # Option 3. Potentially a recursive recombinant
         #           Exclude only original backbone lineages from new search.
         #           Ex. XBL is a recursive recombinant (XBB.1* and BA.2.75*)
         else:
             exclude_lineages += self.lineage.top_lineages
 
+        # Filter the barcodes for our next search. Sorting by total and lineage
+        # so that the results are consistent on re-run
         barcode_summary = barcode_summary[
             ~barcode_summary["lineage"].isin(exclude_lineages)
         ].sort_values(by=["total", "lineage"])
 
         # ---------------------------------------------------------------------
         # EDGE CASES
-        # This section is for legacy detection of SARS-CoV-2 lineages
+        # This section is for legacy detection of SARS-CoV-2 lineages, which have
+        # little to no diagnostic mutation/barcode support.
 
         if edge_cases:
             # `handle_edge_cases` will adjust these global parameters, just
@@ -670,7 +681,7 @@ class Genome:
             self.logger.info(
                 str(datetime.now())
                 + "\t\t"
-                + self.recombination.parent_1.lineage
+                + self.recombination.parent_1.name
                 + " is a perfect match, halting recombinant search."
             )
             self.lineage.recombinant = False
@@ -680,7 +691,7 @@ class Genome:
         # Assign parent_2
 
         # First, exclude all descendants of parent_1 from the search
-        parent_1_tree = next(tree.find_clades(self.recombination.parent_1.lineage))
+        parent_1_tree = next(tree.find_clades(self.recombination.parent_1.name))
         parent_1_descendants = [c.name for c in parent_1_tree.find_clades()]
         exclude_lineages += parent_1_descendants
 
@@ -691,6 +702,7 @@ class Genome:
         conflict_alt_summary = self.summarise_barcodes(
             barcodes=barcodes, barcodes_subs=self.recombination.parent_1.conflict_alt
         )
+        # This is a super-detailed debugging statement.
         # if self.debug:
         #     df_md = conflict_alt_summary.to_markdown(index=False).replace(
         #         "\n", "\n" + "\t" * 7
@@ -713,6 +725,8 @@ class Genome:
             == len(self.recombination.parent_1.conflict_alt)
         ]
         exclude_lineages += list(conflict_ref_summary["lineage"])
+
+        # This is a super-detailed debugging statement.
         # if self.debug:
         #     df_md = conflict_ref_summary.to_markdown(index=False).replace(
         #         "\n", "\n" + "\t" * 7
@@ -723,11 +737,31 @@ class Genome:
         #         + ("\t") * 7 + df_md
         #     )
 
-        # The new barcode_summary is just lineages that will help
-        # us resolve these conflicts
-        barcode_summary = conflict_alt_summary[
-            ~conflict_alt_summary["lineage"].isin(exclude_lineages)
-        ]
+        # If lineages match the conflict_alt
+        if len(conflict_alt_summary) > 0:
+
+            # The new barcode_summary is just lineages that will help
+            # us resolve these conflicts
+            barcode_summary = conflict_alt_summary[
+                ~conflict_alt_summary["lineage"].isin(exclude_lineages)
+            ]
+        # No lineages match the conflict_alt, and we're allowing 0 uniq subs
+        elif min_subs == 0:
+            barcode_summary = barcode_summary[
+                ~barcode_summary["lineage"].isin(exclude_lineages)
+            ]
+        # No lineages match, and we're NOT allowing 0 uniq subs
+        # Therefore, stop searching for next parents
+        else:
+            if self.debug:
+                self.logger.info(
+                    str(datetime.now())
+                    + "\t\t"
+                    + self.recombination.parent_1.name
+                    + " has no conflict_alt subs, halting recombinant search."
+                )
+                self.lineage.recombinant = False
+            return 0
 
         # Now, we search through the barcodes
         recombination_detected = False
@@ -773,6 +807,7 @@ class Genome:
                 genome=self,
                 parent_1=self.recombination.parent_1,
                 parent_2=parent_2,
+                max_breakpoints=max_breakpoints,
                 min_subs=min_subs,
                 min_length=min_length,
                 min_consecutive=min_consecutive,
@@ -783,6 +818,10 @@ class Genome:
             if len(recombination.breakpoints) > 0:
                 recombination_detected = True
                 self.recombination = recombination
+
+                # If this is not a known recombinant, mark as undesignated
+                if not self.lineage.recombinant:
+                    self.lineage.recombinant = "undesignated"
 
             # Otherwise, update our exclude lineages for the next search
             else:

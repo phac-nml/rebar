@@ -653,6 +653,7 @@ def detect_recombination(params):
         recombinant_lineages=recombinant_lineages,
         lineage_to_clade=lineage_to_clade,
         max_depth=params.max_depth,
+        max_breakpoints=params.max_breakpoints,
         min_subs=params.min_subs,
         min_consecutive=params.min_consecutive,
         min_length=params.min_length,

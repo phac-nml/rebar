@@ -11,6 +11,7 @@ class Recombination:
         genome=None,
         parent_1=None,
         parent_2=None,
+        max_breakpoints=1,
         min_subs=1,
         min_length=1,
         min_consecutive=1,
@@ -30,7 +31,13 @@ class Recombination:
 
         if genome and parent_1 and parent_2:
             self.search(
-                genome, parent_1, parent_2, min_subs, min_length, min_consecutive
+                genome,
+                parent_1,
+                parent_2,
+                max_breakpoints,
+                min_subs,
+                min_length,
+                min_consecutive,
             )
 
     def __repr__(self):
@@ -78,7 +85,14 @@ class Recombination:
         return recombination_yaml
 
     def search(
-        self, genome, parent_1, parent_2, min_subs=1, min_length=1, min_consecutive=1
+        self,
+        genome,
+        parent_1,
+        parent_2,
+        max_breakpoints=1,
+        min_subs=1,
+        min_length=1,
+        min_consecutive=1,
     ):
 
         # Identify barcode subs which uniq to each parent
@@ -93,10 +107,10 @@ class Recombination:
                 # "substitution": all_subs,
                 "coord": [s.coord for s in all_subs],
                 "Reference": [s.ref for s in all_subs],
-                parent_1.lineage: [
+                parent_1.name: [
                     s.alt if s in parent_1_subs else s.ref for s in all_subs
                 ],
-                parent_2.lineage: [
+                parent_2.name: [
                     s.alt if s in parent_2_subs else s.ref for s in all_subs
                 ],
                 genome.id: [
@@ -115,8 +129,8 @@ class Recombination:
         # Identify private genome substitutions and exclude these
         private_sub_coords = list(
             subs_df[
-                (subs_df[genome.id] != subs_df[parent_1.lineage])
-                & (subs_df[genome.id] != subs_df[parent_2.lineage])
+                (subs_df[genome.id] != subs_df[parent_1.name])
+                & (subs_df[genome.id] != subs_df[parent_2.name])
                 & (subs_df[genome.id] != subs_df["Reference"])
             ]["coord"]
         )
@@ -126,14 +140,14 @@ class Recombination:
         genome_subs_origin = []
         for rec in subs_df.iterrows():
             genome_base = rec[1][genome.id]
-            parent_1_base = rec[1][parent_1.lineage]
-            parent_2_base = rec[1][parent_2.lineage]
+            parent_1_base = rec[1][parent_1.name]
+            parent_2_base = rec[1][parent_2.name]
             if genome_base == parent_1_base and genome_base == parent_2_base:
                 origin = "shared"
             elif genome_base == parent_1_base:
-                origin = parent_1.lineage
+                origin = parent_1.name
             elif genome_base == parent_2_base:
-                origin = parent_2.lineage
+                origin = parent_2.name
 
             genome_subs_origin.append(origin)
 
@@ -151,15 +165,15 @@ class Recombination:
 
         # Each parent must have at least x min_subs that are lineage-determining
         parent_1_uniq = subs_df[
-            (subs_df["parent"] == parent_1.lineage)
-            & (subs_df[parent_1.lineage] != subs_df["Reference"])
-            & (subs_df[parent_1.lineage] != subs_df[parent_2.lineage])
+            (subs_df["parent"] == parent_1.name)
+            & (subs_df[parent_1.name] != subs_df["Reference"])
+            & (subs_df[parent_1.name] != subs_df[parent_2.name])
         ]
         parent_1_num_uniq = len(parent_1_uniq)
         parent_2_uniq = subs_df[
-            (subs_df["parent"] == parent_2.lineage)
-            & (subs_df[parent_2.lineage] != subs_df["Reference"])
-            & (subs_df[parent_2.lineage] != subs_df[parent_1.lineage])
+            (subs_df["parent"] == parent_2.name)
+            & (subs_df[parent_2.name] != subs_df["Reference"])
+            & (subs_df[parent_2.name] != subs_df[parent_1.name])
         ]
         parent_2_num_uniq = len(parent_2_uniq)
 
@@ -168,7 +182,7 @@ class Recombination:
                 genome.logger.info(
                     str(datetime.now())
                     + "\t\t\tInsufficient unique substitutions from parent_1: "
-                    + parent_1.lineage
+                    + parent_1.name
                 )
             return None
         if parent_2_num_uniq < min_subs:
@@ -176,7 +190,7 @@ class Recombination:
                 genome.logger.info(
                     str(datetime.now())
                     + "\t\t\tInsufficient unique substitutions from parent_2: "
-                    + parent_2.lineage
+                    + parent_2.name
                 )
             return None
 
@@ -295,6 +309,13 @@ class Recombination:
             genome.logger.info(
                 str(datetime.now()) + "\t\t\tBREAKPOINTS: " + str(breakpoints)
             )
+
+        if len(breakpoints) > max_breakpoints:
+            if genome.debug:
+                genome.logger.info(
+                    str(datetime.now()) + "\t\t\tNumber of breakpoints exceeds maximum."
+                )
+            return None
 
         self.dataframe = subs_df
         self.regions = regions_filter

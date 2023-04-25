@@ -39,8 +39,8 @@ class Export:
             # Recombination detected, proceed
             parents = sorted(
                 [
-                    genome.recombination.parent_1.lineage,
-                    genome.recombination.parent_2.lineage,
+                    genome.recombination.parent_1.name,
+                    genome.recombination.parent_2.name,
                 ]
             )
             parents = "{}_{}".format(parents[0], parents[1])

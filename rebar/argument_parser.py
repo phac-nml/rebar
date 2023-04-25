@@ -75,6 +75,13 @@ def add_max_depth_param(parser, required=False):
     )
 
 
+def add_max_breakpoints_param(parser, required=False):
+    text = "Maximum number of allowed breakpoints (Default: 10)."
+    parser.add_argument(
+        "--max-breakpoints", required=required, default=10, type=int, help=text
+    )
+
+
 def add_min_consecutive_param(parser, required=False):
     text = (
         "Minimum number of consecutive barcode positions from each parent (Default: 3)."
@@ -224,6 +231,7 @@ def add_params(parser, subcommand=None):
         add_no_edge_cases_param(parser=optional, required=False)
         add_mask_param(parser=optional, required=False)
         add_exclude_non_recomb_param(parser=optional, required=False)
+        add_max_breakpoints_param(parser=optional, required=False)
         add_max_depth_param(parser=optional, required=False)
         add_min_length_param(parser=optional, required=False)
         add_min_consecutive_param(parser=optional, required=False)
