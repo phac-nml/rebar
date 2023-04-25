@@ -1,4 +1,4 @@
-name: Examples
+name: Validate
 
 on:
   push:
@@ -14,7 +14,7 @@ jobs:
 
   pipeline:
 
-    name: Examples
+    name: Validate
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -32,14 +32,8 @@ jobs:
       - name: install package
         run: pip install .
 
-      - name: run help
-        run: rebar help
-
       - name: dataset
         run: rebar dataset --name sars-cov-2 --tag latest --outdir dataset/sars-cov-2-latest
 
-      - name: example 1
-        run: rebar run --dataset dataset/sars-cov-2-latest --lineages AY.4,BA.5.2,XD,XBB.1.5.1,XBL --output-all --outdir example1
-
-      - name: example 2
-        run: rebar run --dataset dataset/sars-cov-2-latest --alignment test/alignment.fasta --output-all --outdir example2
+      - name: validate
+        run: rebar run --dataset dataset/sars-cov-2-latest --alignment dataset/sars-cov-2-latest/alignment.fasta --validate --threads 2 --output-all --outdir validate
