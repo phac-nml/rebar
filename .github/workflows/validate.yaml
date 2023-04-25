@@ -9,6 +9,8 @@ on:
       - '*'
   release:
     types: [published]
+  schedule:
+    - cron: "0 0 * * *"
 
 jobs:
 
@@ -37,3 +39,10 @@ jobs:
 
       - name: validate
         run: rebar run --dataset dataset/sars-cov-2-latest --alignment dataset/sars-cov-2-latest/alignment.fasta --validate --threads 2 --output-all --outdir validate
+
+      - name: upload summary table
+        uses: actions/upload-artifact@v2
+        with:
+          name: summary.tsv
+          path: validate/summary.tsv
+          retention-days: 60
