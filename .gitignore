@@ -1,18 +1,25 @@
+# input data
+data
 dataset/
-logs/
+
+# building
 build/
-validate/
-output/
+*/__pycache__/
 *.egg-info
 
+# output files
+logs/
+validate/
+output/
 example*/
+snps.csv
 
 *.zip
 slurm*
-*/__pycache__/
 
 # testing
 htmlcov/
 test/tmp
 coverage.xml
 .coverage*
+scripts/
