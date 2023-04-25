@@ -53,6 +53,7 @@ def handle_edge_cases(
         result["barcode_summary"] = barcode_summary[
             barcode_summary["lineage"].isin(include_descendants)
         ]
+        result["min_consecutive"] = 2
 
     # ---------------------------------------------------------------------
     # XBZ: only 2 consecutive barcodes, extremely short parent 2 length

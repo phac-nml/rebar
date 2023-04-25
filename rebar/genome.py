@@ -461,7 +461,9 @@ class Genome:
                     "strain": [self.id],
                     "lineage": [self.lineage.name],
                     "clade": [self.lineage.clade],
-                    "recombinant": [self.lineage.recombinant],
+                    "recombinant": [
+                        self.lineage.recombinant if self.lineage.recombinant else None
+                    ],
                     "definition": [self.lineage.definition],
                     "validate": [self.validate],
                     "parents_lineage": parents_lineage,
@@ -469,6 +471,7 @@ class Genome:
                     "parents_clade": parents_clade,
                     "breakpoints": recombination_dict["breakpoints"],
                     "regions": recombination_dict["regions"],
+                    "genome_length": self.genome_length,
                     "dataset_name": self.dataset["name"],
                     "dataset_tag": self.dataset["tag"][0:8],
                     "barcodes_date": self.dataset["barcodes"]["date"],

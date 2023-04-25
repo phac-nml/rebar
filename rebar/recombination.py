@@ -238,10 +238,8 @@ class Recombination:
                 str(datetime.now()) + "\t\t\tREGIONS UNFILTERED: " + str(regions)
             )
 
-        # Filter recombination regions
-        #   - At least X consecutive subs per region
-        #   - At least X bases per region
-        regions_filter = {}
+        # Filter 1: At least X consecutive subs per region
+        regions_filter_1 = {}
         prev_start = None
         prev_parent = None
 
@@ -254,24 +252,59 @@ class Recombination:
             # First filtered region
             if not prev_parent:
                 # Is the first region long enough?
-                if num_consecutive < min_consecutive or region_length < min_length:
+                if num_consecutive < min_consecutive:
                     continue
-                regions_filter[start] = regions[start]
+                regions_filter_1[start] = regions[start]
 
             # A region that continues the previous parent
             # intermissions from other parents were skipped over
             elif prev_parent == parent:
                 # Update the end coordinates
-                regions_filter[prev_start]["end"] = end
+                regions_filter_1[prev_start]["end"] = end
                 continue
             elif prev_parent != parent:
                 # start new region, if long enough
-                if num_consecutive < min_consecutive or region_length < min_length:
+                if num_consecutive < min_consecutive:
                     continue
-                regions_filter[start] = regions[start]
+                regions_filter_1[start] = regions[start]
 
             prev_parent = parent
             prev_start = start
+
+        # Filter 2: At least X min_length per region
+        regions_filter_2 = {}
+        prev_start = None
+        prev_parent = None
+
+        for start in regions_filter_1:
+            parent = regions[start]["parent"]
+            end = regions[start]["end"]
+            num_consecutive = len(regions[start]["subs"])
+            region_length = (end - start) + 1
+
+            # First filtered region
+            if not prev_parent:
+                # Is the first region long enough?
+                if region_length < min_length:
+                    continue
+                regions_filter_2[start] = regions[start]
+
+            # A region that continues the previous parent
+            # intermissions from other parents were skipped over
+            elif prev_parent == parent:
+                # Update the end coordinates
+                regions_filter_2[prev_start]["end"] = end
+                continue
+            elif prev_parent != parent:
+                # start new region, if long enough
+                if region_length < min_length:
+                    continue
+                regions_filter_2[start] = regions[start]
+
+            prev_parent = parent
+            prev_start = start
+
+        regions_filter = regions_filter_2
 
         if genome.debug:
             genome.logger.info(

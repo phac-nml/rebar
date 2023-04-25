@@ -8,6 +8,7 @@
 [![GitHub issues](https://img.shields.io/github/issues/phac-nml/rebar.svg)](https://github.com/phac-nml/rebar/issues)
 [![Install CI](https://github.com/phac-nml/rebar/actions/workflows/install.yaml/badge.svg)](https://github.com/phac-nml/rebar/actions/workflows/install.yaml)
 [![Examples CI](https://github.com/phac-nml/rebar/actions/workflows/examples.yaml/badge.svg)](https://github.com/phac-nml/rebar/actions/workflows/examples.yaml)
+[![Validate CI](https://github.com/phac-nml/rebar/actions/workflows/validate.yaml/badge.svg)](https://github.com/phac-nml/rebar/actions/workflows/validate.yaml)
 
 **RE**combination detection using **BAR**codes for SARS-CoV-2.
 

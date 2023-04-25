@@ -706,23 +706,20 @@ def detect_recombination(params):
         export.to_dataframe()
 
     if params.output_all or params.output_barcode:
-        outpath = os.path.join(params.outdir, "barcode_<parent_1>_<parent_2>.tsv")
+        outpath = os.path.join(
+            params.outdir, "barcodes/<recombinant>_<parent_1>_<parent_2>.tsv"
+        )
         logger.info(str(datetime.now()) + "\tExporting barcode mutations: " + outpath)
         export.to_barcodes()
 
-    # Dataframe
-    if params.output_all or params.output_fasta:
-        outpath = os.path.join(params.outdir, "alignment_<parent_1>_<parent_2>.fasta")
-        logger.info(str(datetime.now()) + "\tExporting FASTA alignments: " + outpath)
-        export.to_alignments()
-
-    # Snipit plots
+    # Plot
     if params.output_all or params.output_plot:
         outpath = os.path.join(
-            params.outdir, "snipit_<parent_1>_<parent_2>." + params.snipit_format
+            params.outdir,
+            "plots/<recombinant>_<parent_1>_<parent_2>." + params.snipit_format,
         )
-        logger.info(str(datetime.now()) + "\tExporting snipit plots: " + outpath)
-        export.to_snipit(ext=params.snipit_format)
+        logger.info(str(datetime.now()) + "\tExporting plots: " + outpath)
+        export.to_plot()
 
     # Finish
     logger.info(str(datetime.now()) + "\tFinished detecting recombination.")
