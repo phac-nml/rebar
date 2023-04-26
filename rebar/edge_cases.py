@@ -45,6 +45,11 @@ def handle_edge_cases(
         result["min_consecutive"] = 2
 
     # ---------------------------------------------------------------------
+    # XBC: only 2 consecutive barcodes for first breakpoint
+    elif genome.lineage.recombinant in ["XBC"]:
+        result["min_consecutive"] = 2
+
+    # ---------------------------------------------------------------------
     # XBK, XBQ: only 2 consecutive barcodes
     elif genome.lineage.recombinant in ["XBK", "XBQ"]:
         genome.lineage.edge_case = True

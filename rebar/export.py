@@ -1,5 +1,4 @@
 import os
-import subprocess
 import pandas as pd
 
 from .plot import plot
@@ -129,101 +128,10 @@ class Export:
                 )
                 parent_df.to_csv(file_path, sep="\t", index=False)
 
-    def to_alignments(self):
+    def to_plot(self, ext):
 
         # Create output dir
-        outdir_alignments = os.path.join(self.outdir, "alignments")
-        if not os.path.exists(outdir_alignments):
-            os.makedirs(outdir_alignments)
-
-        # Create dataframes first
-        if len(self.dataframes) == 0:
-            self.to_barcodes()
-
-        # Process recombinant groups
-        for recombinant in self.recombinants:
-            self.alignments[recombinant] = {}
-
-            # Process parent groups within recombinant
-            for parents in self.recombinants[recombinant]:
-
-                parents_data = self.recombinants[recombinant][parents]
-
-                # Get genome length from first genome
-                genome_length = parents_data[0].genome_length
-                df = self.dataframes[recombinant][parents]
-
-                coords = [coord for coord in list(df["coord"])]
-                aln_lines = []
-                # Construct a pseudo-alignment where every position is 'N'
-                # unless it's a barcode substitution in the dataframe
-                for header in df.columns[1:]:
-                    seq = ["N"] * genome_length
-                    bases = list(df[header])
-                    for coord, base in zip(coords, bases):
-                        # genomic coordinates are 1-based, adjust for 0-based index
-                        seq[coord - 1] = base
-                        # if coord == 25810:
-                        #    print(base)
-
-                    aln_lines.append(">" + header)
-                    aln_lines.append("".join(seq))
-
-                file_path = os.path.join(
-                    outdir_alignments, "{}_{}.fasta".format(recombinant, parents)
-                )
-                with open(file_path, "w") as outfile:
-                    outfile.write("\n".join(aln_lines) + "\n")
-
-                self.alignments[recombinant][parents] = file_path
-
-    def to_snipit(self, ext):
-
-        # Create output dir
-        outdir_snipit = os.path.join(self.outdir, "snipit")
-        if not os.path.exists(outdir_snipit):
-            os.makedirs(outdir_snipit)
-
-        # Create alignments first
-        if len(self.alignments) == 0:
-            self.to_alignments()
-
-        # Process recombinant groups
-        for recombinant in self.recombinants:
-
-            # Process parent groups within recombinant
-            for parents in self.recombinants[recombinant]:
-
-                # Ex. "BJ.1_CJ.1.1"
-                parent_1 = parents.split("_")[0]
-                parent_2 = parents.split("_")[1]
-                fasta_path = self.alignments[recombinant][parents]
-                fig_prefix = os.path.join(
-                    outdir_snipit, "{}_{}".format(recombinant, parents)
-                )
-
-                cmd_str = (
-                    "snipit {fasta_path}"
-                    " --output-file {fig_prefix}"
-                    " --recombi-mode"
-                    " --recombi-references {parent_1},{parent_2}"
-                    " --reference Reference"
-                    " --flip-vertical"
-                    " --format {ext}"
-                    " --solid-background"
-                ).format(
-                    fasta_path=fasta_path,
-                    fig_prefix=fig_prefix,
-                    parent_1=parent_1,
-                    parent_2=parent_2,
-                    ext=ext,
-                )
-                subprocess.run(cmd_str, shell=True)
-
-    def to_plot(self):
-
-        # Create output dir
-        outdir_plot = os.path.join(self.outdir, "plot")
+        outdir_plot = os.path.join(self.outdir, "plots")
         if not os.path.exists(outdir_plot):
             os.makedirs(outdir_plot)
 
@@ -246,7 +154,7 @@ class Export:
                 )
                 summary_path = os.path.join(self.outdir, "summary.tsv")
                 output_path = os.path.join(
-                    self.outdir, "plots", "{}_{}.png".format(recombinant, parents)
+                    self.outdir, "plots", "{}_{}.{}".format(recombinant, parents, ext)
                 )
                 plot(barcodes=barcodes_path, summary=summary_path, output=output_path)
 

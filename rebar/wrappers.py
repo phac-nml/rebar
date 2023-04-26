@@ -5,7 +5,7 @@ import logging
 import yaml
 
 # PyPI libraries
-from Bio import SeqIO
+from Bio import SeqIO, Phylo
 
 
 # rebar objects
@@ -133,7 +133,20 @@ def run(params):
 
     # Search consensus sequences for target lineages
     if params.lineages:
+        tree = Phylo.read(tree_path, "newick")
         lineage_list = params.lineages.split(",")
+
+        # Check for "*" character to imply descendants
+        for lineage in lineage_list:
+
+            if lineage.endswith("*"):
+                lineage_tree = next(tree.find_clades(lineage[:-1]))
+                lineage_descendants = [c.name for c in lineage_tree.find_clades()]
+                lineage_list.remove(lineage)
+                lineage_list += lineage_descendants
+
+        params.lineages = ",".join(lineage_list)
+
         logger.info(
             str(datetime.now())
             + "\tSearching consensus sequences for: "

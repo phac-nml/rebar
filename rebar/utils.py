@@ -716,10 +716,10 @@ def detect_recombination(params):
     if params.output_all or params.output_plot:
         outpath = os.path.join(
             params.outdir,
-            "plots/<recombinant>_<parent_1>_<parent_2>." + params.snipit_format,
+            "plots/<recombinant>_<parent_1>_<parent_2>." + params.plot_ext,
         )
         logger.info(str(datetime.now()) + "\tExporting plots: " + outpath)
-        export.to_plot()
+        export.to_plot(ext=params.plot_ext)
 
     # Finish
     logger.info(str(datetime.now()) + "\tFinished detecting recombination.")

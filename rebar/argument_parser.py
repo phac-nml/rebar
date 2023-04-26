@@ -117,13 +117,6 @@ def add_output_all_param(parser, required=False):
     )
 
 
-def add_output_fasta_param(parser, required=False):
-    text = "Output FASTA results (alignments with non-barcode positions masked)."
-    parser.add_argument(
-        "--output-fasta", required=required, action="store_true", help=text
-    )
-
-
 def add_output_plot_param(parser, required=False):
     text = "Output snipit plots."
     parser.add_argument(
@@ -162,10 +155,10 @@ def add_shared_param(parser, required=False):
     parser.add_argument("--shared", required=required, action="store_true", help=text)
 
 
-def add_snipit_format_param(parser, required=False):
-    text = "snipit format extension for figures"
+def add_plot_ext_param(parser, required=False):
+    text = "plot format extension for figures"
     parser.add_argument(
-        "--snipit-format",
+        "--plot-ext",
         required=required,
         default="png",
         choices=["pdf", "png"],
@@ -237,12 +230,11 @@ def add_params(parser, subcommand=None):
         add_min_consecutive_param(parser=optional, required=False)
         add_min_subs_param(parser=optional, required=False)
         add_shared_param(parser=optional, required=False)
-        add_snipit_format_param(parser=optional, required=False)
         add_validate_param(parser=optional, required=False)
+        add_plot_ext_param(parser=optional, required=False)
 
         # Optional Output
         add_output_all_param(parser=optional, required=False)
-        add_output_fasta_param(parser=optional, required=False)
         add_output_plot_param(parser=optional, required=False)
         add_output_barcode_param(parser=optional, required=False)
         add_output_tsv_param(parser=optional, required=False)

@@ -26,7 +26,6 @@ def main():
     if hasattr(params, "output_all"):
         if (
             not params.output_all
-            and not params.output_fasta
             and not params.output_barcode
             and not params.output_plot
             and not params.output_tsv

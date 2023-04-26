@@ -194,13 +194,68 @@ class Recombination:
                 )
             return None
 
-        # Identifying breakpoint regions
+        # ---------------------------------------------------------------------
+        # Identify and filter parental regions
+
+        # First: 5' -> 3'
+        regions_5p = self.identify_regions(subs_uniq_df, genome)
+        regions_5p = self.filter_regions_5p(regions_5p, min_consecutive, 0)
+        regions_5p = self.filter_regions_5p(regions_5p, 0, min_length)
+
+        # Second: 3' to 5'
+        regions_3p = self.identify_regions(subs_uniq_df, genome)
+        regions_3p = dict(reversed(regions_3p.items()))
+        regions_3p = self.filter_regions_3p(regions_3p, min_consecutive, 0)
+        regions_3p = self.filter_regions_3p(regions_3p, 0, min_length)
+        regions_3p = dict(reversed(regions_3p.items()))
+
+        # Reconcile 5' vs. 3' differences, by increasing uncertainty
+        regions_intersect = self.intersect_regions(regions_5p, regions_3p)
+
+        if genome.debug:
+            genome.logger.info(
+                str(datetime.now())
+                + "\t\t\tREGIONS FILTERED: "
+                + str(regions_intersect)
+            )
+
+        # If we're left with one filtered parental region, no recombination
+        if len(regions_intersect) < 2:
+            if genome.debug:
+                genome.logger.info(
+                    str(datetime.now()) + "\t\t\t" + "No breakpoints detected."
+                )
+            return None
+
+        # Identify breakpoints
+        breakpoints = self.identify_breakpoints(regions_intersect)
+
+        if genome.debug:
+            genome.logger.info(
+                str(datetime.now()) + "\t\t\tBREAKPOINTS: " + str(breakpoints)
+            )
+
+        if len(breakpoints) > max_breakpoints:
+            if genome.debug:
+                genome.logger.info(
+                    str(datetime.now()) + "\t\t\tNumber of breakpoints exceeds maximum."
+                )
+            return None
+
+        self.dataframe = subs_df
+        self.regions = regions_intersect
+        self.breakpoints = breakpoints
+
+        return 0
+
+    def identify_regions(self, df, genome):
+        # Identifying parental regions
         regions = {}
         p_prev = None
         start = 0
         end = 0
 
-        for rec in subs_uniq_df.iterrows():
+        for rec in df.iterrows():
             p_curr = rec[1]["parent"]
             sub = Substitution(
                 "{}{}{}".format(rec[1]["Reference"], rec[1]["coord"], rec[1][genome.id])
@@ -233,100 +288,115 @@ class Recombination:
             end = sub.coord
             p_prev = p_curr
 
-        if genome.debug:
-            genome.logger.info(
-                str(datetime.now()) + "\t\t\tREGIONS UNFILTERED: " + str(regions)
-            )
+        return regions
 
-        # Filter 1: At least X consecutive subs per region
-        regions_filter_1 = {}
+    def filter_regions_5p(self, regions, min_consecutive, min_length):
+        regions_filter = {}
         prev_start = None
         prev_parent = None
 
         for start in regions:
             parent = regions[start]["parent"]
             end = regions[start]["end"]
-            num_consecutive = len(regions[start]["subs"])
+            subs = regions[start]["subs"]
+            num_consecutive = len(subs)
             region_length = (end - start) + 1
 
-            # First filtered region
-            if not prev_parent:
-                # Is the first region long enough?
-                if num_consecutive < min_consecutive:
+            # Option 1. First filtered region, or a different parent
+            if not prev_parent or prev_parent != parent:
+                # Is the new parental region long enough?
+                if num_consecutive >= min_consecutive and region_length >= min_length:
+                    regions_filter[start] = regions[start]
+                    prev_parent = parent
+                    prev_start = start
+                # Otherwise, continue to next region
+                else:
                     continue
-                regions_filter_1[start] = regions[start]
 
-            # A region that continues the previous parent
-            # intermissions from other parents were skipped over
+            # Option 2. Prev parent continuation
             elif prev_parent == parent:
-                # Update the end coordinates
-                regions_filter_1[prev_start]["end"] = end
+                # Update end coordinates and subs
+                regions_filter[prev_start]["end"] = end
+                regions_filter[prev_start]["subs"] += subs
                 continue
-            elif prev_parent != parent:
-                # start new region, if long enough
-                if num_consecutive < min_consecutive:
-                    continue
-                regions_filter_1[start] = regions[start]
 
-            prev_parent = parent
-            prev_start = start
+        return regions_filter
 
-        # Filter 2: At least X min_length per region
-        regions_filter_2 = {}
+    def filter_regions_3p(self, regions, min_consecutive, min_length):
+        regions_filter = {}
         prev_start = None
         prev_parent = None
 
-        for start in regions_filter_1:
+        for start in regions:
             parent = regions[start]["parent"]
             end = regions[start]["end"]
-            num_consecutive = len(regions[start]["subs"])
+            subs = regions[start]["subs"]
+            num_consecutive = len(subs)
             region_length = (end - start) + 1
 
-            # First filtered region
-            if not prev_parent:
-                # Is the first region long enough?
-                if region_length < min_length:
+            # First filtered region, or different parent from previous region
+            if not prev_parent or prev_parent != parent:
+                # Is the new parental region long enough?
+                if num_consecutive >= min_consecutive and region_length >= min_length:
+                    regions_filter[start] = regions[start]
+                    prev_parent = parent
+                    prev_start = start
+                else:
                     continue
-                regions_filter_2[start] = regions[start]
 
             # A region that continues the previous parent
             # intermissions from other parents were skipped over
             elif prev_parent == parent:
-                # Update the end coordinates
-                regions_filter_2[prev_start]["end"] = end
-                continue
-            elif prev_parent != parent:
-                # start new region, if long enough
-                if region_length < min_length:
-                    continue
-                regions_filter_2[start] = regions[start]
-
-            prev_parent = parent
-            prev_start = start
-
-        regions_filter = regions_filter_2
-
-        if genome.debug:
-            genome.logger.info(
-                str(datetime.now()) + "\t\t\tREGIONS FILTERED: " + str(regions_filter)
-            )
-
-        # If we're left with one filtered parental region, no recombination
-        if len(regions_filter) < 2:
-            if genome.debug:
-                genome.logger.info(
-                    str(datetime.now()) + "\t\t\t" + "No breakpoints detected."
+                # Update the previous regions coordinates
+                regions_filter[start] = regions[prev_start]
+                regions_filter[start]["subs"] = sorted(
+                    regions_filter[prev_start]["subs"] + subs
                 )
-            return None
+                regions_filter[start]["start"] = regions_filter[start]["subs"][0].coord
+                regions_filter[start]["end"] = regions_filter[start]["subs"][-1].coord
+                regions_filter.pop(prev_start)
+                prev_start = start
+                continue
 
-        # Identify breakpoints
+        return regions_filter
+
+    def intersect_regions(self, regions_1, regions_2):
+        regions_intersect = {}
+        for r1 in regions_1.values():
+
+            r1_parent = r1["parent"]
+            r1_subs = set(r1["subs"])
+
+            for r2 in regions_2.values():
+
+                r2_parent = r2["parent"]
+                if r1_parent != r2_parent:
+                    continue
+
+                r2_subs = set(r2["subs"])
+                subs_intersect = r1_subs.intersection(r2_subs)
+                if len(subs_intersect) == 0:
+                    continue
+
+                start = min(subs_intersect).coord
+                end = max(subs_intersect).coord
+                regions_intersect[start] = {
+                    "start": start,
+                    "end": end,
+                    "parent": r1_parent,
+                    "subs": sorted(subs_intersect),
+                }
+
+        return regions_intersect
+
+    def identify_breakpoints(self, regions):
         breakpoints = []
         prev_start_coord = None
         prev_end_coord = None
 
-        for start_coord in regions_filter:
+        for start_coord in regions:
 
-            end_coord = regions_filter[start_coord]["end"]
+            end_coord = regions[start_coord]["end"]
 
             # Skip the first record for breakpoints
             if prev_start_coord:
@@ -338,20 +408,4 @@ class Recombination:
             prev_start_coord = start_coord
             prev_end_coord = end_coord
 
-        if genome.debug:
-            genome.logger.info(
-                str(datetime.now()) + "\t\t\tBREAKPOINTS: " + str(breakpoints)
-            )
-
-        if len(breakpoints) > max_breakpoints:
-            if genome.debug:
-                genome.logger.info(
-                    str(datetime.now()) + "\t\t\tNumber of breakpoints exceeds maximum."
-                )
-            return None
-
-        self.dataframe = subs_df
-        self.regions = regions_filter
-        self.breakpoints = breakpoints
-
-        return 0
+        return breakpoints
