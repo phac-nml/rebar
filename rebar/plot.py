@@ -225,20 +225,3 @@ def plot(barcodes, summary, output):
     # Export
     plt.tight_layout()
     plt.savefig(output)
-
-
-plot(
-    barcodes="output/debug/barcodes/XBJ_BA.2.3.20_BA.5.2.tsv",
-    summary="output/debug/summary.tsv",
-    output="output/debug/plots/XBJ_BA.2.3.20_BA.5.2.png",
-)
-plot(
-    barcodes="output/debug/barcodes/XBJ_BA.2.3.20_CK.2.1.1.tsv",
-    summary="output/debug/summary.tsv",
-    output="output/debug/plots/XBJ_BA.2.3.20_CK.2.1.1.png",
-)
-plot(
-    barcodes="output/XBC/barcodes/XBC_B.1.617.2_CJ.1.tsv",
-    summary="output/XBC/summary.tsv",
-    output="output/XBC/plots/XBC_B.1.617.2_CJ.1.png",
-)
