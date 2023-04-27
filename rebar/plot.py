@@ -20,24 +20,6 @@ def plot(barcodes_df, summary_df, annot_df, output):
     if not os.path.exists(outdir) and outdir != "." and outdir != "":
         os.makedirs(outdir)
 
-    # Parse breakpoints from summary
-    breakpoints = list(summary_df["breakpoints"])
-    # Check if there are multiple different breakpoint versions
-    # Use whichever one is most common
-    if len(set(breakpoints)) > 1:
-        max_count = 0
-        max_breakpoints = None
-        for bp in breakpoints:
-            count = breakpoints.count(bp)
-            if count > max_count:
-                max_count = count
-                max_breakpoints = bp
-
-        breakpoints = max_breakpoints
-    else:
-        breakpoints = breakpoints[0]
-
-    breakpoints_split = breakpoints.split(",")
     genome_length = int(summary_df["genome_length"].values[0])
 
     # Identify the first and second parent
@@ -49,14 +31,8 @@ def plot(barcodes_df, summary_df, annot_df, output):
     palette = [colors.rgb2hex(cmap(i)) for i in range(cmap.N)]
     parent_1_mut_color = palette[0]  # Blue Dark
     parent_1_ref_color = palette[1]  # Blue Light
-    # parent_1_mut_color = palette[4]  # Green Dark
-    # parent_1_ref_color = palette[5]  # Green Light
     parent_2_mut_color = palette[2]  # Orange Dark
     parent_2_ref_color = palette[3]  # Orange Light
-    # parent_2_mut_color = palette[6]  # Red Dark
-    # parent_2_ref_color = palette[7]  # Red Light
-    # parent_2_mut_color = palette[8]  # Purple Dark
-    # parent_2_ref_color = palette[9]  # Purple Light
 
     ref_color = "#c4c4c4"
 
@@ -115,99 +91,8 @@ def plot(barcodes_df, summary_df, annot_df, output):
 
     fig, ax = plt.subplots(1, 1, dpi=200, figsize=(width, height))
 
-    # -----------------------------------------------------------------------------
-    # Genome Coordinates Guide
-
-    guide_x = x_inc * 0.5
-    guide_y1 = (y_inc * num_records) + y_break + (y_inc * 3)
-    guide_y2 = guide_y1 + y_inc
-    guide_h = guide_y2 - guide_y1
-    rect = patches.Rectangle(
-        (guide_x, guide_y1),
-        genome_length,
-        guide_h,
-        alpha=0.2,
-        fill=True,
-        edgecolor="none",
-        facecolor="dimgrey",
-    )
-    ax.add_patch(rect)
-
-    # Add ticks
-    for x in list(range(0, genome_length, guide_tick_intervals)) + [genome_length]:
-        tick_text = str(x)
-        x += guide_x
-        tick_y2 = guide_y1
-        tick_y1 = tick_y2 - (y_inc * 0.25)
-        text_y = tick_y1 - (y_inc * 0.25)
-
-        ax.plot(
-            [x, x],
-            [tick_y1, tick_y2],
-            lw=linewidth,
-            color="black",
-        )
-        ax.text(
-            x,
-            text_y,
-            str(tick_text),
-            size=fontsize - 2,
-            ha="center",
-            va="top",
-            color="black",
-        )
-
-    # -----------------------------------------------------------------------------
-    # Genome Annotations
-
-    annot_y1 = guide_y1 + (y_inc * 1.5)
-    annot_y2 = annot_y1 + y_inc
-    annot_h = annot_y2 - annot_y1
-    # Exclude the sub colors from the palette
-    annot_palette = cycle(palette[4:])
-
-    for i, rec in enumerate(annot_df.iterrows()):
-        start = rec[1]["start"]
-        # End coordinates non-inclusive
-        end = rec[1]["end"] - 1
-
-        annot_x1 = rec[1]["start"] + guide_x
-        annot_x2 = end = (rec[1]["end"] - 1) + guide_x
-        annot_w = annot_x2 - annot_x1
-
-        annot_c = next(annot_palette)
-
-        rect = patches.Rectangle(
-            (annot_x1, annot_y1),
-            annot_w,
-            annot_h,
-            alpha=1,
-            fill=True,
-            edgecolor="none",
-            facecolor=annot_c,
-        )
-        ax.add_patch(rect)
-
-        gene = rec[1]["abbreviation"]
-
-        text_x = annot_x1 + (annot_w * 0.5)
-        # text_y = annot_y1 + (annot_h * 0.5)
-        # Offset height of every other text label
-        if i % 2 == 0:
-            text_y = annot_y1 + (annot_h * 1.5)
-        else:
-            text_y = annot_y1 + (annot_h * 2.25)
-        ax.plot(
-            [text_x, text_x],
-            [annot_y2, text_y],
-            ls="-",
-            lw=linewidth,
-            color="black",
-            clip_on=False,
-        )
-        ax.text(
-            text_x, text_y, gene, size=fontsize, ha="center", va="bottom", color="black"
-        )
+    # Current height of the section for plotting
+    current_y = 0
 
     # -----------------------------------------------------------------------------
     # PLOT SAMPLES AND SNPS
@@ -215,10 +100,9 @@ def plot(barcodes_df, summary_df, annot_df, output):
     # This will be x position in units of genomic coordinates, increment
     x_coord = x_inc
 
-    # Snp box sizes
+    # Sub box sizes
     box_w = x_inc * 0.8
     box_h = y_inc * 0.8
-    top_sample_y = (y_inc * num_records) + y_break + (y_inc * 0.4)
 
     # Iterate through subs, which are columns in plot
     for rec_i, rec in enumerate(barcodes_df.iterrows()):
@@ -230,42 +114,6 @@ def plot(barcodes_df, summary_df, annot_df, output):
         parent_2_base = rec[1][parent_2]
 
         box_x = x_coord - (box_w / 2)
-
-        # Plot this SNP on the genome guide
-        if parent_1_base != ref_base:
-            guide_color = parent_1_mut_color
-        elif parent_2_base != ref_base:
-            guide_color = parent_2_mut_color
-        else:
-            guide_color = "black"
-
-        # Plot a colored line on the guide
-        ax.plot(
-            [genome_coord, genome_coord],
-            [guide_y1, guide_y2],
-            lw=1,
-            color=guide_color,
-            clip_on=False,
-        )
-
-        # Draw a polygon from guide to top row of subs
-        # P1: Top Guide, P2: Top left of SNP box, P3: Top right of SNP box
-        x1 = box_x
-        x2 = box_x + box_w
-        x3 = genome_coord
-        y1 = top_sample_y
-        y2 = guide_y1
-
-        poly_coords = [[x1, y1], [x2, y1], [x3, y2]]
-        poly = patches.Polygon(
-            poly_coords,
-            closed=True,
-            alpha=0.2,
-            fill=True,
-            edgecolor="none",
-            facecolor="dimgrey",
-        )
-        ax.add_patch(poly)
 
         # This will be y position in units of genomic coordinates, increment
         y_coord = (y_inc) * 0.5
@@ -303,6 +151,7 @@ def plot(barcodes_df, summary_df, annot_df, output):
             )
             ax.add_patch(rect)
 
+            # On the first time parsing sub, write sample label
             if rec_i == 0:
                 ax.text(
                     -50,
@@ -311,7 +160,6 @@ def plot(barcodes_df, summary_df, annot_df, output):
                     size=fontsize,
                     ha="right",
                     va="center",
-                    fontweight="bold",
                 )
 
             # Draw sub text bases
@@ -320,16 +168,53 @@ def plot(barcodes_df, summary_df, annot_df, output):
             # Add an extra gap after recombinant parents
             if i == y_break:
                 y_coord += y_inc + (y_break_gap)
+            elif i == (num_records) - 1:
+                y_coord += y_inc / 2
             else:
                 y_coord += y_inc
 
         x_coord += x_inc
 
-    # -----------------------------------------------------------------------------
-    # PLOT BREAKPOINTS
+    top_sample_y = y_coord
+    current_y = y_coord
 
-    y_min = y_inc * 0.1
-    y_max = (y_inc * num_records) + (y_inc)
+    # -----------------------------------------------------------------------------
+    # Breakpoint Labels
+
+    # Parse breakpoints from summary
+    breakpoints = list(summary_df["breakpoints"])
+    # Check if there are multiple different breakpoint versions
+    # Use whichever one is most common
+    if len(set(breakpoints)) > 1:
+        max_count = 0
+        max_breakpoints = None
+        for bp in breakpoints:
+            count = breakpoints.count(bp)
+            if count > max_count:
+                max_count = count
+                max_breakpoints = bp
+
+        breakpoints = max_breakpoints
+    else:
+        breakpoints = breakpoints[0]
+
+    breakpoints_split = breakpoints.split(",")
+
+    # Align bottom of breakpoints dividor with sub box bottom
+    bp_y1 = y_inc * 0.1
+    # This is the y coordinate for the text, bottom aligned
+    bp_y2 = current_y + y_break + (y_inc * 1.5)
+
+    # Write breakpoints label of left
+    ax.text(
+        -50,
+        bp_y2,
+        "Breakpoints",
+        size=fontsize,
+        ha="right",
+        va="bottom",
+    )
+
     for i, breakpoint in enumerate(breakpoints_split):
         # get region start and end
 
@@ -352,17 +237,18 @@ def plot(barcodes_df, summary_df, annot_df, output):
 
             ax.plot(
                 [x_coord, x_coord],
-                [y_min, y_max],
+                [bp_y1, bp_y2],
                 ls="--",
                 lw=linewidth,
                 color="black",
                 clip_on=False,
             )
+        # Plot greyed, out dashed rectangle
         else:
 
             box_x = (x_inc) * (start_i + 1.5)
             box_x2 = (x_inc) * (end_i + 1.5)
-            box_y = y_min
+            box_y = bp_y1
             box_w = box_x2 - box_x
             box_h = (y_inc) * num_records + (y_inc * 0.8)
 
@@ -394,11 +280,25 @@ def plot(barcodes_df, summary_df, annot_df, output):
             )
             ax.add_patch(rect)
 
+            # Bonus little dashed tick in center
+            line_x = box_x + (box_w / 2)
+            line_y1 = box_y + box_h
+            line_y2 = bp_y2
+
+            ax.plot(
+                [line_x, line_x],
+                [line_y1, line_y2],
+                ls="--",
+                lw=linewidth,
+                color="black",
+                clip_on=False,
+            )
+
             x_coord = box_x + (box_x2 - box_x) / 2
 
         ax.text(
             x_coord,
-            y_max,
+            bp_y2,
             "Breakpoint #" + str(i + 1),
             size=fontsize,
             ha="center",
@@ -406,6 +306,260 @@ def plot(barcodes_df, summary_df, annot_df, output):
             bbox=dict(
                 facecolor="white", edgecolor="black", lw=linewidth, boxstyle="round"
             ),
+        )
+
+    current_y = bp_y2
+
+    # -----------------------------------------------------------------------------
+    # Genome Coordinates Guide
+
+    guide_x = x_inc * 0.5
+    guide_y1 = current_y + y_break + (y_inc * 2)
+    guide_y2 = guide_y1 + y_inc
+    guide_h = guide_y2 - guide_y1
+
+    # Write breakpoints label of left
+    ax.text(
+        -50,
+        guide_y1 + (guide_y2 - guide_y1) / 2,
+        "Guide",
+        size=fontsize,
+        ha="right",
+        va="center",
+    )
+
+    # Write grey square as background
+    rect = patches.Rectangle(
+        (guide_x, guide_y1),
+        genome_length,
+        guide_h,
+        alpha=0.2,
+        fill=True,
+        edgecolor="none",
+        facecolor="dimgrey",
+    )
+    ax.add_patch(rect)
+
+    # Add ticks
+    for x in list(range(0, genome_length, guide_tick_intervals)) + [genome_length]:
+        tick_text = str(x)
+        x += guide_x
+        tick_y2 = guide_y1
+        tick_y1 = tick_y2 - (y_inc * 0.25)
+        text_y = tick_y1 - (y_inc * 0.25)
+
+        ax.plot(
+            [x, x],
+            [tick_y1, tick_y2],
+            lw=linewidth,
+            color="black",
+        )
+        ax.text(
+            x,
+            text_y,
+            str(tick_text),
+            size=fontsize - 2,
+            ha="center",
+            va="top",
+            color="black",
+        )
+
+    # Iterate through subs to show on guide
+    guide_sub_x = x_inc
+    # Sub box sizes
+    box_w = x_inc * 0.8
+
+    for rec in enumerate(barcodes_df.iterrows()):
+
+        # Identify base origins
+        genome_coord = rec[1]["coord"]
+        ref_base = rec[1]["Reference"]
+        parent_1_base = rec[1][parent_1]
+        parent_2_base = rec[1][parent_2]
+
+        box_x = guide_sub_x - (box_w / 2)
+
+        guide_color = "black"
+
+        # Plot a line on the guide
+        ax.plot(
+            [genome_coord, genome_coord],
+            [guide_y1, guide_y2],
+            lw=linewidth,
+            color=guide_color,
+            clip_on=False,
+        )
+
+        # Draw a polygon from guide to top row of subs
+        # P1: Top Guide, P2: Top left of SNP box, P3: Top right of SNP box
+        x1 = box_x
+        x2 = box_x + box_w
+        x3 = genome_coord
+        y1 = top_sample_y - (y_inc * 0.1)
+        y2 = guide_y1
+
+        poly_coords = [[x1, y1], [x2, y1], [x3, y2]]
+        poly = patches.Polygon(
+            poly_coords,
+            closed=True,
+            alpha=0.2,
+            fill=True,
+            edgecolor="none",
+            facecolor="dimgrey",
+        )
+        ax.add_patch(poly)
+
+        guide_sub_x += x_inc
+
+    current_y = guide_y2
+
+    # -----------------------------------------------------------------------------
+    # Parental Regions
+
+    regions_x = x_inc * 0.5
+    regions_y1 = current_y + y_break + (y_inc * 1)
+    regions_y2 = regions_y1 + y_inc
+    regions_h = regions_y2 - regions_y1
+
+    # Write label to left
+    ax.text(
+        -50,
+        regions_y1 + (regions_y2 - regions_y1) / 2,
+        "Regions",
+        size=fontsize,
+        ha="right",
+        va="center",
+    )
+
+    # Parse regions from summary
+    # Use whichever region matches the previously identified max breakpoints
+    regions = summary_df[summary_df["breakpoints"] == breakpoints]["regions"].values[0]
+
+    regions_split = regions.split(",")
+    prev_end = None
+
+    # Example: 3796-22599|B.1.617.2
+    for region in regions_split:
+        coords = region.split("|")[0]
+        parent = region.split("|")[1]
+        # First region, plot from beginning
+        if region == regions_split[0]:
+            start = 0
+        else:
+            start = int(coords.split("-")[0])
+        # Last region, plot to end
+        if region == regions_split[-1]:
+            end = genome_length
+        else:
+            end = int(coords.split("-")[1])
+
+        # Adjust x coord
+        start += regions_x
+        end += regions_x
+
+        if parent == parent_1:
+            color = parent_1_mut_color
+        else:
+            color = parent_2_mut_color
+
+        # Parental region box
+        rect = patches.Rectangle(
+            (start, regions_y1),
+            end - start,
+            regions_h,
+            fill=True,
+            edgecolor="black",
+            lw=linewidth,
+            facecolor=color,
+        )
+        ax.add_patch(rect)
+
+        text_x = start + (end - start) / 2
+        # Offset height of every other text label
+        text_y = regions_y1 + (regions_h * 1.5)
+        ax.plot([text_x, text_x], [regions_y2, text_y], lw=linewidth, c="black")
+        ax.text(text_x, text_y, parent, size=fontsize, ha="center", va="bottom")
+
+        # Breakpoints box
+        if prev_end:
+            rect = patches.Rectangle(
+                (prev_end, regions_y1),
+                start - prev_end,
+                regions_h,
+                fill=True,
+                edgecolor="black",
+                lw=linewidth,
+                facecolor=ref_color,
+            )
+            ax.add_patch(rect)
+
+        prev_end = end
+
+    current_y = regions_y2
+
+    # -----------------------------------------------------------------------------
+    # Genome Annotations
+    # Above genome guide
+
+    annot_x = x_inc * 0.5
+    annot_y1 = current_y + (y_inc * 1.75)
+    annot_y2 = annot_y1 + y_inc
+    annot_h = annot_y2 - annot_y1
+    # Exclude the sub colors from the palette
+    annot_palette = cycle(palette[4:])
+
+    # Write label to left
+    ax.text(
+        -50,
+        annot_y1 + (annot_y2 - annot_y1) / 2,
+        "Genes",
+        size=fontsize,
+        ha="right",
+        va="center",
+    )
+
+    for i, rec in enumerate(annot_df.iterrows()):
+        start = rec[1]["start"]
+        # End coordinates non-inclusive
+        end = rec[1]["end"] - 1
+
+        annot_x1 = rec[1]["start"] + annot_x
+        annot_x2 = end = (rec[1]["end"] - 1) + annot_x
+        annot_w = annot_x2 - annot_x1
+
+        annot_c = next(annot_palette)
+
+        # Plot annotation rectangle
+        rect = patches.Rectangle(
+            (annot_x1, annot_y1),
+            annot_w,
+            annot_h,
+            alpha=1,
+            fill=True,
+            edgecolor="black",
+            linewidth=linewidth,
+            facecolor=annot_c,
+        )
+        ax.add_patch(rect)
+
+        gene = rec[1]["abbreviation"]
+
+        text_x = annot_x1 + (annot_w * 0.5)
+        # Offset height of every other text label
+        if i % 2 == 0:
+            text_y = annot_y1 + (annot_h * 1.5)
+        else:
+            text_y = annot_y1 + (annot_h * 2.25)
+        ax.plot(
+            [text_x, text_x],
+            [annot_y2, text_y],
+            ls="-",
+            lw=linewidth,
+            color="black",
+            clip_on=False,
+        )
+        ax.text(
+            text_x, text_y, gene, size=fontsize, ha="center", va="bottom", color="black"
         )
 
     # -----------------------------------------------------------------------------
@@ -427,9 +581,9 @@ def plot(barcodes_df, summary_df, annot_df, output):
     # # Set the Y axis limits to the genome length
     # Extra y_inc for:
     #  1. Breakpoints, 2. Genome Guide,
-    ax.set_ylim(0, (num_records * y_inc) + y_break_gap + (y_inc * 5))
+    ax.set_ylim(0, (num_records * y_inc) + y_break_gap + (y_inc * 10))
     ax.set_xlim(0, genome_length + x_inc)
-    ax.set_xlabel("Genomic Coordinate", fontsize=fontsize, fontweight="bold")
+    ax.set_xlabel("Genomic Coordinate", fontsize=fontsize)
 
     ax.axes.set_aspect("equal")
     # Export
