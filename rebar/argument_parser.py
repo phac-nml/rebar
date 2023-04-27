@@ -188,7 +188,7 @@ def add_plot_ext_param(parser, required=False):
         "--plot-ext",
         required=required,
         default=PLOT_FORMAT,
-        choices=["pdf", "png"],
+        choices=["pdf", "png", "svg"],
         type=str,
         help=text,
     )

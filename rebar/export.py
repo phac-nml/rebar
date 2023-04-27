@@ -5,14 +5,28 @@ from .plot import plot
 
 
 class Export:
-    def __init__(self, genomes, outdir, include_shared):
+    def __init__(
+        self,
+        genomes,
+        dataset,
+        outdir,
+    ):
         self.genomes = genomes
+        self.dataset = dataset
         self.outdir = outdir
         self.recombinants = self.collect_recombinants()
-        self.include_shared = include_shared
         self.dataframe = None
         self.barcodes = {}
         self.alignments = {}
+        self.annotations = self.load_annotations(dataset)
+
+    def load_annotations(self, dataset):
+        """
+        Load annotations dataframe from dataset path.
+        """
+        annot_path = os.path.join(self.dataset, "annotations.tsv")
+        annot_df = pd.read_csv(annot_path, sep="\t")
+        return annot_df
 
     def collect_recombinants(self):
         """
@@ -154,6 +168,7 @@ class Export:
 
                 # In the summary table, parents are seperated by comma
                 parents_csv = parents.replace("_", ",")
+
                 # Get barcodes and summary for this recombinant
                 barcodes_df = self.barcodes[recombinant][parents]
                 summary_df = self.dataframe[
@@ -163,6 +178,11 @@ class Export:
                 output_path = os.path.join(
                     self.outdir, "plots", "{}_{}.{}".format(recombinant, parents, ext)
                 )
-                plot(barcodes_df=barcodes_df, summary_df=summary_df, output=output_path)
+                plot(
+                    barcodes_df=barcodes_df,
+                    summary_df=summary_df,
+                    annot_df=self.annotations,
+                    output=output_path,
+                )
 
         return 0

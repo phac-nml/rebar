@@ -13,6 +13,7 @@ from .utils import (
     download_consensus_sequences,
     download_reference_sequence,
     parse_alignment,
+    create_annotations,
     create_tree,
     create_barcodes,
     detect_recombination,
@@ -52,6 +53,7 @@ def dataset(params):
 
         if params.tag == "latest":
 
+            create_annotations(params)
             accession = "MN908947.3"
             info["reference"] = download_reference_sequence(params, accession)
             info["sequences"] = download_consensus_sequences(params)

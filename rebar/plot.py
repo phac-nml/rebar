@@ -5,11 +5,15 @@ import logging
 
 import matplotlib.pyplot as plt
 from matplotlib import patches, colors
+import pandas as pd
 
 logging.getLogger("matplotlib.font_manager").disabled = True
 
 
-def plot(barcodes_df, summary_df, output):
+def plot(barcodes_df, summary_df, annot_df, output):
+
+    # Debugging
+    # barcodes_df = barcodes_df.head(35)
 
     # Create output directory if it doesn't exist
     outdir = os.path.dirname(output)
@@ -53,29 +57,53 @@ def plot(barcodes_df, summary_df, output):
     # # Fontsize of 9 looks good for 20 subs
     fontsize = 9
     linewidth = 0.5
+    guide_tick_intervals = 5000
 
-    if num_subs < 10:
-        width = 10
-    else:
-        width = num_subs * 0.25
+    target_height = 20
+    target_width = 20
 
-    if num_records < 10:
-        height = 5
-    else:
+    # True matplotlib maximum
+    max_height = 50
+    max_width = 50
+
+    # Default width and height
+    width = 10
+    height = 10
+
+    if num_subs >= 10:
+
+        width = num_subs
+        if num_subs > target_width:
+            width = num_subs * 0.25
+
+        if width > max_width:
+            width = max_width
+
+    if num_records >= 10:
         height = num_records
+        if num_records > target_height:
+            height = max_height
+        if height > max_height:
+            height = max_height
+
+    if width < 10:
+        fontsize = 7
+    else:
+        guide_tick_intervals = 2500
 
     fig, ax = plt.subplots(1, 1, dpi=200, figsize=(width, height))
 
     # -----------------------------------------------------------------------------
-    # PLOT GENOME GUIDE
+    # Genome Coordinates Guide
 
     guide_x = x_inc * 0.5
-    guide_y1 = (y_inc * num_records) + y_break + (y_inc * 2)
+    guide_y1 = (y_inc * num_records) + y_break + (y_inc * 3)
     guide_y2 = guide_y1 + y_inc
+    guide_h = guide_y2 - guide_y1
     rect = patches.Rectangle(
         (guide_x, guide_y1),
         genome_length,
-        guide_y2 - guide_y1,
+        guide_h,
         alpha=0.2,
         fill=True,
         edgecolor="none",
@@ -83,11 +111,85 @@ def plot(barcodes_df, summary_df, output):
     )
     ax.add_patch(rect)
 
+    # Add ticks
+    for x in list(range(0, genome_length, guide_tick_intervals)) + [genome_length]:
+        tick_text = str(x)
+        x += guide_x
+        tick_y2 = guide_y1
+        tick_y1 = tick_y2 - (y_inc * 0.25)
+        text_y = tick_y1 - (y_inc * 0.25)
+
+        ax.plot(
+            [x, x],
+            [tick_y1, tick_y2],
+            lw=linewidth,
+            color="black",
+        )
+        ax.text(
+            x,
+            text_y,
+            str(tick_text),
+            size=fontsize - 2,
+            ha="center",
+            va="top",
+            color="black",
+        )
+
+    # -----------------------------------------------------------------------------
+    # Genome Annotations
+
+    annot_y1 = guide_y1 + (y_inc * 1.5)
+    annot_y2 = annot_y1 + y_inc
+    annot_h = annot_y2 - annot_y1
+
+    for i, rec in enumerate(annot_df.iterrows()):
+        start = rec[1]["start"]
+        # End coordinates non-inclusive
+        end = rec[1]["end"] - 1
+
+        annot_x1 = rec[1]["start"] + guide_x
+        annot_x2 = end = (rec[1]["end"] - 1) + guide_x
+        annot_w = annot_x2 - annot_x1
+
+        annot_c = palette[i]
+
+        rect = patches.Rectangle(
+            (annot_x1, annot_y1),
+            annot_w,
+            annot_h,
+            alpha=1,
+            fill=True,
+            edgecolor="none",
+            facecolor=annot_c,
+        )
+        ax.add_patch(rect)
+
+        gene = rec[1]["abbreviation"]
+
+        text_x = annot_x1 + (annot_w * 0.5)
+        # text_y = annot_y1 + (annot_h * 0.5)
+        # Offset height of every other text label
+        if i % 2 == 0:
+            text_y = annot_y1 + (annot_h * 1.5)
+        else:
+            text_y = annot_y1 + (annot_h * 2.25)
+        ax.plot(
+            [text_x, text_x],
+            [annot_y2, text_y],
+            ls="-",
+            lw=linewidth,
+            color="black",
+            clip_on=False,
+        )
+        ax.text(
+            text_x, text_y, gene, size=fontsize, ha="center", va="bottom", color="black"
+        )
+
     # -----------------------------------------------------------------------------
     # PLOT SAMPLES AND SNPS
 
     # This will be x position in units of genomic coordinates, increment
-    x_coord = 0
+    x_coord = x_inc
 
     # Snp box sizes
     box_w = x_inc * 0.8
@@ -103,7 +205,6 @@ def plot(barcodes_df, summary_df, output):
         parent_1_base = rec[1][parent_1]
         parent_2_base = rec[1][parent_2]
 
-        x_coord += x_inc
         box_x = x_coord - (box_w / 2)
 
         # Plot this SNP on the genome guide
@@ -198,6 +299,8 @@ def plot(barcodes_df, summary_df, output):
             else:
                 y_coord += y_inc
 
+        x_coord += x_inc
+
     # -----------------------------------------------------------------------------
     # PLOT BREAKPOINTS
 
@@ -211,6 +314,9 @@ def plot(barcodes_df, summary_df, output):
 
         start_match = barcodes_df[barcodes_df["coord"] == start]
         end_match = barcodes_df[barcodes_df["coord"] == end]
+
+        if len(start_match) == 0:
+            continue
 
         start_i = start_match.index.values[0]
         end_i = end_match.index.values[0]
@@ -256,6 +362,9 @@ def plot(barcodes_df, summary_df, output):
             size=fontsize,
             ha="center",
             va="bottom",
+            bbox=dict(
+                facecolor="white", edgecolor="black", lw=linewidth, boxstyle="round"
+            ),
         )
 
     # -----------------------------------------------------------------------------
@@ -275,7 +384,9 @@ def plot(barcodes_df, summary_df, output):
     ax.set_yticks([])
 
     # # Set the Y axis limits to the genome length
-    ax.set_ylim(0, (num_records * y_inc) + y_break_gap + (y_inc * 3))
+    # Extra y_inc for:
+    #  1. Breakpoints, 2. Genome Guide,
+    ax.set_ylim(0, (num_records * y_inc) + y_break_gap + (y_inc * 10))
     ax.set_xlim(0, genome_length + x_inc)
     ax.set_xlabel("Genomic Coordinate", fontsize=fontsize, fontweight="bold")
 
@@ -285,6 +396,22 @@ def plot(barcodes_df, summary_df, output):
     plt.savefig(output)
 
 
-# barcodes_df = pd.read_csv("output/XBC/barcodes/XBC_CJ.1_B.1.617.2.tsv", sep="\t")
-# summary_df = pd.read_csv("output/XBC/summary.tsv", sep="\t")
-# plot(barcodes_df=barcodes_df, summary_df=summary_df, output="test.png")
+annot_df = pd.read_csv("dataset/sars-cov-2-latest/annotations.tsv", sep="\t")
+
+barcodes_df = pd.read_csv("output/XBC/barcodes/XBC_CJ.1_B.1.617.2.tsv", sep="\t")
+summary_df = pd.read_csv("output/XBC/summary.tsv", sep="\t")
+plot(
+    barcodes_df=barcodes_df,
+    summary_df=summary_df,
+    annot_df=annot_df,
+    output="output/XBC/plots/XBC_CJ.1_B.1.617.2.png",
+)
+
+barcodes_df = pd.read_csv("output/XBJ/barcodes/XBJ_BA.2.3.20_BA.5.2.tsv", sep="\t")
+summary_df = pd.read_csv("output/XBJ/summary.tsv", sep="\t")
+plot(
+    barcodes_df=barcodes_df,
+    summary_df=summary_df,
+    annot_df=annot_df,
+    output="output/XBJ/plots/XBJ_BA.2.3.20_BA.5.2.png",
+)

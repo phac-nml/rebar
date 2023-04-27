@@ -198,6 +198,77 @@ def download_consensus_sequences(params):
     return info
 
 
+def create_annotations(params):
+    """Create gene annotations dataframe."""
+
+    logger = params.logger
+    logger.info(str(datetime.now()) + "\tCreating annotations.")
+
+    annot_data = {
+        "gene": [
+            "ORF1a",
+            "ORF1b",
+            "S",
+            "ORF3a",
+            "E",
+            "M",
+            "ORF6",
+            "ORF7a",
+            "ORF7b",
+            "ORF8",
+            "ORF9b",
+        ],
+        "abbreviation": [
+            "1a",
+            "1b",
+            "S",
+            "3a",
+            "E",
+            "M",
+            "6",
+            "7a",
+            "7b",
+            "8",
+            "9b",
+        ],
+        "start": [
+            266,
+            13468,
+            21563,
+            25393,
+            26245,
+            26523,
+            27202,
+            27394,
+            27756,
+            27894,
+            28284,
+        ],
+        "end": [
+            13468,
+            21555,
+            25384,
+            26220,
+            26472,
+            27191,
+            27387,
+            27759,
+            27887,
+            28259,
+            28577,
+        ],
+    }
+    annot_df = pd.DataFrame(annot_data)
+
+    annot_path = os.path.join(params.outdir, "annotations.tsv")
+    logger.info(str(datetime.now()) + "\tExporting annotations: " + annot_path)
+    annot_df.to_csv(annot_path, sep="\t", index=False)
+
+    # Finish
+    logger.info(str(datetime.now()) + "\tFinished creating annotations.")
+    return 0
+
+
 def create_barcodes(params):
     """
     Create csv of lineage barcodes from nextclade and usher.
@@ -692,7 +763,7 @@ def detect_recombination(params):
     # If requested, exclude non-recombinants from output
     if params.exclude_non_recomb:
         genomes = [g for g in genomes if len(g.recombination.breakpoints) > 0]
-    export = Export(genomes=genomes, outdir=params.outdir, include_shared=params.shared)
+    export = Export(genomes=genomes, dataset=params.dataset, outdir=params.outdir)
 
     # YAML
     if params.output_all or params.output_yaml:
