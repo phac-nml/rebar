@@ -40,7 +40,7 @@ def test_download_consensus_sequences(params):
     params.logger = utils.create_logger(os.path.join(params.outdir, "test.log"))
 
     utils.download_consensus_sequences(params)
-    fasta_path = os.path.join(params.outdir, "sequences.fasta")
+    fasta_path = os.path.join(params.outdir, "alignment.fasta")
     records = list(SeqIO.parse(fasta_path, "fasta"))
     assert len(records) > 1500
 

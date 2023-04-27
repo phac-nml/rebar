@@ -29,3 +29,11 @@ BARCODE_MANUAL_EDITS = {
     # This substitution is found in the UShER tree, but missing from Nextclade
     "XAE": {"A26530G": 1}
 }
+
+MASK = 200
+MAX_DEPTH = 3
+MIN_LENGTH = 500
+MIN_SUBS = 1
+MIN_CONSECUTIVE = 3
+MAX_BREAKPOINTS = 5
+PLOT_FORMAT = "png"

@@ -11,7 +11,7 @@ class Export:
         self.recombinants = self.collect_recombinants()
         self.include_shared = include_shared
         self.dataframe = None
-        self.dataframes = {}
+        self.barcodes = {}
         self.alignments = {}
 
     def collect_recombinants(self):
@@ -28,12 +28,11 @@ class Export:
                 if genome.lineage.recombinant != recombinant:
                     continue
 
-                parents = sorted(
-                    [
-                        genome.recombination.parent_1.name,
-                        genome.recombination.parent_2.name,
-                    ]
-                )
+                # parents = sorted(
+                parents = [
+                    genome.recombination.parent_1.name,
+                    genome.recombination.parent_2.name,
+                ]
                 parents = "{}_{}".format(parents[0], parents[1])
                 if parents not in result[recombinant]:
                     result[recombinant][parents] = []
@@ -58,6 +57,7 @@ class Export:
 
         file_path = os.path.join(self.outdir, "summary.tsv")
         dataframe.to_csv(file_path, sep="\t", index=False)
+        self.dataframe = dataframe
 
         return dataframe
 
@@ -70,7 +70,7 @@ class Export:
 
         # Process recombinant groups
         for recombinant in self.recombinants:
-            self.dataframes[recombinant] = {}
+            self.barcodes[recombinant] = {}
 
             # Process parent groups within recombinant
             for parents in self.recombinants[recombinant]:
@@ -122,11 +122,13 @@ class Export:
 
                     parent_df[genome.id] = bases
 
-                self.dataframes[recombinant][parents] = parent_df
+                self.barcodes[recombinant][parents] = parent_df
                 file_path = os.path.join(
                     outdir_barcodes, "{}_{}.tsv".format(recombinant, parents)
                 )
                 parent_df.to_csv(file_path, sep="\t", index=False)
+
+        return self.barcodes
 
     def to_plot(self, ext):
 
@@ -139,8 +141,8 @@ class Export:
         if type(self.dataframe) != pd.core.series.Series:
             self.to_dataframe()
 
-        # Create individual dataframes
-        if len(self.dataframes) == 0:
+        # Create individual barcodes
+        if len(self.barcodes) == 0:
             self.to_barcodes()
 
         # Process recombinant groups
@@ -149,13 +151,18 @@ class Export:
 
             # Process parent groups within recombinant
             for parents in self.recombinants[recombinant]:
-                barcodes_path = os.path.join(
-                    self.outdir, "barcodes", "{}_{}.tsv".format(recombinant, parents)
-                )
-                summary_path = os.path.join(self.outdir, "summary.tsv")
+
+                # In the summary table, parents are seperated by comma
+                parents_csv = parents.replace("_", ",")
+                # Get barcodes and summary for this recombinant
+                barcodes_df = self.barcodes[recombinant][parents]
+                summary_df = self.dataframe[
+                    (self.dataframe["recombinant"] == recombinant)
+                    & (self.dataframe["parents_lineage"] == parents_csv)
+                ]
                 output_path = os.path.join(
                     self.outdir, "plots", "{}_{}.{}".format(recombinant, parents, ext)
                 )
-                plot(barcodes=barcodes_path, summary=summary_path, output=output_path)
+                plot(barcodes_df=barcodes_df, summary_df=summary_df, output=output_path)
 
         return 0

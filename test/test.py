@@ -2,6 +2,13 @@
 
 import subprocess
 import sys
+import shutil
+import os
+
+tmp_dir = "test/tmp"
+
+if os.path.exists(tmp_dir):
+    shutil.rmtree(tmp_dir, ignore_errors=True)
 
 cmd_str = (
     "python -m coverage run -m pytest --cov=rebar --cov-report=html --cov-report=xml"

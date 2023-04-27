@@ -3,6 +3,15 @@
 import argparse
 from .wrappers import dataset, run
 from . import version
+from .constants import (
+    MASK,
+    MAX_DEPTH,
+    MIN_LENGTH,
+    MIN_SUBS,
+    MIN_CONSECUTIVE,
+    MAX_BREAKPOINTS,
+    PLOT_FORMAT,
+)
 
 
 def add_alignment_param(parser, required=False):
@@ -64,43 +73,61 @@ def add_lineages_param(parser, required=False):
 
 
 def add_mask_param(parser, required=False):
-    text = "Number of bases to mask at 5' and 3' end of genome (Default: 200)."
-    parser.add_argument("--mask", required=required, default=200, type=int, help=text)
+    text = "Number of bases to mask at 5' and 3' end of genome (Default: {}).".format(
+        MASK
+    )
+    parser.add_argument("--mask", required=required, default=MASK, type=int, help=text)
 
 
 def add_max_depth_param(parser, required=False):
-    text = "Maximum search depth to look for parents (Default: 3)."
+    text = "Maximum search depth to look for parents (Default: {}).".format(MAX_DEPTH)
     parser.add_argument(
-        "--max-depth", required=required, default=3, type=int, help=text
+        "--max-depth", required=required, default=MAX_DEPTH, type=int, help=text
     )
 
 
 def add_max_breakpoints_param(parser, required=False):
-    text = "Maximum number of allowed breakpoints (Default: 10)."
+    text = "Maximum number of allowed breakpoints (Default: {}).".format(
+        MAX_BREAKPOINTS
+    )
     parser.add_argument(
-        "--max-breakpoints", required=required, default=10, type=int, help=text
+        "--max-breakpoints",
+        required=required,
+        default=MAX_BREAKPOINTS,
+        type=int,
+        help=text,
     )
 
 
 def add_min_consecutive_param(parser, required=False):
-    text = (
-        "Minimum number of consecutive barcode positions from each parent (Default: 3)."
+    text = "Minimum number of consecutive barcode positions from each parent (Default: {}).".format(
+        MIN_CONSECUTIVE
     )
     parser.add_argument(
-        "--min-consecutive", required=required, default=3, type=int, help=text
+        "--min-consecutive",
+        required=required,
+        default=MIN_CONSECUTIVE,
+        type=int,
+        help=text,
     )
 
 
 def add_min_length_param(parser, required=False):
-    text = "Minimum length of regions contributed by each parent (Default: 500)."
+    text = "Minimum length of regions contributed by each parent (Default: {}).".format(
+        MIN_LENGTH
+    )
     parser.add_argument(
-        "--min-length", required=required, default=500, type=int, help=text
+        "--min-length", required=required, default=MIN_LENGTH, type=int, help=text
     )
 
 
 def add_min_subs_param(parser, required=False):
-    text = "Minimum number of lineage-determining substitutions from each parent (Default: 1)."
-    parser.add_argument("--min-subs", required=required, default=1, type=int, help=text)
+    text = "Minimum number of lineage-determining substitutions from each parent (Default: {}).".format(
+        MIN_SUBS
+    )
+    parser.add_argument(
+        "--min-subs", required=required, default=MIN_SUBS, type=int, help=text
+    )
 
 
 def add_outdir_param(parser, required=False, default="output"):
@@ -160,7 +187,7 @@ def add_plot_ext_param(parser, required=False):
     parser.add_argument(
         "--plot-ext",
         required=required,
-        default="png",
+        default=PLOT_FORMAT,
         choices=["pdf", "png"],
         type=str,
         help=text,
