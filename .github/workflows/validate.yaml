@@ -42,7 +42,7 @@ jobs:
 
       - name: compress
         run: |
-          zip validate validate
+          zip -r validate validate
 
       - name: upload
         uses: actions/upload-artifact@v2
