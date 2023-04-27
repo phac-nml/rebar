@@ -252,7 +252,8 @@ class Barcode:
                 if list(lineage_row[s])[0] == 1
             ]
             # Add in the top_lineages shared subs
-            lineage_subs = sorted(list(set(lineage_subs + top_lineages_subs_shared)))
+            # This interferes with plotting of XBJ. Where is it a benefit?
+            # lineage_subs = sorted(list(set(lineage_subs + top_lineages_subs_shared)))
 
         # Get the barcode subs that were observed
         support = sorted([s for s in lineage_subs if s in genome.substitutions])
@@ -285,12 +286,8 @@ class Barcode:
         conflict_ref = [s for s in conflict_ref if s in conflict_subs]
         conflict_alt = [s for s in conflict_alt if s in conflict_subs]
 
-        definition = lineage
-        if len(conflict_alt) > 0:
-            definition += "+" + ",".join([str(s) for s in conflict_alt])
-
         self.name = lineage
-        self.definition = definition
+        self.definition = lineage
         self.clade = clade
         self.top_lineages = top_lineages
         self.top_lineages_subsample = top_lineages_subsample
@@ -334,3 +331,8 @@ class Barcode:
             self.recombinant = False
 
         return 0
+
+    def set_definition(self):
+        self.definition = self.name
+        if len(self.conflict_alt) > 0:
+            self.definition += "+" + ",".join([str(s) for s in self.conflict_alt])

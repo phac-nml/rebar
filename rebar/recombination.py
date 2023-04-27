@@ -98,8 +98,16 @@ class Recombination:
 
         # Identify barcode subs which uniq to each parent
         all_subs = sorted(list(set(parent_1.barcode + parent_2.barcode)))
+        # We're going to process by coord, because some subs are not bi-allelic
+        all_coords = [s.coord for s in all_subs]
+        dup_coords = set([c for c in all_coords if all_coords.count(c) > 1])
+
         parent_1_subs = [s for s in parent_1.barcode if s not in parent_2.barcode]
         parent_2_subs = [s for s in parent_2.barcode if s not in parent_1.barcode]
+
+        parent_1_coords = [s.coord for s in parent_1_subs]
+        parent_2_coords = [s.coord for s in parent_2_subs]
+        genome_coords = [s.coord for s in genome.substitutions]
 
         # Organize into a dataframe where rows are substitutions, and columns
         # will indicate strain and parental origin
@@ -126,6 +134,47 @@ class Recombination:
                 ],
             }
         ).sort_values(by="coord")
+
+        # Reconcile duplicate coords that are not bi-allelic
+        for coord in dup_coords:
+
+            # Get base of reference
+            ref_base = [s.ref for s in all_subs if s.coord == coord][0]
+
+            # Get base of parent 1
+            parent_1_base = ref_base
+            if coord in parent_1_coords:
+                parent_1_base = [s.alt for s in parent_1_subs if s.coord == coord][0]
+
+            # Get base of parent 2
+            parent_2_base = ref_base
+            if coord in parent_2_coords:
+                parent_2_base = [s.alt for s in parent_2_subs if s.coord == coord][0]
+
+            # Get base of genomic sample
+            genome_base = ref_base
+            if coord in genome_coords:
+                genome_base = [s.alt for s in genome.substitutions if s.coord == coord][
+                    0
+                ]
+            elif coord in genome.missing:
+                genome_base = "N"
+            elif coord in genome.deletions:
+                genome_base = "-"
+
+            data = {
+                "coord": [coord],
+                "Reference": [ref_base],
+                parent_1.name: [parent_1_base],
+                parent_2.name: [parent_2_base],
+                genome.id: [genome_base],
+            }
+            row = pd.DataFrame(data)
+
+            # Remove the old duplicate rows
+            subs_df = subs_df[subs_df["coord"] != coord]
+            # Add new deduplicated row
+            subs_df = pd.concat([subs_df, row]).sort_values(by="coord")
 
         # Identify private genome substitutions and exclude these
         private_sub_coords = list(
@@ -159,7 +208,7 @@ class Recombination:
         subs_uniq_df = subs_df[(subs_df["parent"] != "shared")]
 
         if genome.debug:
-            genome.logger.info(str(datetime.now()) + "\t\t\tBARCODE ORIGINS:")
+            genome.logger.info(str(datetime.now()) + "\t\t\tBARCODE UNIQ:")
             subs_md = subs_uniq_df.to_markdown(index=False)
             subs_str = subs_md.replace("\n", "\n" + "\t" * 7)
             genome.logger.info(str(datetime.now()) + "\t\t\t\t" + subs_str)
@@ -203,6 +252,11 @@ class Recombination:
         regions_5p = self.filter_regions_5p(regions_5p, min_consecutive, 0)
         regions_5p = self.filter_regions_5p(regions_5p, 0, min_length)
 
+        if genome.debug:
+            genome.logger.info(
+                str(datetime.now()) + "\t\t\tREGIONS 5': " + str(regions_5p)
+            )
+
         # Second: 3' to 5'
         regions_3p = self.identify_regions(subs_uniq_df, genome)
         regions_3p = dict(reversed(regions_3p.items()))
@@ -210,13 +264,18 @@ class Recombination:
         regions_3p = self.filter_regions_3p(regions_3p, 0, min_length)
         regions_3p = dict(reversed(regions_3p.items()))
 
+        if genome.debug:
+            genome.logger.info(
+                str(datetime.now()) + "\t\t\tREGIONS 3': " + str(regions_3p)
+            )
+
         # Reconcile 5' vs. 3' differences, by increasing uncertainty
         regions_intersect = self.intersect_regions(regions_5p, regions_3p)
 
         if genome.debug:
             genome.logger.info(
                 str(datetime.now())
-                + "\t\t\tREGIONS FILTERED: "
+                + "\t\t\tREGIONS INTERSECT: "
                 + str(regions_intersect)
             )
 

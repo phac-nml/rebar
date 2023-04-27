@@ -2,6 +2,7 @@
 
 import os
 import logging
+from itertools import cycle
 
 import matplotlib.pyplot as plt
 from matplotlib import patches, colors
@@ -19,8 +20,23 @@ def plot(barcodes_df, summary_df, annot_df, output):
     if not os.path.exists(outdir) and outdir != "." and outdir != "":
         os.makedirs(outdir)
 
-    # Parse data from summary
-    breakpoints = summary_df["breakpoints"].values[0]
+    # Parse breakpoints from summary
+    breakpoints = list(summary_df["breakpoints"])
+    # Check if there are multiple different breakpoint versions
+    # Use whichever one is most common
+    if len(set(breakpoints)) > 1:
+        max_count = 0
+        max_breakpoints = None
+        for bp in breakpoints:
+            count = breakpoints.count(bp)
+            if count > max_count:
+                max_count = count
+                max_breakpoints = bp
+
+        breakpoints = max_breakpoints
+    else:
+        breakpoints = breakpoints[0]
+
     breakpoints_split = breakpoints.split(",")
     genome_length = int(summary_df["genome_length"].values[0])
 
@@ -33,8 +49,15 @@ def plot(barcodes_df, summary_df, annot_df, output):
     palette = [colors.rgb2hex(cmap(i)) for i in range(cmap.N)]
     parent_1_mut_color = palette[0]  # Blue Dark
     parent_1_ref_color = palette[1]  # Blue Light
-    parent_2_mut_color = palette[6]  # Red Dark
-    parent_2_ref_color = palette[7]  # Red Light
+    # parent_1_mut_color = palette[4]  # Green Dark
+    # parent_1_ref_color = palette[5]  # Green Light
+    parent_2_mut_color = palette[2]  # Orange Dark
+    parent_2_ref_color = palette[3]  # Orange Light
+    # parent_2_mut_color = palette[6]  # Red Dark
+    # parent_2_ref_color = palette[7]  # Red Light
+    # parent_2_mut_color = palette[8]  # Purple Dark
+    # parent_2_ref_color = palette[9]  # Purple Light
+
     ref_color = "#c4c4c4"
 
     records = barcodes_df.columns[1:]
@@ -49,7 +72,7 @@ def plot(barcodes_df, summary_df, annot_df, output):
     # This is the y position position to add extra space
     y_break = num_records - 4
     y_break_gap = y_inc * 0.5
-    # y_break_gap = 0
+
     # -------------------------------------------------------------------------
     # Plot Setup
 
@@ -69,7 +92,7 @@ def plot(barcodes_df, summary_df, annot_df, output):
     width = 10
     height = 10
 
-    if num_subs >= 10:
+    if num_subs > 10:
 
         width = num_subs
         if num_subs > target_width:
@@ -78,7 +101,7 @@ def plot(barcodes_df, summary_df, annot_df, output):
         if width > max_width:
             width = max_width
 
-    if num_records >= 10:
+    if num_records > 5:
         height = num_records
         if num_records > target_height:
             height = max_height
@@ -140,6 +163,8 @@ def plot(barcodes_df, summary_df, annot_df, output):
     annot_y1 = guide_y1 + (y_inc * 1.5)
     annot_y2 = annot_y1 + y_inc
     annot_h = annot_y2 - annot_y1
+    # Exclude the sub colors from the palette
+    annot_palette = cycle(palette[4:])
 
     for i, rec in enumerate(annot_df.iterrows()):
         start = rec[1]["start"]
@@ -150,7 +175,7 @@ def plot(barcodes_df, summary_df, annot_df, output):
         annot_x2 = end = (rec[1]["end"] - 1) + guide_x
         annot_w = annot_x2 - annot_x1
 
-        annot_c = palette[i]
+        annot_c = next(annot_palette)
 
         rect = patches.Rectangle(
             (annot_x1, annot_y1),
@@ -318,10 +343,11 @@ def plot(barcodes_df, summary_df, annot_df, output):
             continue
 
         start_i = start_match.index.values[0]
-        end_i = end_match.index.values[0]
+        # End coordinates are not inclusive, move back one
+        end_i = end_match.index.values[0] - 1
 
         # If start and end are adjacent coordinates, plot dashed line
-        if (end_i - start_i) == 1:
+        if (end_i - start_i) == 0:
             x_coord = (x_inc) * (start_i + 1.5)
 
             ax.plot(
@@ -340,12 +366,28 @@ def plot(barcodes_df, summary_df, annot_df, output):
             box_w = box_x2 - box_x
             box_h = (y_inc) * num_records + (y_inc * 0.8)
 
+            # Greyed out rectangle
+            rect = patches.Rectangle(
+                (box_x, box_y),
+                box_w,
+                box_h,
+                alpha=0.4,
+                fill=True,
+                facecolor="black",
+                edgecolor="none",
+                lw=linewidth,
+                ls="--",
+            )
+            ax.add_patch(rect)
+
+            # Dashed rectangle outline
             rect = patches.Rectangle(
                 (box_x, box_y),
                 box_w,
                 box_h,
                 alpha=1,
                 fill=False,
+                facecolor="none",
                 edgecolor="black",
                 lw=linewidth,
                 ls="--",
@@ -385,7 +427,7 @@ def plot(barcodes_df, summary_df, annot_df, output):
     # # Set the Y axis limits to the genome length
     # Extra y_inc for:
     #  1. Breakpoints, 2. Genome Guide,
-    ax.set_ylim(0, (num_records * y_inc) + y_break_gap + (y_inc * 10))
+    ax.set_ylim(0, (num_records * y_inc) + y_break_gap + (y_inc * 5))
     ax.set_xlim(0, genome_length + x_inc)
     ax.set_xlabel("Genomic Coordinate", fontsize=fontsize, fontweight="bold")
 

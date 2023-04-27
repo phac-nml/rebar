@@ -146,6 +146,7 @@ class Genome:
                 recombinant_tree=recombinant_tree,
                 lineage_to_clade=lineage_to_clade,
             )
+            self.lineage.set_definition()
 
             self.parent_assignment(
                 barcodes=barcodes,

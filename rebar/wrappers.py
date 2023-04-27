@@ -155,15 +155,25 @@ def run(params):
             + params.lineages
         )
         fasta_lines = []
+        found_lineages = []
         records = SeqIO.parse(consensus_path, "fasta")
         for record in records:
             if record.id in lineage_list:
                 fasta_lines.append(">" + str(record.id))
                 fasta_lines.append(str(record.seq))
+                found_lineages.append(record.id)
 
         if len(fasta_lines) == 0:
             raise SystemExit(
                 RebarError("RebarError: No sequences were found for input lineages.")
+            )
+
+        missing_lineages = [l for l in lineage_list if l not in found_lineages]
+        if len(missing_lineages) > 0:
+            logger.info(
+                str(datetime.now())
+                + "\tNo sequences were found for the following lineages: "
+                + ",".join(missing_lineages)
             )
 
         alignment_path = os.path.join(params.outdir, "alignment.fasta")
