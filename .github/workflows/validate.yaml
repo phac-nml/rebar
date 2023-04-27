@@ -40,13 +40,19 @@ jobs:
       - name: validate
         run: rebar run --dataset dataset/sars-cov-2-latest --alignment dataset/sars-cov-2-latest/alignment.fasta --validate --threads 2 --output-all --outdir validate
 
-      - name: compress results
+      - name: compress
         run: |
           zip validate validate
 
-      - name: upload results
+      - name: upload
         uses: actions/upload-artifact@v2
         with:
           name: validate
           path: validate.zip
           retention-days: 60
+
+      # Force a non-zero exit value if "false_positive" or "false_negative"
+      # appeared during validation.
+      - name: check
+        run: |
+          if [[ $(grep "false" validate/summary.tsv) ]]; then echo exit 1; fi
