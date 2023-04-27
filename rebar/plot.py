@@ -212,7 +212,7 @@ def plot(barcodes_df, summary_df, annot_df, output):
         "Breakpoints",
         size=fontsize,
         ha="right",
-        va="bottom",
+        va="center",
     )
 
     for i, breakpoint in enumerate(breakpoints_split):
@@ -302,7 +302,7 @@ def plot(barcodes_df, summary_df, annot_df, output):
             "Breakpoint #" + str(i + 1),
             size=fontsize,
             ha="center",
-            va="bottom",
+            va="center",
             bbox=dict(
                 facecolor="white", edgecolor="black", lw=linewidth, boxstyle="round"
             ),
@@ -369,10 +369,10 @@ def plot(barcodes_df, summary_df, annot_df, output):
     # Sub box sizes
     box_w = x_inc * 0.8
 
-    for rec in enumerate(barcodes_df.iterrows()):
+    for rec in barcodes_df.iterrows():
 
         # Identify base origins
-        genome_coord = rec[1]["coord"]
+        genome_coord = rec[1]["coord"] + (x_inc * 0.5)
         ref_base = rec[1]["Reference"]
         parent_1_base = rec[1][parent_1]
         parent_2_base = rec[1][parent_2]
@@ -594,9 +594,8 @@ def plot(barcodes_df, summary_df, annot_df, output):
     plt.close()
 
 
-# Testing code
+# # Testing code
 # import pandas as pd
-
 # annot_df = pd.read_csv("dataset/sars-cov-2-latest/annotations.tsv", sep="\t")
 
 # barcodes_df = pd.read_csv("output/XBC/barcodes/XBC_CJ.1_B.1.617.2.tsv", sep="\t")
@@ -615,4 +614,13 @@ def plot(barcodes_df, summary_df, annot_df, output):
 #     summary_df=summary_df,
 #     annot_df=annot_df,
 #     output="output/XBJ/plots/XBJ_BA.2.3.20_BA.5.2.png",
+# )
+
+# barcodes_df = pd.read_csv("output/XBB.1.16/barcodes/XBB_BJ.1_CJ.1.tsv", sep="\t")
+# summary_df = pd.read_csv("output/XBB.1.16/summary.tsv", sep="\t")
+# plot(
+#     barcodes_df=barcodes_df,
+#     summary_df=summary_df,
+#     annot_df=annot_df,
+#     output="output/XBB.1.16/plots/XBB_BJ.1_CJ.1.png",
 # )

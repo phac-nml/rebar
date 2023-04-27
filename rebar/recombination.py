@@ -104,7 +104,6 @@ class Recombination:
 
         parent_1_subs = [s for s in parent_1.barcode if s not in parent_2.barcode]
         parent_2_subs = [s for s in parent_2.barcode if s not in parent_1.barcode]
-
         parent_1_coords = [s.coord for s in parent_1_subs]
         parent_2_coords = [s.coord for s in parent_2_subs]
         genome_coords = [s.coord for s in genome.substitutions]
@@ -134,6 +133,9 @@ class Recombination:
                 ],
             }
         ).sort_values(by="coord")
+
+        # TBD! Remove subs shared by all
+        # Somewhere here is causing all shared ref bases to sneak through
 
         # Reconcile duplicate coords that are not bi-allelic
         for coord in dup_coords:
@@ -250,6 +252,9 @@ class Recombination:
         # First: 5' -> 3'
         regions_5p = self.identify_regions(subs_uniq_df, genome)
         regions_5p = self.filter_regions_5p(regions_5p, min_consecutive, 0)
+        print("regions_5p:")
+        for r in regions_5p:
+            print(regions_5p[r])
         regions_5p = self.filter_regions_5p(regions_5p, 0, min_length)
 
         if genome.debug:
