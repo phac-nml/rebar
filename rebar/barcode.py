@@ -5,7 +5,7 @@ from datetime import datetime
 
 import pandas as pd
 
-from .substitution import Substitution
+from rebar.substitution import Substitution
 
 
 class Barcode:

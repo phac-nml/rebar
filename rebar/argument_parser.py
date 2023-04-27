@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 
 import argparse
-from .wrappers import dataset, run
-from . import version
-from .constants import (
+from rebar.wrappers import dataset, run
+from rebar import version
+from rebar.constants import (
     MASK,
     MAX_DEPTH,
     MIN_LENGTH,

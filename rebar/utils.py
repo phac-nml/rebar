@@ -17,9 +17,9 @@ from Bio.Phylo.BaseTree import Clade
 from multiprocess import Pool  # Note that we are importing "multiprocess", no "ing"!
 from tqdm import tqdm
 
-from .genome import genome_mp
-from .substitution import Substitution
-from .constants import (
+from rebar.genome import genome_mp
+from rebar.substitution import Substitution
+from rebar.constants import (
     NO_DATA_CHAR,
     PANGO_SEQUENCES_URL,
     BARCODES_NEXTCLADE_URL,

@@ -395,6 +395,9 @@ def plot(barcodes_df, summary_df, annot_df, output):
     # plt.tight_layout()
     plt.savefig(output)
 
+    # Close for memory management
+    plt.close()
+
 
 annot_df = pd.read_csv("dataset/sars-cov-2-latest/annotations.tsv", sep="\t")
 
