@@ -5,7 +5,6 @@ import logging
 
 import matplotlib.pyplot as plt
 from matplotlib import patches, colors
-import pandas as pd
 
 logging.getLogger("matplotlib.font_manager").disabled = True
 
@@ -71,11 +70,12 @@ def plot(barcodes_df, summary_df, output):
     # PLOT GENOME GUIDE
 
     guide_x = x_inc * 0.5
-    guide_y = (y_inc * num_records) + y_break + (y_inc * 2)
+    guide_y1 = (y_inc * num_records) + y_break + (y_inc * 2)
+    guide_y2 = guide_y1 + y_inc
     rect = patches.Rectangle(
-        (guide_x, guide_y),
+        (guide_x, guide_y1),
         genome_length,
-        y_inc,
+        guide_y2 - guide_y1,
         alpha=0.2,
         fill=True,
         edgecolor="none",
@@ -83,31 +83,65 @@ def plot(barcodes_df, summary_df, output):
     )
     ax.add_patch(rect)
 
-    for coord in list(barcodes_df["coord"]):
-        ax.plot(
-            [coord, coord],
-            [guide_y, guide_y + y_inc],
-            lw=linewidth,
-            color="black",
-            clip_on=False,
-        )
-        break
-
     # -----------------------------------------------------------------------------
-    # PLOT SAMPLES
+    # PLOT SAMPLES AND SNPS
 
     # This will be x position in units of genomic coordinates, increment
     x_coord = 0
+
+    # Snp box sizes
+    box_w = x_inc * 0.8
+    box_h = y_inc * 0.8
+    top_sample_y = (y_inc * num_records) + y_break + (y_inc * 0.4)
 
     # Iterate through subs, which are columns in plot
     for rec_i, rec in enumerate(barcodes_df.iterrows()):
 
         # Identify base origins
+        genome_coord = rec[1]["coord"]
         ref_base = rec[1]["Reference"]
         parent_1_base = rec[1][parent_1]
         parent_2_base = rec[1][parent_2]
 
         x_coord += x_inc
+        box_x = x_coord - (box_w / 2)
+
+        # Plot this SNP on the genome guide
+        if parent_1_base != ref_base:
+            guide_color = parent_1_mut_color
+        elif parent_2_base != ref_base:
+            guide_color = parent_2_mut_color
+        else:
+            guide_color = "black"
+
+        # Plot a colored line on the guide
+        ax.plot(
+            [genome_coord, genome_coord],
+            [guide_y1, guide_y2],
+            lw=1,
+            color=guide_color,
+            clip_on=False,
+        )
+
+        # Draw a polygon from guide to top row of subs
+        # P1: Top Guide, P2: Top left of SNP box, P3: Top right of SNP box
+        x1 = box_x
+        x2 = box_x + box_w
+        x3 = genome_coord
+        y1 = top_sample_y
+        y2 = guide_y1
+
+        poly_coords = [[x1, y1], [x2, y1], [x3, y2]]
+        poly = patches.Polygon(
+            poly_coords,
+            closed=True,
+            alpha=0.2,
+            fill=True,
+            edgecolor="none",
+            facecolor="dimgrey",
+        )
+        ax.add_patch(poly)
+
         # This will be y position in units of genomic coordinates, increment
         y_coord = (y_inc) * 0.5
 
@@ -116,9 +150,6 @@ def plot(barcodes_df, summary_df, output):
             base = rec[1][label]
 
             # Draw box
-            box_w = x_inc * 0.8
-            box_h = y_inc * 0.8
-            box_x = x_coord - (box_w / 2)
             box_y = y_coord - (box_h / 2)
 
             if label == "Reference":
@@ -171,7 +202,7 @@ def plot(barcodes_df, summary_df, output):
     # PLOT BREAKPOINTS
 
     y_min = y_inc * 0.1
-    y_max = (y_inc * num_records) + (y_inc * 0.5)
+    y_max = (y_inc * num_records) + (y_inc)
     for i, breakpoint in enumerate(breakpoints_split):
         # get region start and end
 
@@ -202,7 +233,7 @@ def plot(barcodes_df, summary_df, output):
             box_x2 = (x_inc) * (end_i + 1.5)
             box_y = y_min
             box_w = box_x2 - box_x
-            box_h = (y_inc) * num_records + (y_inc * 0.4)
+            box_h = (y_inc) * num_records + (y_inc * 0.8)
 
             rect = patches.Rectangle(
                 (box_x, box_y),
@@ -254,6 +285,6 @@ def plot(barcodes_df, summary_df, output):
     plt.savefig(output)
 
 
-barcodes_df = pd.read_csv("output/XBC/barcodes/XBC_CJ.1_B.1.617.2.tsv", sep="\t")
-summary_df = pd.read_csv("output/XBC/summary.tsv", sep="\t")
-plot(barcodes_df=barcodes_df, summary_df=summary_df, output="test.png")
+# barcodes_df = pd.read_csv("output/XBC/barcodes/XBC_CJ.1_B.1.617.2.tsv", sep="\t")
+# summary_df = pd.read_csv("output/XBC/summary.tsv", sep="\t")
+# plot(barcodes_df=barcodes_df, summary_df=summary_df, output="test.png")
