@@ -40,9 +40,13 @@ jobs:
       - name: validate
         run: rebar run --dataset dataset/sars-cov-2-latest --alignment dataset/sars-cov-2-latest/alignment.fasta --validate --threads 2 --output-all --outdir validate
 
-      - name: upload summary table
+      - name: compress results
+        run: |
+          zip validate validate
+
+      - name: upload results
         uses: actions/upload-artifact@v2
         with:
-          name: summary.tsv
-          path: validate/summary.tsv
+          name: validate
+          path: validate.zip
           retention-days: 60
