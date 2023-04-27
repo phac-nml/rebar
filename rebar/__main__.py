@@ -5,7 +5,7 @@ from datetime import datetime
 from multiprocess import cpu_count
 import sys
 from .utils import create_logger
-from rebar import make_parser, RebarError
+from . import make_parser, RebarError
 
 """
 Stub function and module used as a setuptools entry point.

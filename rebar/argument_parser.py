@@ -1,16 +1,16 @@
 #!/usr/bin/env python3
 
 import argparse
-from rebar.wrappers import dataset, run
-from rebar import version
-from rebar.constants import (
+from .wrappers import dataset, run
+from . import version
+from .constants import (
     MASK,
     MAX_DEPTH,
     MIN_LENGTH,
     MIN_SUBS,
     MIN_CONSECUTIVE,
     MAX_BREAKPOINTS,
-    PLOT_FORMAT,
+    PLOT_EXT,
 )
 
 
@@ -187,7 +187,7 @@ def add_plot_ext_param(parser, required=False):
     parser.add_argument(
         "--plot-ext",
         required=required,
-        default=PLOT_FORMAT,
+        default=PLOT_EXT,
         choices=["pdf", "png", "svg"],
         type=str,
         help=text,

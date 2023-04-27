@@ -1,0 +1,3 @@
+def test_handle_edge_cases():
+    """Test function edge_cases.handle_edge_cases."""
+    ...

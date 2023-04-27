@@ -1,8 +1,9 @@
 import yaml
 import pandas as pd
-from rebar.barcode import Barcode
 from datetime import datetime
-from rebar.substitution import Substitution
+
+from .barcode import Barcode
+from .substitution import Substitution
 
 
 class Recombination:

@@ -9,12 +9,12 @@ from Bio.SeqRecord import SeqRecord
 from pango_aliasor.aliasor import Aliasor
 
 # rebar custom
-from rebar.constants import NO_DATA_CHAR
-from rebar.substitution import Substitution
-from rebar.barcode import Barcode
-from rebar.recombination import Recombination
-from rebar.edge_cases import handle_edge_cases
-from rebar import RebarError
+from . import RebarError
+from .constants import NO_DATA_CHAR
+from .substitution import Substitution
+from .barcode import Barcode
+from .recombination import Recombination
+from .edge_cases import handle_edge_cases
 
 
 class Genome:

@@ -1,7 +1,7 @@
 import os
 import pandas as pd
 
-from rebar.plot import plot
+from .plot import plot
 
 
 class Export:

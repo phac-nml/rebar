@@ -9,7 +9,7 @@ from Bio import SeqIO, Phylo
 
 
 # rebar objects
-from rebar.utils import (
+from .utils import (
     download_consensus_sequences,
     download_reference_sequence,
     parse_alignment,
@@ -18,7 +18,7 @@ from rebar.utils import (
     create_barcodes,
     detect_recombination,
 )
-from rebar import RebarError
+from . import RebarError
 
 # Quiet URL fetch requests messages
 logging.getLogger("requests").setLevel(logging.WARNING)
