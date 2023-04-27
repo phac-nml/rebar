@@ -592,3 +592,27 @@ def plot(barcodes_df, summary_df, annot_df, output):
 
     # Close for memory management
     plt.close()
+
+
+# Testing code
+# import pandas as pd
+
+# annot_df = pd.read_csv("dataset/sars-cov-2-latest/annotations.tsv", sep="\t")
+
+# barcodes_df = pd.read_csv("output/XBC/barcodes/XBC_CJ.1_B.1.617.2.tsv", sep="\t")
+# summary_df = pd.read_csv("output/XBC/summary.tsv", sep="\t")
+# plot(
+#     barcodes_df=barcodes_df,
+#     summary_df=summary_df,
+#     annot_df=annot_df,
+#     output="output/XBC/plots/XBC_CJ.1_B.1.617.2.png",
+# )
+
+# barcodes_df = pd.read_csv("output/XBJ/barcodes/XBJ_BA.2.3.20_BA.5.2.tsv", sep="\t")
+# summary_df = pd.read_csv("output/XBJ/summary.tsv", sep="\t")
+# plot(
+#     barcodes_df=barcodes_df,
+#     summary_df=summary_df,
+#     annot_df=annot_df,
+#     output="output/XBJ/plots/XBJ_BA.2.3.20_BA.5.2.png",
+# )
