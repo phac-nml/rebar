@@ -84,11 +84,12 @@ class Export:
 
         # Process recombinant groups
         for recombinant in self.recombinants:
+            print("recombinant:", recombinant)
             self.barcodes[recombinant] = {}
 
             # Process parent groups within recombinant
             for parents in self.recombinants[recombinant]:
-
+                print("\tparents:", parents)
                 parents_data = self.recombinants[recombinant][parents]
                 parent_1 = parents.split("_")[0]
                 parent_2 = parents.split("_")[1]
@@ -101,6 +102,7 @@ class Export:
                     parent_2: [],
                 }
                 for genome in parents_data:
+                    print("\t\t", genome)
                     df = genome.recombination.dataframe
                     for rec in df.iterrows():
                         coord = rec[1]["coord"]

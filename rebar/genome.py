@@ -64,6 +64,7 @@ class Genome:
         barcodes : pd.core.frame.DataFrame
             Dataframe of lineage barcodes, from `rebar barcodes` subcommand
         """
+
         # Debugging option
         self.debug = debug
         self.logger = logger

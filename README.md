@@ -1,8 +1,6 @@
 # rebar
 
-<!-- ALL-CONTRIBUTORS-BADGE:START - Do not remove or modify this section -->
-[![All Contributors](https://img.shields.io/badge/all_contributors-10-orange.svg?style=flat-square)](#contributors-)
-<!-- ALL-CONTRIBUTORS-BADGE:END -->
+[![All Contributors](https://img.shields.io/badge/all_contributors-11-orange.svg?style=flat-square)](#credits)
 
 [![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](https://github.com/phac-nml/rebar/blob/master/LICENSE)
 [![GitHub issues](https://img.shields.io/github/issues/phac-nml/rebar.svg)](https://github.com/phac-nml/rebar/issues)
@@ -53,7 +51,8 @@ rebar run \
   --outdir example1
 ```
 
-The `--lineages` can include any designated lineage found in the dataset `alignment.fasta`.
+- The `--lineages` can include any designated lineage found in the dataset `alignment.fasta`.
+- The "\*" character can also be used to include descendants. For example `--lineages XBB.1.16*` will include `XBB.1.16`, `XBB.1.16.1`, `FU.1`, `XBB.1.16.2`, etc.
 
 ### Example 2
 
@@ -87,51 +86,66 @@ rebar run \
 
 ### Plot
 
-Visualization with [snipit](https://github.com/aineniamh/snipit): `snipit_<parent_1>_<parent_2>.png`
+Visualization of substitutions, parental origins, and breakpoints.
 
-![snipit_XD](images/snipit_XD.png)
+- Output path: `<outdir>/plots/<recombinant>_<parent_1>_<parent_2>.png`
+
+![plot_XBB.1.16](images/plot_XBB.1.16.png)
 
 ### Table
 
-A linelist summary of recombination detection results: `summary.tsv`
+A linelist summary of detection results.
 
-|strain   |lineage  |clade      |recombinant|parents_lineage|parents_clade|breakpoints            |regions                                            |
-|:--------|:--------|:----------|:----------|:--------------|:------------|:----------------------|:--------------------------------------------------|
-|AY.4     |AY.4     |21J        |False      |               |             |                       |                                                   |
-|BA.5.2   |BA.5.2   |22B        |False      |               |             |                       |                                                   |
-|XBB.1.5.1|XBB.1.5.1|23A        |XBB        |BJ.1,CJ.1      |21L,22D      |22897:22941            |261-22896\|BJ.1,22942-29118\|CJ.1                  |
-|XBL      |XBL      |recombinant|XBL        |XBB.1.5,BA.2.75|22F,22D      |5184:16341             |3796-5183\|BA.2.75,16342-27915\|XBB.1.5            |
-|XD       |XD       |recombinant|XD         |BA.1,AY.4      |21K,21J      |21988:22577,25470:25583|210-21987\|AY.4,22578-25469\|BA.1,25584-29402\|AY.4|
+- Output path: `<outdir>/summary.tsv`
+
+|strain    |lineage   |clade|clade_lineage|recombinant|definition|validate|parents_lineage|parents_clade|parents_clade_lineage|breakpoints|regions                          |genome_length|dataset_name|dataset_tag|barcodes_date|barcodes_tag|tree_date |tree_tag|sequences_date|sequences_tag|
+|:---------|:---------|:----|:------------|:----------|:---------|:-------|:--------------|:------------|:--------------------|:----------|:--------------------------------|:------------|:-----------|:----------|:------------|:-----------|:---------|:-------|:-------------|:------------|
+|XBB.1.16  |XBB.1.16  |23B  |XBB.1.16     |XBB        |XBB.1.16  |positive|BJ.1,CJ.1      |21L,22D      |BA.2,BA.2.75         |22897:22941|261-22896\|BJ.1,22942-29118\|CJ.1|29903        |sars-cov-2  |latest     |2023-04-28   |c728b480    |2023-04-28|b2794397|2023-04-28    |6f36a61a     |
+|XBB.1.16.1|XBB.1.16.1|23B  |XBB.1.16     |XBB        |XBB.1.16.1|positive|BJ.1,CJ.1      |21L,22D      |BA.2,BA.2.75         |22897:22941|261-22896\|BJ.1,22942-29118\|CJ.1|29903        |sars-cov-2  |latest     |2023-04-28   |c728b480    |2023-04-28|b2794397|2023-04-28    |6f36a61a     |
 
 ### Summary YAML
 
-A detailed YAML summary of recombination detection results: `summary.yaml`
+A super-detailed YAML summary of recombination detection results.
+
+- Output path: `<outdir>/summary.yaml`
 
 ```yaml
-XA:
-  substitutions: C241T,T445C,T2019C,C3037T,C4999T,C6286T,C8090T,C9430T,A10323G,C13945T,C14408T,G20410A,G21255C,A23063T,C23208T,C23271A,A23403G,C23604A,C23709T,T24506G,G2491
-  deletions: 21765-21770,21992-21994,28271
+XBB.1.16:
+  substitutions: C241T,A405G,T670G,C2790T,C3037T,G4184A,...
+  deletions: 11288-11296,21633-21641,21992-21994,28362-28370
   missing: 1-200,29704-29903
   lineage:
-    lineage: XA
-    clade: recombinant
-    top_lineages: XA
-    top_lineages_subsample: XA
+    lineage: XBB.1.16
+    definition: XBB.1.16
+    clade: 23B
+    clade_lineage: XBB.1.16
+    top_lineages: XBB.1.16.3,XBB.1.16.2,XBB.1.16.1,XBB.1.16,FU.2,FU.1
+    top_lineages_subsample: XBB.1.16.3,XBB.1.16.2,XBB.1.16.1,XBB.1.16,FU.2,FU.1
     outlier_lineages:
-    barcode: C241T,T445C,T2019C,C3037T,C4999T,C6286T,C8090T,C9430T,A10323G,C13945T,C14408T,G20410A,G21255C,A23063T,C23208T,C23271A,A23403G,C23604A,C23709T,T24506G,G24914C,G
-    support: C241T,T445C,T2019C,C3037T,C4999T,C6286T,C8090T,C9430T,A10323G,C13945T,C14408T,G20410A,G21255C,A23063T,C23208T,C23271A,A23403G,C23604A,C23709T,T24506G,G24914C,G
-    missing:
+    barcode: A1G,C44T,C241T,A405G,T670G,C2790T,C3037T,G4184A,...
+    support: C241T,A405G,T670G,C2790T,C3037T,G4184A,...
+    missing: A1G,C44T
     conflict_ref:
     conflict_alt:
-    recombinant: XA
+    recombinant: XBB
     recursive: None
     edge_case: 'False'
-    ...  
+  recombination:
+    breakpoints: 22897:22941
+    regions: 261-22896|BJ.1,22942-29118|CJ.1
+    parent_1:
+      lineage: BJ.1
+      definition: BJ.1
+      clade: 21L
+      clade_lineage: BA.2
+      ...
 ```
 
 ## Credits
 
 [rebar](https://github.com/phac-nml/rebar) is built and maintained by [Katherine Eaton](https://ktmeaton.github.io/) at the [National Microbiology Laboratory (NML)](https://github.com/phac-nml) of the Public Health Agency of Canada (PHAC).
+
+This project follows the [all-contributors](https://github.com/all-contributors/all-contributors) specification ([emoji key](https://allcontributors.org/docs/en/emoji-key)). Contributions of any kind welcome!
 
 <table>
   <tr>
@@ -139,33 +153,82 @@ XA:
   </tr>
 </table>
 
-Thanks goes to these wonderful people ([emoji key](https://allcontributors.org/docs/en/emoji-key)):
+Special thanks go to the following people, who are instrumental to the design and data sources in `rebar`:
 
-- Note: Add Cornelius Roemer, neherlab (treetime)
+- Lena Schimmel ([@lenaschimmel](https://github.com/lenaschimmel)) for the original concept of a barcode-scanning recombinant detector with [sc2rf](https://github.com/lenaschimmel/sc2rf).
+- Cornelius Roemer ([@corneliusroemer](https://github.com/corneliusroemer)) for the [designated lineages](https://github.com/cov-lineages/pango-designation), [consensus sequences](https://github.com/yatisht/usher), and [Nextclade barcodes](https://raw.githubusercontent.com/corneliusroemer/pango-sequences/main/data/pango-consensus-sequences_summary.json).
+- Josh Levy ([@joshuailevy](https://github.com/andersen-lab/Freyja-data)) and the [Andersen Lab](https://github.com/andersen-lab) for the [UShER barcodes](https://github.com/yatisht/usher) from [Freyja](https://github.com/andersen-lab/Freyja).
+- Richard Neher ([@rneher](https://github.com/rneher)) and the [Neher Lab](https://github.com/neherlab) for python package structure, specifically [treetime](https://github.com/neherlab/treetime).
 
-<!-- ALL-CONTRIBUTORS-LIST:START - Do not remove or modify this section -->
-<!-- prettier-ignore-start -->
-<!-- markdownlint-disable -->
 <table>
   <tr>
-    <td align="center"><a href="https://github.com/nextstrain/nextclade"><img src="https://avatars.githubusercontent.com/u/22159334?v=4?s=100" width="100px;" alt=""/><br /><sub><b>Nextstrain (Nextclade)</b></sub></a><br /><a href="#data-nextstrain" title="Data">🔣</a> <a href="#plugin-nextstrain" title="Plugin/utility libraries">🔌</a></td>
-    <td align="center"><a href="https://github.com/lenaschimmel/sc2rf"><img src="https://avatars.githubusercontent.com/u/1325019?v=4?s=100" width="100px;" alt=""/><br /><sub><b>Lena Schimmel (sc2rf)</b></sub></a><br /><a href="#plugin-lenaschimmel" title="Plugin/utility libraries">🔌</a></td>
-    <td align="center"><a href="https://github.com/yatisht/usher"><img src="https://avatars.githubusercontent.com/u/34664884?v=4?s=100" width="100px;" alt=""/><br /><sub><b>Yatish Turakhia (UShER)</b></sub></a><br /><a href="#data-yatisht" title="Data">🔣</a> <a href="#plugin-yatisht" title="Plugin/utility libraries">🔌</a></td>
-    <td align="center"><a href="https://github.com/yatisht/usher"><img src="https://avatars.githubusercontent.com/u/186983?v=4?s=100" width="100px;" alt=""/><br /><sub><b>Angie Hinrichs (UShER)</b></sub></a><br /><a href="#data-AngieHinrichs" title="Data">🔣</a> <a href="#plugin-AngieHinrichs" title="Plugin/utility libraries">🔌</a></td>
-    <td align="center"><a href="https://www.inspq.qc.ca/en/auteurs/2629/all"><img src="https://i1.rgstatic.net/ii/profile.image/278724097396748-1443464411327_Q128/Benjamin-Delisle.jpg?s=100" width="100px;" alt=""/><br /><sub><b>Benjamin Delisle</b></sub></a><br /><a href="https://github.com/phac-nml/rebar/issues?q=author%3Abenjamindeslisle" title="Bug reports">🐛</a> <a href="https://github.com/phac-nml/rebar/commits?author=benjamindeslisle" title="Tests">⚠️</a></td>
-  </tr>
-  <tr>
-    <td align="center"><a href="https://ca.linkedin.com/in/dr-vani-priyadarsini-ikkurti-4a2ab676"><img src="https://media-exp1.licdn.com/dms/image/C5603AQHaG8Xx4QLXSQ/profile-displayphoto-shrink_200_200/0/1569339145568?e=2147483647&v=beta&t=3WrvCciW-x8J3Aw4JHGrWOpuqiikrrGV2KsDaISnHIw" width="100px;" alt=""/><br /><sub><b>Vani Priyadarsini Ikkurthi</b></sub></a><br /><a href="https://github.com/phac-nml/rebar/issues?q=author%3Avanipriyadarsiniikkurthi" title="Bug reports">🐛</a> <a href="https://github.com/phac-nml/rebar/commits?author=vanipriyadarsiniikkurthi" title="Tests">⚠️</a></td>
-    <td align="center"><a href="https://ca.linkedin.com/in/mark-horsman-52a14740"><img src="https://ui-avatars.com/api/?name=Mark+Horsman?s=100" width="100px;" alt=""/><br /><sub><b>Mark Horsman</b></sub></a><br /><a href="#ideas-markhorsman" title="Ideas, Planning, & Feedback">🤔</a> <a href="#design-markhorsman" title="Design">🎨</a></td>
-    <td align="center"><a href="https://github.com/jbloomlab"><img src="https://avatars.githubusercontent.com/u/17679492?s=200&v=4?s=100" width="100px;" alt=""/><br /><sub><b>Jesse Bloom Lab</b></sub></a><br /><a href="#data-jbloomlab" title="Data">🔣</a> <a href="#plugin-jbloomlab" title="Plugin/utility libraries">🔌</a></td>
-    <td align="center"><a href="https://github.com/dfornika"><img src="https://avatars.githubusercontent.com/u/145659?v=4?s=100" width="100px;" alt=""/><br /><sub><b>Dan Fornika</b></sub></a><br /><a href="#ideas-dfornika" title="Ideas, Planning, & Feedback">🤔</a> <a href="https://github.com/phac-nml/rebar/commits?author=dfornika" title="Tests">⚠️</a></td>
-    <td align="center"><img src="https://ui-avatars.com/api/?name=Tara+Newman?s=100" width="100px;" alt=""/><br /><sub><b>Tara Newman</b></sub><br /><a href="#ideas-TaraNewman" title="Ideas, Planning, & Feedback">🤔</a> <a href="https://github.com/phac-nml/rebar/commits?author=TaraNewman" title="Tests">⚠️</a></td>
+    <td align="center">
+      <a href="https://github.com/lenaschimmel"><img src="https://avatars.githubusercontent.com/u/1325019?v=4?s=100" width="100px;" alt=""/>
+        <br />
+        <sub><b>Lena Schimmel</b></sub>
+      </a>
+      <br />
+      <a href="https://github.com/lenaschimmel/sc2rf" title="Ideas: sc2rf">🤔</a>
+    </td>
+    <td align="center">
+      <a href="https://github.com/corneliusroemer">
+        <img src="https://avatars.githubusercontent.com/u/25161793?v=4?s=100" width="100px;" alt=""/>
+        <br />
+        <sub><b>Cornelius Roemer</b></sub>
+      </a>
+      <br />
+      <a href="https://github.com/cov-lineages/pango-designation" title="Data: Lineage Designations">🔣</a>
+      <a href="https://github.com/corneliusroemer/pango-sequences" title="Data: Consensus Sequences">🔣</a>
+      <a href="https://github.com/corneliusroemer/pango-sequences" title="Data: Nextclade Barcodes">🔣</a>
+    </td>
+    <td align="center">
+      <a href="https://github.com/joshuailevy">
+      <img src="https://ui-avatars.com/api/?name=Josh+Levy?s=100" width="100px;" alt=""/>
+        <br />
+        <sub><b>Josh Levy</b></sub>
+      </a>
+      <br />
+      <a href="https://github.com/andersen-lab/Freyja-data" title="Data: UShER Barcodes">🔣</a>
+    </td>
+    <td align="center">
+      <a href="https://github.com/rneher">
+      <img src="https://avatars.githubusercontent.com/u/8379168?v=4?s=100" width="100px;" alt=""/>
+        <br />
+        <sub><b>Richard Neher</b></sub>
+      </a>
+      <br />
+      <a href="https://github.com/neherlab/treetime" title="Ideas: Treetime">🤔</a>
+    </td>  
   </tr>
 </table>
 
-<!-- markdownlint-restore -->
-<!-- prettier-ignore-end -->
+Thanks go to the following people, who participated in the development of [ncov-recombinant](https://github.com/ktmeaton/ncov-recombinant), which `rebar` is based on:
 
-<!-- ALL-CONTRIBUTORS-LIST:END -->
+<table>
+  <tr>
+    <td align="center">
+      <a href="https://github.com/yatisht"><img src="https://avatars.githubusercontent.com/u/34664884?v=4s=100" width="100px;" alt=""/>
+        <br />
+        <sub><b>Yatish Turakhia</b></sub>
+      </a>
+      <br />
+      <a href="https://github.com/yatisht/usher" title="Data: UShER">🔣</a>
+      <a href="https://github.com/yatisht/usher" title="Ideas: UShER">🤔</a>
+    </td>
+    <td align="center">
+      <a href="https://github.com/AngieHinrichs"><img src="https://avatars.githubusercontent.com/u/186983?v=4?v=4s=100" width="100px;" alt=""/>
+        <br />
+        <sub><b>Angie Hinrichs</b></sub>
+      </a>
+      <br />
+      <a href="https://github.com/yatisht/usher" title="Data: UShER">🔣</a>
+      <a href="https://github.com/yatisht/usher" title="Ideas: UShER">🤔</a>
+    </td>
+    <td align="center"><a href="https://www.inspq.qc.ca/en/auteurs/2629/all"><img src="https://i1.rgstatic.net/ii/profile.image/278724097396748-1443464411327_Q128/Benjamin-Delisle.jpg?s=100" width="100px;" alt=""/><br /><sub><b>Benjamin Delisle</b></sub></a><br /><a href="https://github.com/phac-nml/rebar/issues?q=author%3Abenjamindeslisle" title="Bug eports">🐛</a> <a href="https://github.com/phac-nml/rebar/commits?author=benjamindeslisle" title="Tests">⚠️</a></td>  
+    <td align="center"><a href="https://ca.linkedin.com/in/dr-vani-priyadarsini-ikkurti-4a2ab676"><img src="https://media-exp1.licdn.com/dms/image/C5603AQHaG8Xx4QLXSQ/profile-displayphoto-shrink_200_200/0/1569339145568?e=2147483647&v=beta&t=3WrvCciW-x8J3Aw4JHGrWOpuqiikrrGV2KsDaISnHIw" width="100px;" alt=""/><br /><sub><b>Vani Priyadarsini Ikkurthi</b></sub></a><br /><a href="https://github.com/phac-nml/rebar/issues?q=author%3Avanipriyadarsiniikkurthi" title="Bug reports">🐛</a> <a href="https://github.com/phac-nml/rebar/commits?author=vanipriyadarsiniikkurthi" title="Tests">⚠️</a></td>
+    <td align="center"><a href="https://ca.linkedin.com/in/mark-horsman-52a14740"><img src="https://ui-avatars.com/api/?name=Mark+Horsman?s=100" width="100px;" alt=""/><br /><sub><b>Mark Horsman</b></sub></a><br /><a href="#ideas-markhorsman" title="Ideas, Planning, & Feedback">🤔</a> <a href="#design-markhorsman" title="Design">🎨</a></td>
+    <td align="center"><a href="https://github.com/dfornika"><img src="https://avatars.githubusercontent.com/u/145659?v=4?s=100" width="100px;" alt=""/><br /><sub><b>Dan Fornika</b></sub></a><br /><a href="#ideas-dfornika" title="Ideas, Planning, & Feedback">🤔</a> <a href="https://github.com/phac-nml/rebar/commits?author=dfornika" title="Tests">⚠️</a></td>
+    <td align="center"><img src="https://ui-avatars.com/api/?name=Tara+Newman?s=100" width="100px;" alt=""/><br /><sub><b>Tara Newman</b></sub><br /><a href="#ideas-TaraNewman" title="Ideas, Planning, & Feedback">🤔</a> <a href="https://github.com/phac-nml/rebar/commits?author=TaraNewman" title="Tests">⚠️</a></td>  
+  </tr>  
 
-This project follows the [all-contributors](https://github.com/all-contributors/all-contributors) specification. Contributions of any kind welcome!
+</table>

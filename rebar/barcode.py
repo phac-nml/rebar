@@ -22,6 +22,7 @@ class Barcode:
         # Initialize attributes
         self.name = None
         self.clade = None
+        self.clade_lineage = None
         self.top_lineages = []
         self.top_lineages_subsample = []
         self.outlier_lineages = []
@@ -100,6 +101,7 @@ class Barcode:
             "lineage": self.name,
             "definition": self.definition,
             "clade": self.clade,
+            "clade_lineage": self.clade_lineage,
             "top_lineages": ",".join(self.top_lineages),
             "top_lineages_subsample": ",".join(self.top_lineages_subsample),
             "outlier_lineages": ",".join(self.outlier_lineages),
