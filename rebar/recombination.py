@@ -96,23 +96,32 @@ class Recombination:
         min_consecutive=1,
     ):
 
-        # Identify barcode subs which uniq to each parent
-        all_subs = sorted(list(set(parent_1.barcode + parent_2.barcode)))
-        # We're going to process by coord, because some subs are not bi-allelic
+        # ---------------------------------------------------------------------
+        # Initialize Barcode Dataframe
+        # Create a dataframe where rows are coordinates and columns are
+        #   coord, parent, Reference, <parent_1>, <parent_2>, <genome>
+
+        # Identify which subs are non-bi-allelic, these will wind up being
+        # duplicate rows, which we'll need to reconcile and collapse
+        all_subs = sorted(
+            list(set(parent_1.barcode + parent_2.barcode + genome.substitutions))
+        )
         all_coords = [s.coord for s in all_subs]
         dup_coords = set([c for c in all_coords if all_coords.count(c) > 1])
 
+        # Re-do all subs list just with parents
+        all_subs = sorted(list(set(parent_1.barcode + parent_2.barcode)))
+
         parent_1_subs = [s for s in parent_1.barcode if s not in parent_2.barcode]
         parent_2_subs = [s for s in parent_2.barcode if s not in parent_1.barcode]
+
         parent_1_coords = [s.coord for s in parent_1_subs]
         parent_2_coords = [s.coord for s in parent_2_subs]
         genome_coords = [s.coord for s in genome.substitutions]
 
-        # Organize into a dataframe where rows are substitutions, and columns
-        # will indicate strain and parental origin
+        # Create the barcode dataframe as described.
         subs_df = pd.DataFrame(
             {
-                # "substitution": all_subs,
                 "coord": [s.coord for s in all_subs],
                 "Reference": [s.ref for s in all_subs],
                 parent_1.name: [
@@ -134,10 +143,9 @@ class Recombination:
             }
         ).sort_values(by="coord")
 
-        # TBD! Remove subs shared by all
-        # Somewhere here is causing all shared ref bases to sneak through
+        # ---------------------------------------------------------------------
+        # Collapse duplicate rows from non bi-allelic sites
 
-        # Reconcile duplicate coords that are not bi-allelic
         for coord in dup_coords:
 
             # Get base of reference
@@ -153,30 +161,37 @@ class Recombination:
             if coord in parent_2_coords:
                 parent_2_base = [s.alt for s in parent_2_subs if s.coord == coord][0]
 
-            # Get base of genomic sample
-            genome_base = ref_base
-            if coord in genome_coords:
-                genome_base = [s.alt for s in genome.substitutions if s.coord == coord][
-                    0
-                ]
-            elif coord in genome.missing:
-                genome_base = "N"
-            elif coord in genome.deletions:
-                genome_base = "-"
+            # If alt's of parent1 and parent2 are same, just exclude, not helpful
+            if parent_1_base == parent_2_base:
+                # Remove the old duplicate rows
+                subs_df = subs_df[subs_df["coord"] != coord]
+                continue
+            # Otherwise, we'll tidy up and collapse the duplicates
+            else:
+                # Get base of genomic sample
+                genome_base = ref_base
+                if coord in genome_coords:
+                    genome_base = [
+                        s.alt for s in genome.substitutions if s.coord == coord
+                    ][0]
+                elif coord in genome.missing:
+                    genome_base = "N"
+                elif coord in genome.deletions:
+                    genome_base = "-"
 
-            data = {
-                "coord": [coord],
-                "Reference": [ref_base],
-                parent_1.name: [parent_1_base],
-                parent_2.name: [parent_2_base],
-                genome.id: [genome_base],
-            }
-            row = pd.DataFrame(data)
+                data = {
+                    "coord": [coord],
+                    "Reference": [ref_base],
+                    parent_1.name: [parent_1_base],
+                    parent_2.name: [parent_2_base],
+                    genome.id: [genome_base],
+                }
+                row = pd.DataFrame(data)
 
-            # Remove the old duplicate rows
-            subs_df = subs_df[subs_df["coord"] != coord]
-            # Add new deduplicated row
-            subs_df = pd.concat([subs_df, row]).sort_values(by="coord")
+                # Remove the old duplicate rows
+                subs_df = subs_df[subs_df["coord"] != coord]
+                # Add new deduplicated row
+                subs_df = pd.concat([subs_df, row]).sort_values(by="coord")
 
         # Identify private genome substitutions and exclude these
         private_sub_coords = list(
@@ -187,6 +202,9 @@ class Recombination:
             ]["coord"]
         )
         subs_df = subs_df[~subs_df["coord"].isin(private_sub_coords)]
+
+        # ---------------------------------------------------------------------
+        # Annotate dataframe with parental origin
 
         # Identify genome sub origins by parent, this is not an efficient method
         genome_subs_origin = []
@@ -204,6 +222,9 @@ class Recombination:
             genome_subs_origin.append(origin)
 
         subs_df.insert(loc=1, column="parent", value=genome_subs_origin)
+
+        # ---------------------------------------------------------------------
+        # Remove non-discriminating sites
 
         # Search for genomic blocks from each parent
         # Just look at the subs that are uniq to one parent and detected in sample
@@ -252,9 +273,6 @@ class Recombination:
         # First: 5' -> 3'
         regions_5p = self.identify_regions(subs_uniq_df, genome)
         regions_5p = self.filter_regions_5p(regions_5p, min_consecutive, 0)
-        print("regions_5p:")
-        for r in regions_5p:
-            print(regions_5p[r])
         regions_5p = self.filter_regions_5p(regions_5p, 0, min_length)
 
         if genome.debug:
@@ -292,7 +310,9 @@ class Recombination:
                 )
             return None
 
+        # ---------------------------------------------------------------------
         # Identify breakpoints
+
         breakpoints = self.identify_breakpoints(regions_intersect)
 
         if genome.debug:
@@ -307,6 +327,7 @@ class Recombination:
                 )
             return None
 
+        # Finish, update class attributes
         self.dataframe = subs_df
         self.regions = regions_intersect
         self.breakpoints = breakpoints

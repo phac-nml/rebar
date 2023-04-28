@@ -67,6 +67,8 @@ class Barcode:
             + str(self.definition)
             + "clade:      "
             + str(self.clade)
+            + "clade_lineage:      "
+            + str(self.clade_lineage)
             + "\ntop_lineages: "
             + str(self.top_lineages)
             + "\ntop_lineages_subsample: "
@@ -205,10 +207,15 @@ class Barcode:
             clade = lineage_to_clade[lineage_to_clade["lineage"] == lineage][
                 "nextstrainClade"
             ].values[0]
+            clade_lineage = lineage_to_clade[lineage_to_clade["lineage"] == lineage][
+                "nextstrainClade_lineage"
+            ].values[0]
         elif lineage in ["MRCA", "X"]:
             clade = lineage
+            clade_lineage = lineage
         else:
             clade = None
+            clade_lineage = None
             if genome.debug:
                 genome.logger.info(
                     str(datetime.now())
@@ -289,6 +296,7 @@ class Barcode:
         self.name = lineage
         self.definition = lineage
         self.clade = clade
+        self.clade_lineage = clade_lineage
         self.top_lineages = top_lineages
         self.top_lineages_subsample = top_lineages_subsample
         self.outlier_lineages = outlier_lineages

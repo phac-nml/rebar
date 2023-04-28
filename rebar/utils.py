@@ -305,14 +305,33 @@ def create_barcodes(params):
     barcodes_dict = {
         lineage: barcodes_data[lineage]["nucSubstitutions"] for lineage in barcodes_data
     }
+
     # Mapping of lineage to clade information
+
     lineage_to_clade = {
         lineage: barcodes_data[lineage]["nextstrainClade"] for lineage in barcodes_data
     }
+    # Reverse, map to clade to a lineage MRCA, for nice notation later on
+    clade_to_lineage = {
+        clade: "Unknown" for clade in sorted(set(lineage_to_clade.values()))
+    }
+
+    # We need the tree for this lookup
+    tree = Phylo.read(params.tree, "newick")
+    for clade in clade_to_lineage:
+        lineages = [l for l, c in lineage_to_clade.items() if c == clade]
+        # Get MRCA node of all lineages
+        mrca = tree.common_ancestor(lineages).name
+        # Add a suffix to indicate descendants
+        clade_to_lineage[clade] = mrca
+
+    clade_mrcas = [clade_to_lineage[c] for c in lineage_to_clade.values()]
+
     lineage_to_clade_df = pd.DataFrame(
         {
             "lineage": list(lineage_to_clade.keys()),
             "nextstrainClade": list(lineage_to_clade.values()),
+            "nextstrainClade_lineage": clade_mrcas,
         }
     )
 

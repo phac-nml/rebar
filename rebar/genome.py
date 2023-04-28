@@ -6,7 +6,6 @@ from copy import copy
 # PyPI libraries
 import pandas as pd
 from Bio.SeqRecord import SeqRecord
-from pango_aliasor.aliasor import Aliasor
 
 # rebar custom
 from . import RebarError
@@ -369,52 +368,6 @@ class Genome:
 
         return coords
 
-    def simplify_parents_lineage(self):
-        """
-        Simplify parental lin
-
-        Examples
-        --------
-        "BA.5.2,BE.4.1" --> "BA.5.2,BA.5.3"
-        """
-        parent_1 = self.recombination.parent_1.name
-        parent_2 = self.recombination.parent_2.name
-
-        aliasor = Aliasor()
-        parent_1_uncompress = aliasor.uncompress(parent_1)
-        parent_2_uncompress = aliasor.uncompress(parent_2)
-
-        # Compress the parts that are shared
-        parent_1_split = parent_1_uncompress.split(".")
-        parent_2_split = parent_2_uncompress.split(".")
-        if len(parent_1_split) < len(parent_2_split):
-            min_level = len(parent_1_split)
-        else:
-            min_level = len(parent_2_split)
-
-        # Find the level in which they differ
-        for level in range(0, min_level):
-            if parent_1_split[level] != parent_2_split[level]:
-                break
-        up_to_level = level // 3
-        level_remainder = level % 3
-
-        parent_1_compress = aliasor.partial_compress(
-            parent_1_uncompress, up_to=up_to_level
-        )
-        parent_2_compress = aliasor.partial_compress(
-            parent_2_uncompress, up_to=up_to_level
-        )
-
-        parent_1_simplify = ".".join(
-            parent_1_compress.split(".")[0 : (level_remainder + 1)]
-        )
-        parent_2_simplify = ".".join(
-            parent_2_compress.split(".")[0 : (level_remainder + 1)]
-        )
-
-        return parent_1_simplify, parent_2_simplify
-
     def to_dataframe(self, df_type="subs"):
         """
         Convert Genome object to dataframe.
@@ -440,21 +393,20 @@ class Genome:
             # only write parents if recombination detected:
             if not self.recombination.parent_2.name:
                 parents_lineage = ""
-                parents_lineage_simplify = ""
                 parents_clade = ""
+                parents_clade_lineage = ""
             else:
                 parents_lineage = "{},{}".format(
                     self.recombination.parent_1.name,
                     self.recombination.parent_2.name,
                 )
-                parent_1_simplify, parent_2_simplify = self.simplify_parents_lineage()
-                parents_lineage_simplify = "{},{}".format(
-                    parent_1_simplify,
-                    parent_2_simplify,
-                )
                 parents_clade = "{},{}".format(
                     self.recombination.parent_1.clade,
                     self.recombination.parent_2.clade,
+                )
+                parents_clade_lineage = "{},{}".format(
+                    self.recombination.parent_1.clade_lineage,
+                    self.recombination.parent_2.clade_lineage,
                 )
 
             genome_dataframe = pd.DataFrame(
@@ -462,14 +414,15 @@ class Genome:
                     "strain": [self.id],
                     "lineage": [self.lineage.name],
                     "clade": [self.lineage.clade],
+                    "clade_lineage": [self.lineage.clade_lineage],
                     "recombinant": [
                         self.lineage.recombinant if self.lineage.recombinant else None
                     ],
                     "definition": [self.lineage.definition],
                     "validate": [self.validate],
                     "parents_lineage": parents_lineage,
-                    "parents_lineage_simplify": parents_lineage_simplify,
                     "parents_clade": parents_clade,
+                    "parents_clade_lineage": parents_clade_lineage,
                     "breakpoints": recombination_dict["breakpoints"],
                     "regions": recombination_dict["regions"],
                     "genome_length": self.genome_length,

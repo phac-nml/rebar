@@ -58,6 +58,9 @@ def dataset(params):
             info["reference"] = download_reference_sequence(params, accession)
             info["sequences"] = download_consensus_sequences(params)
             info["tree"] = create_tree(params)
+
+            # barcodes needs tree for clade to lineage mapping
+            params.tree = os.path.join(params.outdir, "tree.nwk")
             info["barcodes"] = create_barcodes(params)
 
             # Summarize dataset in yaml file

@@ -22,9 +22,14 @@ def plot(barcodes_df, summary_df, annot_df, output):
 
     genome_length = int(summary_df["genome_length"].values[0])
 
-    # Identify the first and second parent
+    # Identify the first and second parent lineage
     parent_1 = barcodes_df.columns[2]
     parent_2 = barcodes_df.columns[3]
+
+    # Identify clade of each parent
+    parents = summary_df["parents_clade_lineage"].values[0]
+    parent_1_clade_lineage = parents.split(",")[0]
+    parent_2_clade_lineage = parents.split(",")[1]
 
     # Set up palette to distinguish parents and mutation source
     cmap = plt.get_cmap("tab20", 20)
@@ -153,6 +158,11 @@ def plot(barcodes_df, summary_df, annot_df, output):
 
             # On the first time parsing sub, write sample label
             if rec_i == 0:
+                # If parent, also include clade
+                if label == parent_1:
+                    label = "{} ({})".format(parent_1, parent_1_clade_lineage)
+                elif label == parent_2:
+                    label = "{} ({})".format(parent_2, parent_2_clade_lineage)
                 ax.text(
                     -50,
                     y_coord,
