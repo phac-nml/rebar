@@ -52,7 +52,8 @@ jobs:
           retention-days: 60
 
       # Force a non-zero exit value if "false_positive" or "false_negative"
-      # appeared during validation.
+      # Force a non-zero exit value if "no_breakpoints", which applies
+      # a positive recombinant that we couldn't find breakpoints for.
       - name: check
         run: |
-          if [[ $(grep "false" validate/summary.tsv) ]]; then echo exit 1; fi
+          if [[ $(-E "false|no_breakpoints") ]]; then echo exit 1; fi

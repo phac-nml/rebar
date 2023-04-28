@@ -104,6 +104,10 @@ class Export:
                 for genome in parents_data:
                     print("\t\t", genome)
                     df = genome.recombination.dataframe
+                    # If we know this is a recombinant, but couldn't detect
+                    # breakpoints, skip over
+                    if type(df) != pd.core.series.Series:
+                        continue
                     for rec in df.iterrows():
                         coord = rec[1]["coord"]
                         ref = rec[1]["Reference"]
@@ -173,6 +177,12 @@ class Export:
 
                 # Get barcodes and summary for this recombinant
                 barcodes_df = self.barcodes[recombinant][parents]
+
+                # If we know this is a recombinant, but couldn't detect
+                # breakpoints, skip over
+                if type(barcodes_df) != pd.core.series.Series:
+                    continue
+
                 summary_df = self.dataframe[
                     (self.dataframe["recombinant"] == recombinant)
                     & (self.dataframe["parents_lineage"] == parents_csv)
