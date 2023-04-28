@@ -40,16 +40,12 @@ jobs:
       - name: validate
         run: rebar run --dataset dataset/sars-cov-2-latest --alignment dataset/sars-cov-2-latest/alignment.fasta --validate --threads 2 --output-all --outdir validate
 
-      - name: compress
-        run: |
-          zip -r validate validate
-
       - name: upload
         uses: actions/upload-artifact@v2
         with:
           name: validate
-          path: validate.zip
-          retention-days: 60
+          path: validate/
+          retention-days: 30
 
       # Force a non-zero exit value if "false_positive" or "false_negative"
       # Force a non-zero exit value if "no_breakpoints", which applies

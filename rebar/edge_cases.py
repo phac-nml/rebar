@@ -26,6 +26,7 @@ def handle_edge_cases(
     # ---------------------------------------------------------------------
     # XB: top_lineages are tied exactly B.1.631 and B.1.634
     #     force the first parent to be B.1.631
+    #     there is maybe a small second breakpoint (~100 nuc)
     if genome.lineage.recombinant in ["XB"]:
         genome.lineage.edge_case = True
         include_tree = next(tree.find_clades("B.1.631"))
@@ -33,6 +34,7 @@ def handle_edge_cases(
         result["barcode_summary"] = barcode_summary[
             barcode_summary["lineage"].isin(include_descendants)
         ]
+        result["min_length"] = 100
 
     # ---------------------------------------------------------------------
     # XP: second parent (BA.2) comes from only one barcode position: A29510C
