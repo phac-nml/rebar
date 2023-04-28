@@ -812,6 +812,7 @@ class Genome:
                 status = "positive"
                 if len(self.recombination.breakpoints) == 0:
                     status += ";no_breakpoints"
+                    warn = True
             # Correct negative
             elif not self.lineage.recombinant and expected == "negative":
                 status = "negative"
