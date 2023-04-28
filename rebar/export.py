@@ -84,12 +84,10 @@ class Export:
 
         # Process recombinant groups
         for recombinant in self.recombinants:
-            print("recombinant:", recombinant)
             self.barcodes[recombinant] = {}
 
             # Process parent groups within recombinant
             for parents in self.recombinants[recombinant]:
-                print("\tparents:", parents)
                 parents_data = self.recombinants[recombinant][parents]
                 parent_1 = parents.split("_")[0]
                 parent_2 = parents.split("_")[1]
@@ -102,11 +100,10 @@ class Export:
                     parent_2: [],
                 }
                 for genome in parents_data:
-                    print("\t\t", genome)
                     df = genome.recombination.dataframe
                     # If we know this is a recombinant, but couldn't detect
                     # breakpoints, skip over
-                    if type(df) != pd.core.series.Series:
+                    if type(df) != pd.core.frame.DataFrame:
                         continue
                     for rec in df.iterrows():
                         coord = rec[1]["coord"]
@@ -180,7 +177,7 @@ class Export:
 
                 # If we know this is a recombinant, but couldn't detect
                 # breakpoints, skip over
-                if type(barcodes_df) != pd.core.series.Series:
+                if type(barcodes_df) != pd.core.frame.DataFrame:
                     continue
 
                 summary_df = self.dataframe[
