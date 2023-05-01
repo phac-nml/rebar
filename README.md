@@ -20,17 +20,13 @@
     pip install .
     ```
 
-1. PyPI
+1. PyPI: \*\*Coming Soon\*\*
 
-    \*\*Coming Soon\*\*
-
-1. Conda
-
-    \*\*Coming Soon\*\*
+1. Conda: \*\*Coming Soon\*\*
 
 ## Usage
 
-Download a `rebar` dataset.
+Download the `rebar` dataset.
 
 ```bash
 rebar dataset \
