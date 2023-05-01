@@ -40,6 +40,13 @@ jobs:
         run: |
           python test/test.py
 
+      - name: upload
+        uses: actions/upload-artifact@v2
+        with:
+          name: htmlcov
+          path: htmlcov/
+          retention-days: 7
+
       # - name: codecov upload
       #   if: matrix.python-version == '3.9'
       #   uses: codecov/codecov-action@v1
