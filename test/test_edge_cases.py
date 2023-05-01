@@ -29,8 +29,11 @@ def test_handle_edge_cases(params):
     params.outdir = "test/tmp/edge_cases"
     if not os.path.exists(params.outdir):
         os.makedirs(params.outdir)
+
     params.alignment = None
     params.lineages = edge_case_lineages
+    # Use the dataset created from test_wrappers
+    params.dataset = "test/tmp/wrappers/dataset/sars-cov-2-latest"
     params.logger = utils.create_logger(os.path.join(params.outdir, "test.log"))
 
     wrappers.run(params)
