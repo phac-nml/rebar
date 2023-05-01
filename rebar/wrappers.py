@@ -139,16 +139,21 @@ def run(params):
     # Search consensus sequences for target lineages
     if params.lineages:
         tree = Phylo.read(tree_path, "newick")
-        lineage_list = params.lineages.split(",")
+        lineage_list_raw = params.lineages.split(",")
+        lineage_list = []
 
         # Check for "*" character to imply descendants
-        for lineage in lineage_list:
-
-            if lineage.endswith("*"):
-                lineage_tree = next(tree.find_clades(lineage[:-1]))
+        for lineage in lineage_list_raw:
+            if lineage[-1] == "*":
+                lineage = lineage[:-1]
+                lineage_tree = next(tree.find_clades(lineage))
                 lineage_descendants = [c.name for c in lineage_tree.find_clades()]
-                lineage_list.remove(lineage)
-                lineage_list += lineage_descendants
+
+                for desc in lineage_descendants:
+                    if desc not in lineage_list:
+                        lineage_list.append(desc)
+            else:
+                lineage_list.append(lineage)
 
         params.lineages = ",".join(lineage_list)
 

@@ -227,7 +227,7 @@ class Recombination:
         # Remove non-discriminating sites
 
         # Search for genomic blocks from each parent
-        # Just look at the subs that are uniq to one parent and detected in sample
+        # Just look at the subs/barcodes that are uniq to one parent and in sample
         subs_df = subs_df[(subs_df["parent"] != "shared")]
 
         if genome.debug:
@@ -237,8 +237,16 @@ class Recombination:
             genome.logger.info(str(datetime.now()) + "\t\t\t\t" + subs_str)
 
         # Each parent must have at least x min_subs that are lineage-determining
-        parent_1_num_uniq = len(subs_df[subs_df["parent"] == parent_1.name])
-        parent_2_num_uniq = len(subs_df[subs_df["parent"] == parent_2.name])
+        parent_1_uniq = subs_df[
+            (subs_df["parent"] == parent_1.name)
+            & (subs_df[parent_1.name] != subs_df["Reference"])
+        ]
+        parent_1_num_uniq = len(parent_1_uniq)
+        parent_2_uniq = subs_df[
+            (subs_df["parent"] == parent_2.name)
+            & (subs_df[parent_2.name] != subs_df["Reference"])
+        ]
+        parent_2_num_uniq = len(parent_2_uniq)
 
         if parent_1_num_uniq < min_subs:
             if genome.debug:
