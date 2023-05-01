@@ -58,9 +58,9 @@ def handle_edge_cases(
         result["min_consecutive"] = 2
 
     # ---------------------------------------------------------------------
-    # XAE: second_parent only has 1 conflict sub
+    # XAD, XAE: second_parent only has 1 conflict sub
     #     force the first parent to be the minor parent (BA.1)
-    elif genome.lineage.recombinant in ["XAE"]:
+    elif genome.lineage.recombinant in ["XAD", "XAE"]:
         genome.lineage.edge_case = True
         include_tree = next(tree.find_clades("BA.1"))
         include_descendants = [c.name for c in include_tree.find_clades()]
@@ -104,6 +104,12 @@ def handle_edge_cases(
         result["barcode_summary"] = barcode_summary[
             ~barcode_summary["lineage"].isin(exclude_descendants)
         ]
+
+    # ---------------------------------------------------------------------
+    # XAY: Many breakpoints, some very small (200 nuc)
+    elif genome.lineage.recombinant in ["XAY"]:
+        genome.lineage.edge_case = True
+        result["min_length"] = 200
 
     # ---------------------------------------------------------------------
     # XAZ: no diagnostic subs from BA.2, only 1 consecutive barcode from BA.2 parent

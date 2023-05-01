@@ -421,6 +421,7 @@ class Genome:
                     ],
                     "definition": [self.lineage.definition],
                     "validate": [self.validate],
+                    "edge_case": [self.lineage.edge_case],
                     "parents_lineage": parents_lineage,
                     "parents_clade": parents_clade,
                     "parents_clade_lineage": parents_clade_lineage,

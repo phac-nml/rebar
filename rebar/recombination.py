@@ -228,27 +228,17 @@ class Recombination:
 
         # Search for genomic blocks from each parent
         # Just look at the subs that are uniq to one parent and detected in sample
-        subs_uniq_df = subs_df[(subs_df["parent"] != "shared")]
+        subs_df = subs_df[(subs_df["parent"] != "shared")]
 
         if genome.debug:
-            genome.logger.info(str(datetime.now()) + "\t\t\tBARCODE UNIQ:")
-            subs_md = subs_uniq_df.to_markdown(index=False)
+            genome.logger.info(str(datetime.now()) + "\t\t\tBARCODE DISCRIMINATING:")
+            subs_md = subs_df.to_markdown(index=False)
             subs_str = subs_md.replace("\n", "\n" + "\t" * 7)
             genome.logger.info(str(datetime.now()) + "\t\t\t\t" + subs_str)
 
         # Each parent must have at least x min_subs that are lineage-determining
-        parent_1_uniq = subs_df[
-            (subs_df["parent"] == parent_1.name)
-            & (subs_df[parent_1.name] != subs_df["Reference"])
-            & (subs_df[parent_1.name] != subs_df[parent_2.name])
-        ]
-        parent_1_num_uniq = len(parent_1_uniq)
-        parent_2_uniq = subs_df[
-            (subs_df["parent"] == parent_2.name)
-            & (subs_df[parent_2.name] != subs_df["Reference"])
-            & (subs_df[parent_2.name] != subs_df[parent_1.name])
-        ]
-        parent_2_num_uniq = len(parent_2_uniq)
+        parent_1_num_uniq = len(subs_df[subs_df["parent"] == parent_1.name])
+        parent_2_num_uniq = len(subs_df[subs_df["parent"] == parent_2.name])
 
         if parent_1_num_uniq < min_subs:
             if genome.debug:
@@ -271,7 +261,7 @@ class Recombination:
         # Identify and filter parental regions
 
         # First: 5' -> 3'
-        regions_5p = self.identify_regions(subs_uniq_df, genome)
+        regions_5p = self.identify_regions(subs_df, genome)
         regions_5p = self.filter_regions_5p(regions_5p, min_consecutive, 0)
         regions_5p = self.filter_regions_5p(regions_5p, 0, min_length)
 
@@ -281,7 +271,7 @@ class Recombination:
             )
 
         # Second: 3' to 5'
-        regions_3p = self.identify_regions(subs_uniq_df, genome)
+        regions_3p = self.identify_regions(subs_df, genome)
         regions_3p = dict(reversed(regions_3p.items()))
         regions_3p = self.filter_regions_3p(regions_3p, min_consecutive, 0)
         regions_3p = self.filter_regions_3p(regions_3p, 0, min_length)

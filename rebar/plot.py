@@ -9,11 +9,10 @@ from matplotlib import patches, colors
 
 logging.getLogger("matplotlib.font_manager").disabled = True
 
+EDGE_CASE_CHAR = "†"
+
 
 def plot(barcodes_df, summary_df, annot_df, output):
-
-    # Debugging
-    # barcodes_df = barcodes_df.head(35)
 
     # Create output directory if it doesn't exist
     outdir = os.path.dirname(output)
@@ -21,6 +20,9 @@ def plot(barcodes_df, summary_df, annot_df, output):
         os.makedirs(outdir)
 
     genome_length = int(summary_df["genome_length"].values[0])
+
+    # Check if this is an edge case recombinant
+    edge_case = summary_df["edge_case"].values[0]
 
     # Identify the first and second parent lineage
     parent_1 = barcodes_df.columns[2]
@@ -563,6 +565,9 @@ def plot(barcodes_df, summary_df, annot_df, output):
                     label = "{} ({})".format(parent_1, parent_1_clade_lineage)
                 elif label == parent_2:
                     label = "{} ({})".format(parent_2, parent_2_clade_lineage)
+                # Otherwise, we might want to append edge_case char
+                elif edge_case:
+                    label = "{}$^{}$".format(label, EDGE_CASE_CHAR)
                 ax.text(
                     section_label_x,
                     text_y,
@@ -612,25 +617,28 @@ def plot(barcodes_df, summary_df, annot_df, output):
     # -----------------------------------------------------------------------------
     # Legend
 
-    # # Build legend colors, labels from bottom up
     legend_colors = [
-        parent_2_ref_color,
-        parent_2_mut_color,
-        parent_1_ref_color,
-        parent_1_mut_color,
         ref_color,
+        parent_1_mut_color,
+        parent_1_ref_color,
+        parent_2_mut_color,
+        parent_2_ref_color,
     ]
     legend_labels = [
-        parent_2 + " Reference",
-        parent_2 + " Mutation",
-        parent_1 + " Reference",
-        parent_1 + " Mutation",
         "Reference",
+        parent_1 + " Mutation",
+        parent_1 + " Reference",
+        parent_2 + " Mutation",
+        parent_2 + " Reference",
     ]
 
     # General section dimensions
     section_y2 = current_y - y_inc * 2
-    section_y1 = section_y2 - (y_inc * (len(legend_labels) + 1))
+    # extra inc for white space
+    section_y1 = section_y2 - (y_inc * len(legend_labels)) - y_inc
+    # extra inc for edge case label
+    if edge_case:
+        section_y1 = section_y1 - (y_inc)
     section_w = section_x + (x_inc * 10)  # an estimate
     section_h = section_y2 - section_y1
 
@@ -660,7 +668,7 @@ def plot(barcodes_df, summary_df, annot_df, output):
 
     # Coordinates for section elements
     legend_box_x = section_x + (x_inc * 0.5)
-    legend_box_y = section_y1 + (y_inc * 0.5)
+    legend_box_y = section_y2 - (y_inc * 1.5)
     legend_text_x = legend_box_x + x_inc
     legend_text_y = legend_box_y + (sub_box_h / 2)
 
@@ -677,8 +685,17 @@ def plot(barcodes_df, summary_df, annot_df, output):
         ax.add_patch(box)
         ax.text(legend_text_x, legend_text_y, label, size=fs, ha="left", va="center")
 
-        legend_box_y += y_inc
-        legend_text_y += y_inc
+        legend_box_y -= y_inc
+        legend_text_y -= y_inc
+
+    # Plot edge case char at box x position
+    legend_box_x += sub_box_w / 2
+    legend_box_y += sub_box_h / 2
+    label = EDGE_CASE_CHAR
+    ax.text(legend_box_x, legend_box_y, label, size=fs, ha="center", va="center")
+    # Write edge case text label at text x position
+    label = "Edge Case Recombinant"
+    ax.text(legend_text_x, legend_text_y, label, size=fs, ha="left", va="center")
 
     current_y = section_y1
 
