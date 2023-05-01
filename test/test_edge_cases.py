@@ -27,7 +27,7 @@ def test_prep_edge_cases(params):
 
             clean_line = split_line.replace('"', "").replace(" ", "")
             for lineage in clean_line.split(","):
-                edge_case_lineages.append(lineage)
+                edge_case_lineages.append(lineage + "*")
 
     edge_case_lineages = ",".join(edge_case_lineages)
     params.alignment = None
@@ -59,6 +59,7 @@ def test_handle_edge_cases(params, edge_cases_expected):
     lineage_to_clade = pd.read_csv(lineage_to_clade_path, sep="\t")
 
     edge_case_lineages = list(subs_df["strain"])
+    edge_case_recombinants = []
 
     conflict = False
 
@@ -83,13 +84,21 @@ def test_handle_edge_cases(params, edge_cases_expected):
             min_consecutive=params.min_consecutive,
         )
 
-        if lineage not in edge_cases_expected:
+        recombinant = lineage_genome.lineage.recombinant
+        if recombinant not in edge_case_recombinants:
+            edge_case_recombinants.append(recombinant)
+
+        if recombinant not in edge_cases_expected:
             conflict = True
-            print("lineage: {} has no expected values.".format(lineage))
+            print(
+                "lineage: {}, recombinant: {} has no expected values.".format(
+                    lineage, recombinant
+                )
+            )
 
         else:
-            for param in edge_cases_expected[lineage]:
-                expected = edge_cases_expected[lineage][param]
+            for param in edge_cases_expected[recombinant]:
+                expected = edge_cases_expected[recombinant][param]
                 actual = result[param]
 
                 if expected != actual:
@@ -100,9 +109,9 @@ def test_handle_edge_cases(params, edge_cases_expected):
                         )
                     )
 
-    for lineage in edge_cases_expected:
-        if lineage not in edge_case_lineages:
-            print("lineage: {} has no actual values.".format(lineage))
+    for recombinant in edge_cases_expected:
+        if recombinant not in edge_case_recombinants:
+            print("recombinant: {} has no actual values.".format(recombinant))
             conflict = True
 
     assert conflict is False

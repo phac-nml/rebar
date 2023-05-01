@@ -77,7 +77,7 @@ def edge_cases_expected():
         "XAD": {"min_consecutive": 5},
         "XAE": {"min_consecutive": 5},
         "XAJ": {
-            "min_length": 1,
+            "min_length": 4,
         },
         "XAS": {},
         "XAV": {

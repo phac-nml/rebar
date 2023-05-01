@@ -16,7 +16,7 @@ cmd_str = (
     # `test_edge_cases`` depends on `test_wrappers`` to be run first
     " test/test_edge_cases.py"
     # `test_utils` is the biggest test suite, and takes the longest(?)
-    # " test/test_utils.py"
+    " test/test_utils.py"
 )
 result = subprocess.run(cmd_str, shell=True)
 # I'm not 100% sure this is necessary to pass the subprocess return code
