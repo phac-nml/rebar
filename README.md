@@ -12,7 +12,7 @@
 
 ## Install
 
-1. Source
+1. Git
 
     ```bash
     git clone https://github.com/phac-nml/rebar.git
@@ -163,7 +163,7 @@ Special thanks go to the following people, who are instrumental to the design an
 <table>
   <tr>
     <td align="center">
-      <a href="https://github.com/lenaschimmel"><img src="https://avatars.githubusercontent.com/u/1325019?v=4?s=100" width="100px;" alt=""/>
+      <a href="https://github.com/lenaschimmel"><img src="https://avatars.githubusercontent.com/u/1325019?v=4&s=100" width="100px;" alt=""/>
         <br />
         <sub><b>Lena Schimmel</b></sub>
       </a>
@@ -172,7 +172,7 @@ Special thanks go to the following people, who are instrumental to the design an
     </td>
     <td align="center">
       <a href="https://github.com/corneliusroemer">
-        <img src="https://avatars.githubusercontent.com/u/25161793?v=4?s=100" width="100px;" alt=""/>
+        <img src="https://avatars.githubusercontent.com/u/25161793?v=4&s=100" width="100px;" alt=""/>
         <br />
         <sub><b>Cornelius Roemer</b></sub>
       </a>
@@ -183,7 +183,7 @@ Special thanks go to the following people, who are instrumental to the design an
     </td>
     <td align="center">
       <a href="https://github.com/joshuailevy">
-      <img src="https://ui-avatars.com/api/?name=Josh+Levy?s=100" width="100px;" alt=""/>
+      <img src="https://avatars.githubusercontent.com/u/19437463?v=4&s=100" width="100px;" alt=""/>
         <br />
         <sub><b>Josh Levy</b></sub>
       </a>
@@ -192,7 +192,7 @@ Special thanks go to the following people, who are instrumental to the design an
     </td>
     <td align="center">
       <a href="https://github.com/rneher">
-      <img src="https://avatars.githubusercontent.com/u/8379168?v=4?s=100" width="100px;" alt=""/>
+      <img src="https://avatars.githubusercontent.com/u/8379168?v=4&s=100" width="100px;" alt=""/>
         <br />
         <sub><b>Richard Neher</b></sub>
       </a>
