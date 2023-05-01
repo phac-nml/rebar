@@ -311,12 +311,6 @@ def plot(barcodes_df, summary_df, annot_df, output):
     for rec in barcodes_df.iterrows():
 
         genome_coord = rec[1]["coord"] + section_x
-
-        # Identify base origins
-        ref_base = rec[1]["Reference"]
-        parent_1_base = rec[1][parent_1]
-        parent_2_base = rec[1][parent_2]
-
         guide_color = "black"
 
         # Plot a line on the guide
@@ -330,297 +324,293 @@ def plot(barcodes_df, summary_df, annot_df, output):
 
     current_y = section_y1
 
-    # # -----------------------------------------------------------------------------
-    # # SECTION: GUIDE TO SUB POLYGONS
+    # -----------------------------------------------------------------------------
+    # SECTION: GUIDE TO SUB POLYGONS
 
-    # section_y2 = current_y
-    # # Add a little bit extra based on box_size
-    # section_y1 = current_y - (y_inc * 3) - (x_inc - sub_box_h)
+    section_y2 = current_y
+    section_y1 = current_y - (y_inc * 3)
 
-    # # Starting x point for sub boxes
-    # sub_box_x = section_x - x_inc + (x_inc - sub_box_w) / 2
+    # Starting x point for sub boxes
+    sub_x = section_x
 
-    # # Iterate through subs, which are columns in plot
-    # for rec in barcodes_df.iterrows():
+    # Iterate through subs, which are columns in plot
+    for rec in barcodes_df.iterrows():
 
-    #     sub_box_x += x_inc
+        # Adjust box coord based on width
+        sub_box_x = sub_x + (x_inc / 2 - sub_box_w / 2)
 
-    #     genome_coord = rec[1]["coord"] + section_x
+        genome_coord = rec[1]["coord"] + section_x
 
-    #     # Draw a polygon from guide to top row of subs
-    #     # P1: Top Guide, P2: Top left of SNP box, P3: Top right of SNP box
-    #     x1 = sub_box_x
-    #     x2 = sub_box_x + sub_box_w
-    #     x3 = genome_coord
-    #     y1 = section_y1
-    #     y2 = section_y2
+        # Draw a polygon from guide to top row of subs
+        # P1: Top Guide, P2: Top left of SNP box, P3: Top right of SNP box
+        x1 = sub_box_x
+        x2 = sub_box_x + sub_box_w
+        x3 = genome_coord
+        y1 = section_y1 - (y_inc - sub_box_h) / 2
+        y2 = section_y2
 
-    #     poly_coords = [[x1, y1], [x2, y1], [x3, y2]]
-    #     poly = patches.Polygon(
-    #         poly_coords,
-    #         closed=True,
-    #         alpha=0.2,
-    #         fill=True,
-    #         edgecolor="none",
-    #         facecolor="dimgrey",
-    #     )
-    #     ax.add_patch(poly)
+        poly_coords = [[x1, y1], [x2, y1], [x3, y2]]
+        poly = patches.Polygon(
+            poly_coords,
+            closed=True,
+            alpha=0.2,
+            fill=True,
+            edgecolor="none",
+            facecolor="dimgrey",
+        )
+        ax.add_patch(poly)
 
-    # current_y = section_y1
+        sub_x += x_inc
 
-    # # -----------------------------------------------------------------------------
-    # # SECTION: BREAKPOINT LINES AND LABELS
+    current_y = section_y1
 
-    # # General section dimensions
-    # section_y2 = section_y2
-    # section_y1 = section_y1
-    # section_label_y = section_y1 + (section_y2 - section_y1) / 2.25
-    # section_label = "Breakpoints"
+    # -----------------------------------------------------------------------------
+    # SECTION: BREAKPOINT LINES AND LABELS
 
-    # # Next section
-    # next_section_y1 = section_y1 - (num_records * y_inc) - (y_inc)
+    # General section dimensions
+    section_y2 = section_y2
+    section_y1 = section_y1
+    section_label_y = section_y1 + (section_y2 - section_y1) / 2.5
+    section_label = "Breakpoints"
 
-    # # Write section label
-    # ax.text(section_label_x, section_label_y, section_label, size=fs, ha="right")
+    # Next section
+    next_section_y1 = section_y1 - (num_records * y_inc) - (y_inc)
 
-    # # Parse breakpoints from summary based on previous regions
+    # Write section label
+    ax.text(
+        section_label_x,
+        section_label_y,
+        section_label,
+        size=fs,
+        ha="right",
+        va="center",
+    )
+
+    # Parse breakpoints from summary based on previous regions
     breakpoints = summary_df[summary_df["regions"] == regions]["breakpoints"].values[0]
-    # breakpoints_split = breakpoints.split(",")
+    breakpoints_split = breakpoints.split(",")
 
-    # # Align bottom of breakpoints dividor with next section sub box bottom
-    # bp_y1 = next_section_y1 + (y_inc - sub_box_h) / 2
-    # bp_y2 = section_label_y
+    # Align bottom of breakpoints dividor with next section sub box bottom
+    bp_y1 = next_section_y1 + (y_inc - sub_box_h) / 2
+    bp_y2 = section_label_y
 
-    # for i, breakpoint in enumerate(breakpoints_split):
+    for i, breakpoint in enumerate(breakpoints_split):
 
-    #     # get region start and end
-    #     start = int(breakpoint.split(":")[0]) - 1
-    #     end = int(breakpoint.split(":")[1]) + 1
+        # get region start and end
+        start = int(breakpoint.split(":")[0]) - 1
+        end = int(breakpoint.split(":")[1]) + 1
 
-    #     start_match = barcodes_df[barcodes_df["coord"] == start]
-    #     end_match = barcodes_df[barcodes_df["coord"] == end]
+        start_match = barcodes_df[barcodes_df["coord"] == start]
+        end_match = barcodes_df[barcodes_df["coord"] == end]
 
-    #     if len(start_match) == 0:
-    #         continue
+        if len(start_match) == 0:
+            continue
 
-    #     start_i = start_match.index.values[0]
-    #     # End coordinates are not inclusive, move back one
-    #     end_i = end_match.index.values[0] - 1
+        start_i = start_match.index.values[0]
+        # End coordinates are not inclusive, move back one
+        end_i = end_match.index.values[0] - 1
 
-    #     # If start and end are adjacent coordinates, plot dashed line
-    #     if (end_i - start_i) == 0:
-    #         bp_x = section_x + (start_i * x_inc)
+        # If start and end are adjacent coordinates, plot dashed line
+        if (end_i - start_i) == 0:
+            bp_x = section_x + ((start_i + 1) * x_inc)
 
-    #         ax.plot(
-    #             [bp_x, bp_x],
-    #             [bp_y1, bp_y2],
-    #             ls="--",
-    #             lw=linewidth,
-    #             color="black",
-    #             clip_on=False,
-    #         )
-    #     # # Plot greyed, out dashed rectangle
-    #     # else:
+            ax.plot(
+                [bp_x, bp_x],
+                [bp_y1, bp_y2],
+                ls="--",
+                lw=linewidth,
+                color="black",
+                clip_on=False,
+            )
+        # Plot greyed, out dashed rectangle
+        else:
 
-    #     #     bp_box_x = (x_inc) * (start_i + 1.5)
-    #     #     bp_box_x2 = (x_inc) * (end_i + 1.5)
-    #     #     bp_box_y = bp_y1
-    #     #     bp_box_w = bp_box_x2 - bp_box_x
-    #     #     bp_box_h = (y_inc) * num_records + (y_inc * 0.8)
+            bp_box_x = (x_inc) * (start_i + 1)
+            bp_box_x2 = (x_inc) * (end_i + 1)
+            bp_box_y = bp_y1
+            bp_box_w = bp_box_x2 - bp_box_x
+            bp_box_h = (y_inc) * num_records + (y_inc)
 
-    #     #     # Greyed out rectangle
-    #     #     rect = patches.Rectangle(
-    #     #         (box_x, box_y),
-    #     #         box_w,
-    #     #         box_h,
-    #     #         alpha=0.4,
-    #     #         fill=True,
-    #     #         facecolor="black",
-    #     #         edgecolor="none",
-    #     #         lw=linewidth,
-    #     #         ls="--",
-    #     #     )
-    #     #     ax.add_patch(rect)
+            bp_x = bp_box_x + bp_box_w / 2
 
-    #     #     # Dashed rectangle outline
-    #     #     rect = patches.Rectangle(
-    #     #         (box_x, box_y),
-    #     #         box_w,
-    #     #         box_h,
-    #     #         alpha=1,
-    #     #         fill=False,
-    #     #         facecolor="none",
-    #     #         edgecolor="black",
-    #     #         lw=linewidth,
-    #     #         ls="--",
-    #     #     )
-    #     #     ax.add_patch(rect)
+            # Greyed out rectangle
+            rect = patches.Rectangle(
+                (bp_box_x, bp_box_y),
+                bp_box_w,
+                bp_box_h,
+                alpha=0.4,
+                fill=True,
+                facecolor="black",
+                edgecolor="none",
+                lw=linewidth,
+                ls="--",
+            )
+            ax.add_patch(rect)
 
-    #     #     # Bonus little dashed tick in center
-    #     #     line_x = box_x + (box_w / 2)
-    #     #     line_y1 = box_y + box_h
-    #     #     line_y2 = bp_y2
+            # Dashed rectangle outline
+            rect = patches.Rectangle(
+                (bp_box_x, bp_box_y),
+                bp_box_w,
+                bp_box_h,
+                alpha=1,
+                fill=False,
+                facecolor="none",
+                edgecolor="black",
+                lw=linewidth,
+                ls="--",
+            )
+            ax.add_patch(rect)
 
-    #     #     ax.plot(
-    #     #         [line_x, line_x],
-    #     #         [line_y1, line_y2],
-    #     #         ls="--",
-    #     #         lw=linewidth,
-    #     #         color="black",
-    #     #         clip_on=False,
-    #     #     )
+            # Bonus little dashed tick in center
+            line_x = bp_x
+            line_y1 = bp_box_y + bp_box_h
+            line_y2 = bp_y2
 
-    #     #     x_coord = box_x + (box_x2 - box_x) / 2
+            ax.plot(
+                [line_x, line_x],
+                [line_y1, line_y2],
+                ls="--",
+                lw=linewidth,
+                color="black",
+                clip_on=False,
+            )
 
-    #     # ax.text(
-    #     #     x_coord,
-    #     #     bp_y2,
-    #     #     "Breakpoint #" + str(i + 1),
-    #     #     size=fs,
-    #     #     ha="center",
-    #     #     va="center",
-    #     #     bbox=dict(
-    #     #         facecolor="white", edgecolor="black", lw=linewidth, boxstyle="round"
-    #     #     ),
-    #     # )
+        ax.text(
+            bp_x,
+            bp_y2,
+            "Breakpoint #" + str(i + 1),
+            size=fs,
+            ha="center",
+            va="center",
+            bbox=dict(
+                facecolor="white", edgecolor="black", lw=linewidth, boxstyle="round"
+            ),
+        )
 
-    # current_y = section_y1
+    current_y = section_y1
 
-    # # -----------------------------------------------------------------------------
-    # # SECTION: SAMPLES AND SUBSTITUTION BOXES
+    # -----------------------------------------------------------------------------
+    # SECTION: SAMPLES AND SUBSTITUTION BOXES
 
-    # # General section dimensions
-    # section_y2 = current_y
-    # section_y1 = section_y2 - (num_records * y_inc) - (y_inc)
+    # General section dimensions
+    section_y2 = current_y
+    section_y1 = section_y2 - (num_records * y_inc) - (y_inc)
 
-    # # Starting x point for sub boxes, we start with iter
-    # sub_x = section_x
+    # Starting x point for sub boxes, we start with iter
+    sub_x = section_x
 
-    # # Iterate through subs, which are columns in plot
-    # for rec_i, rec in enumerate(barcodes_df.iterrows()):
+    # Iterate through subs, which are columns in plot
+    for rec_i, rec in enumerate(barcodes_df.iterrows()):
 
-    #     # Adjust box coord based on width
-    #     sub_box_x = sub_x + (x_inc - sub_box_w) / 2
+        # Adjust box coord based on width
+        sub_box_x = sub_x + (x_inc / 2 - sub_box_w / 2)
 
-    #     # Identify base origins
-    #     ref_base = rec[1]["Reference"]
-    #     parent_1_base = rec[1][parent_1]
-    #     parent_2_base = rec[1][parent_2]
+        # Identify base origins
+        ref_base = rec[1]["Reference"]
+        parent_1_base = rec[1][parent_1]
+        parent_2_base = rec[1][parent_2]
 
-    #     # y coordinates for substitutions box
-    #     sub_y = section_y2
+        # y coordinates for substitutions box
+        sub_y = section_y2
 
-    #     # Iterate through samples, which are rows in plot
-    #     for i, label in enumerate(records):
+        # Iterate through samples, which are rows in plot
+        for i, label in enumerate(records):
 
-    #         # Adjust box coord based on height
-    #         sub_box_y = sub_y - (y_inc - sub_box_h) / 2
+            # Adjust box coord based on height
+            sub_y -= y_inc
 
-    #         # Add extra gap after recombinant parents
-    #         if i == y_break:
-    #             sub_box_y -= y_inc
+            # Add extra gap after recombinant parents
+            if i == y_break:
+                sub_y -= y_inc
 
-    #         base = rec[1][label]
+            # Adjust box coord based on height
+            sub_box_y = sub_y + (y_inc / 2 - sub_box_h / 2)
 
-    #         if label == "Reference":
-    #             box_c = ref_color
-    #         elif base == parent_1_base:
-    #             if base == ref_base:
-    #                 box_c = parent_1_ref_color
-    #             else:
-    #                 box_c = parent_1_mut_color
-    #         elif base == parent_2_base:
-    #             if base == ref_base:
-    #                 box_c = parent_2_ref_color
-    #             else:
-    #                 box_c = parent_2_mut_color
-    #         else:
-    #             box_c = "white"
+            base = rec[1][label]
 
-    #         rect = patches.Rectangle(
-    #             (sub_box_x, sub_box_y),
-    #             sub_box_w,
-    #             sub_box_h,
-    #             alpha=0.90,
-    #             fill=True,
-    #             edgecolor="none",
-    #             facecolor=box_c,
-    #         )
-    #         ax.add_patch(rect)
+            if label == "Reference":
+                box_c = ref_color
+            elif base == parent_1_base:
+                if base == ref_base:
+                    box_c = parent_1_ref_color
+                else:
+                    box_c = parent_1_mut_color
+            elif base == parent_2_base:
+                if base == ref_base:
+                    box_c = parent_2_ref_color
+                else:
+                    box_c = parent_2_mut_color
+            else:
+                box_c = "white"
 
-    #         # Debug
-    #         rect = patches.Rectangle(
-    #             (sub_x, sub_y - y_inc),
-    #             x_inc,
-    #             y_inc,
-    #             alpha=1,
-    #             fill=True,
-    #             edgecolor="black",
-    #             facecolor="none",
-    #         )
-    #         ax.add_patch(rect)
+            rect = patches.Rectangle(
+                (sub_box_x, sub_box_y),
+                sub_box_w,
+                sub_box_h,
+                alpha=0.90,
+                fill=True,
+                edgecolor="none",
+                facecolor=box_c,
+            )
+            ax.add_patch(rect)
 
-    #         text_y = sub_box_y + (sub_box_h / 2)
+            text_y = sub_box_y + (sub_box_h / 2)
 
-    #         # On the first time parsing sub, write sample label
-    #         if rec_i == 0:
-    #             # If parent, also include clade
-    #             if label == parent_1:
-    #                 label = "{} ({})".format(parent_1, parent_1_clade_lineage)
-    #             elif label == parent_2:
-    #                 label = "{} ({})".format(parent_2, parent_2_clade_lineage)
-    #             ax.text(
-    #                 section_label_x,
-    #                 text_y,
-    #                 label,
-    #                 size=fs,
-    #                 ha="right",
-    #                 va="center",
-    #             )
-    #         text_x = sub_box_x + (sub_box_w / 2)
+            # On the first time parsing sub, write sample label
+            if rec_i == 0:
+                # If parent, also include clade
+                if label == parent_1:
+                    label = "{} ({})".format(parent_1, parent_1_clade_lineage)
+                elif label == parent_2:
+                    label = "{} ({})".format(parent_2, parent_2_clade_lineage)
+                ax.text(
+                    section_label_x,
+                    text_y,
+                    label,
+                    size=fs,
+                    ha="right",
+                    va="center",
+                )
+            text_x = sub_box_x + (sub_box_w / 2)
 
-    #         # Draw sub text bases
-    #         ax.text(text_x, text_y, base, size=fs, ha="center", va="center")
+            # Draw sub text bases
+            ax.text(text_x, text_y, base, size=fs, ha="center", va="center")
 
-    #     sub_x += x_inc
+        sub_x += x_inc
 
-    # current_y = section_y1
+    current_y = section_y1
 
-    # # -----------------------------------------------------------------------------
-    # # SECTION: SUBSTITUTION X AXIS TICKS
+    # -----------------------------------------------------------------------------
+    # SECTION: SUBSTITUTION X AXIS TICKS
 
-    # section_y2 = current_y - (y_inc * 0.25)
-    # section_y1 = section_y2 - y_inc
+    section_y2 = current_y - (y_inc * 0.25)
+    section_y1 = section_y2 - y_inc
 
-    # tick_y1 = section_y2
-    # tick_y2 = section_y2 - (y_inc * 0.25)
+    tick_x = section_x + x_inc / 2
+    tick_y1 = section_y2
+    tick_y2 = section_y2 - (y_inc * 0.25)
 
-    # tick_x = section_x - x_inc + (x_inc - sub_box_w) / 2
+    # Iterate through subs, which are columns in plot
+    for rec in barcodes_df.iterrows():
 
-    # tick_text_y = tick_y2
+        genome_coord = rec[1]["coord"]
 
-    # # Iterate through subs, which are columns in plot
-    # for rec_i, rec in enumerate(barcodes_df.iterrows()):
+        ax.plot([tick_x, tick_x], [tick_y1, tick_y2], lw=linewidth, c="black")
+        ax.text(
+            tick_x,
+            tick_y2,
+            str(genome_coord) + " ",
+            size=fs,
+            ha="center",
+            va="top",
+            rotation=90,
+        )
+        tick_x += x_inc
 
-    #     tick_x += x_inc
+    current_y = section_y1
 
-    #     genome_coord = rec[1]["coord"]
-
-    #     ax.plot([tick_x, tick_x], [tick_y1, tick_y2], lw=linewidth, c="black")
-    #     ax.text(
-    #         tick_x,
-    #         tick_y2,
-    #         str(genome_coord) + " ",
-    #         size=fs,
-    #         ha="center",
-    #         va="top",
-    #         rotation=90,
-    #     )
-
-    # current_y = section_y1
-
-    # # -----------------------------------------------------------------------------
-    # # Legend
+    # -----------------------------------------------------------------------------
+    # Legend
 
     # # Build legend colors, labels from bottom up
     legend_colors = [
@@ -638,57 +628,62 @@ def plot(barcodes_df, summary_df, annot_df, output):
         "Reference",
     ]
 
-    # # General section dimensions
-    # legend_x = x_inc * 0.5
-    # legend_y1 = current_y
-    # legend_y2 = legend_y1 + (y_inc * (len(legend_labels) + 1))
-    # legend_w = legend_x + (x_inc * 8) # 8 inc is an estimate
-    # legend_h = legend_y2 - legend_y1
+    # General section dimensions
+    section_y2 = current_y - y_inc * 2
+    section_y1 = section_y2 - (y_inc * (len(legend_labels) + 1))
+    section_w = section_x + (x_inc * 10)  # an estimate
+    section_h = section_y2 - section_y1
 
-    # # Write label to left
-    # ax.text(
-    #     -50,
-    #     legend_y1 + (legend_y2 - legend_y1) / 2,
-    #     "Legend",
-    #     size=fontsize,
-    #     ha="right",
-    #     va="center",
-    # )
+    section_label = "Legend"
+    section_label_y = section_y1 + (section_h / 2)
 
-    # # Draw Legend Frame
-    # legend_frame = patches.Rectangle(
-    #     (legend_x, legend_y1),
-    #     legend_w,
-    #     legend_h,
-    #     edgecolor="black",
-    #     lw=linewidth,
-    #     facecolor="none",
-    # )
-    # ax.add_patch(legend_frame)
+    # Write section label
+    ax.text(
+        section_label_x,
+        section_label_y,
+        section_label,
+        size=fs,
+        ha="right",
+        va="center",
+    )
 
-    # # Coordinates for section elements
-    # box_x = legend_x + x_inc
-    # box_y = legend_y1 + (y_inc * 0.5)
-    # text_x = box_x + x_inc
-    # text_y =box_y + (sub_box_h / 2)
+    # Draw Legend Frame
+    legend_frame = patches.Rectangle(
+        (section_x, section_y1),
+        section_w,
+        section_h,
+        edgecolor="black",
+        lw=linewidth,
+        facecolor="none",
+    )
+    ax.add_patch(legend_frame)
 
-    # for color,label in zip(legend_colors,legend_labels):
+    # Coordinates for section elements
+    legend_box_x = section_x + (x_inc * 0.5)
+    legend_box_y = section_y1 + (y_inc * 0.5)
+    legend_text_x = legend_box_x + x_inc
+    legend_text_y = legend_box_y + (sub_box_h / 2)
 
-    #     box = patches.Rectangle(
-    #     (box_x, box_y), sub_box_w, sub_box_h, ec="black", lw=linewidth, fc=color)
-    #     ax.add_patch(box)
-    #     ax.text(text_x, text_y, label, size=fontsize, ha="left", va="center")
+    for color, label in zip(legend_colors, legend_labels):
 
-    #     box_y += y_inc
-    #     text_y += y_inc
+        box = patches.Rectangle(
+            (legend_box_x, legend_box_y),
+            sub_box_w,
+            sub_box_h,
+            ec="none",
+            lw=linewidth,
+            fc=color,
+        )
+        ax.add_patch(box)
+        ax.text(legend_text_x, legend_text_y, label, size=fs, ha="left", va="center")
 
-    # current_y = legend_y2
+        legend_box_y += y_inc
+        legend_text_y += y_inc
+
+    current_y = section_y1
 
     # -----------------------------------------------------------------------------
     # PLOT WRAPUP
-
-    # Flip y axis
-    # plt.gca().invert_yaxis()
 
     # Hide the axes lines
     for spine in ax.spines:
@@ -702,28 +697,25 @@ def plot(barcodes_df, summary_df, annot_df, output):
     ax.set_xticks([])
     ax.set_yticks([])
 
-    # # Set the Y axis limits to the genome length
-    # Extra y_inc for additional row modules
-    # Inverted y axis
+    # # Set the X axis limits to the genome length
     x_min = 0
     x_max = genome_length + x_inc
     ax.set_xlim(x_min, x_max)
 
-    y_min = current_y
+    y_min = current_y - y_inc
     y_max = y_inc
-    # y_max = (num_records * y_inc)
     ax.set_ylim(y_min, y_max)
 
     ax.axes.set_aspect("equal")
     # Export
-    # plt.tight_layout()
+    plt.tight_layout()
     plt.savefig(output)
 
     # Close for memory management
     plt.close()
 
 
-# # Testing code
+# Testing code
 # import pandas as pd
 
 # annot_df = pd.read_csv("dataset/sars-cov-2-latest/annotations.tsv", sep="\t")
