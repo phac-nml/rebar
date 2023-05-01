@@ -142,7 +142,7 @@ class Barcode:
         tree,
         lineage_to_clade,
         max_top_lineages=10,
-        outlier_method="distance",
+        outlier_method="min_conflict",
     ):
 
         # No barcode matches
@@ -168,6 +168,47 @@ class Barcode:
         # if there's only one or two top lineages, there's no outliers
         if len(top_lineages) < 2:
             outlier_lineages = []
+
+        # For future interest, I might want to combine the 'min_conflict' and
+        # 'distance' outlier methods into one
+
+        elif outlier_method == "min_conflict":
+
+            # Fix the seed, so that results are the same every rerun
+            random.seed(123456)
+            # If there are a large number of top_lineages, subsample down for speed
+            if len(top_lineages) > max_top_lineages:
+                top_lineages_subsample = random.choices(
+                    top_lineages, k=max_top_lineages
+                )
+
+            conflict_count = {lin: 0 for lin in top_lineages_subsample}
+            for lin in top_lineages_subsample:
+                row = barcodes.query("lineage == @lin")
+                subs = sorted(
+                    [Substitution(s) for s in row.columns[1:] if list(row[s])[0] == 1]
+                )
+                conflict_alt = [s for s in genome.substitutions if s not in subs]
+                conflict_ref = [s for s in subs if s not in genome.substitutions]
+
+                conflict_total = len(conflict_alt) + len(conflict_ref)
+                conflict_count[lin] = conflict_total
+
+            min_conflict_count = min(conflict_count.values())
+
+            # Redo outlier lineages, and MRCA
+            keep_lineages = [
+                lin
+                for lin, count in conflict_count.items()
+                if count == min_conflict_count
+            ]
+
+            lineage_tree = tree.common_ancestor(keep_lineages)
+            lineage = lineage_tree.name
+            lineage_descendants = [c.name for c in lineage_tree.find_clades()]
+            outlier_lineages += [
+                l for l in top_lineages if l not in lineage_descendants
+            ]
 
         elif outlier_method == "distance":
 
