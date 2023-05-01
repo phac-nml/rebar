@@ -12,7 +12,7 @@ logging.getLogger("matplotlib.font_manager").disabled = True
 EDGE_CASE_CHAR = "†"
 
 
-def plot(barcodes_df, summary_df, annot_df, output):
+def plot(barcodes_df, summary_df, annot_df, output, max_samples=10):
 
     # Create output directory if it doesn't exist
     outdir = os.path.dirname(output)
@@ -43,8 +43,38 @@ def plot(barcodes_df, summary_df, annot_df, output):
 
     ref_color = "#c4c4c4"
 
-    records = barcodes_df.columns[1:]
+    records = list(barcodes_df.columns[1:])
     num_records = len(records)
+
+    # Check if we need to collapse some samples
+    # minus 3 for ref and two parents
+    if (num_records - 3) > max_samples:
+        uniq_data = {}
+        for sample in records[3:]:
+            sample_data = "".join(barcodes_df[sample])
+
+            if sample_data not in uniq_data:
+                uniq_data[sample_data] = {
+                    "sample": sample,
+                    "count": 1,
+                }
+            else:
+                uniq_data[sample_data]["count"] += 1
+
+        # Only keep the uniq sample data
+        keep_records = ["coord"] + records[0:3]
+        keep_records += [data["sample"] for data in uniq_data.values()]
+
+        # Rename to indicate N = X collapse of samples
+        rename_records = {
+            data["sample"]: "{} (N = {})".format(data["sample"], data["count"])
+            for data in uniq_data.values()
+        }
+        barcodes_df = barcodes_df[keep_records].rename(columns=rename_records)
+
+        records = list(barcodes_df.columns[1:])
+        num_records = len(records)
+
     num_subs = len(barcodes_df)
 
     # What is going to be the width and height of each sub box?
@@ -689,13 +719,14 @@ def plot(barcodes_df, summary_df, annot_df, output):
         legend_text_y -= y_inc
 
     # Plot edge case char at box x position
-    legend_box_x += sub_box_w / 2
-    legend_box_y += sub_box_h / 2
-    label = EDGE_CASE_CHAR
-    ax.text(legend_box_x, legend_box_y, label, size=fs, ha="center", va="center")
-    # Write edge case text label at text x position
-    label = "Edge Case Recombinant"
-    ax.text(legend_text_x, legend_text_y, label, size=fs, ha="left", va="center")
+    if edge_case:
+        legend_box_x += sub_box_w / 2
+        legend_box_y += sub_box_h / 2
+        label = EDGE_CASE_CHAR
+        ax.text(legend_box_x, legend_box_y, label, size=fs, ha="center", va="center")
+        # Write edge case text label at text x position
+        label = "Edge Case Recombinant"
+        ax.text(legend_text_x, legend_text_y, label, size=fs, ha="left", va="center")
 
     current_y = section_y1
 
@@ -732,10 +763,19 @@ def plot(barcodes_df, summary_df, annot_df, output):
     plt.close()
 
 
-# Testing code
+# # Testing code
 # import pandas as pd
 
 # annot_df = pd.read_csv("dataset/sars-cov-2-latest/annotations.tsv", sep="\t")
+
+# barcodes_df = pd.read_csv("output/XAY/barcodes/XAY_CH.1.1.16_B.1.617.2.tsv", sep="\t")
+# summary_df = pd.read_csv("output/XAY/summary.tsv", sep="\t")
+# plot(
+#     barcodes_df=barcodes_df,
+#     summary_df=summary_df,
+#     annot_df=annot_df,
+#     output="output/XAY/plots/XAY_CH.1.1.16_B.1.617.2.png",
+# )
 
 # barcodes_df = pd.read_csv("output/XBC/barcodes/XBC_CJ.1_B.1.617.2.tsv", sep="\t")
 # summary_df = pd.read_csv("output/XBC/summary.tsv", sep="\t")

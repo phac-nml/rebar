@@ -90,11 +90,6 @@ class Genome:
         # Entry point #1, from fasta alignment
         if record:
             self.id = record.id
-            # This debugging is very noisy, and not useful?
-            # if self.debug:
-            #     self.logger.info(
-            #         str(datetime.now()) + "\t\tParsing sample: " + record.id
-            #     )
             self.seq = str(record.seq)
 
             # Mask genome sequence
@@ -105,13 +100,14 @@ class Genome:
             )
 
         if reference and self.seq:
-            # Mask genome sequence
             reference.seq = str(reference.seq)
-            reference.seq = "".join(
-                (["N"] * mask)  # 5' masking
-                + [reference.seq[mask:-mask]]  # in between, unmasked bases
-                + ["N"] * mask  # 3' masking
-            )
+            # Mask genome sequence
+            if mask > 0:
+                reference.seq = "".join(
+                    (["N"] * mask)  # 5' masking
+                    + [reference.seq[mask:-mask]]  # in between, unmasked bases
+                    + ["N"] * mask  # 3' masking
+                )
             self.parse_sequence(reference)
 
         # Entry point #2, from subs dataframe
