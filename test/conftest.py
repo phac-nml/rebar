@@ -57,3 +57,52 @@ def params():
         validate=True,
     )
     return params
+
+
+@pytest.fixture(scope="module")
+def edge_cases_expected():
+    """Return dictionary of expected values for edge case lineages."""
+    edge_cases_expected = {
+        "XB": {
+            "min_length": 100,
+        },
+        "XP": {
+            "min_consecutive": 1,
+            "min_length": 1,
+        },
+        "XR": {
+            "min_subs": 0,
+            "min_consecutive": 2,
+        },
+        "XAD": {"min_consecutive": 5},
+        "XAE": {"min_consecutive": 5},
+        "XAJ": {
+            "min_length": 1,
+        },
+        "XAS": {},
+        "XAV": {
+            "min_subs": 0,
+            "min_consecutive": 2,
+        },
+        "XAY": {"min_length": 200},
+        "XAZ": {
+            "min_subs": 0,
+            "min_consecutive": 1,
+            "min_length": 1,
+        },
+        "XBC": {
+            "min_consecutive": 2,
+        },
+        "XBK": {
+            "min_consecutive": 2,
+        },
+        "XBQ": {
+            "min_consecutive": 2,
+        },
+        "XBZ": {
+            "min_consecutive": 2,
+            "min_length": 300,
+        },
+    }
+
+    return edge_cases_expected
