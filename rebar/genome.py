@@ -44,7 +44,6 @@ class Genome:
         edge_cases=False,
         validate=None,
         dataset_info=None,
-        annotations=None,
     ):
         """
         Genome constructor. Parses genomic features from a sequence records or
@@ -488,7 +487,6 @@ class Genome:
         recombinant_tree,
         lineage_to_clade,
         top_n=1,
-        # annotations,
     ):
         """
         Assign genome to a lineage based on the top barcode matches.
