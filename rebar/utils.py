@@ -438,7 +438,6 @@ def create_barcodes(params):
     # Export
     barcodes_path = os.path.join(params.outdir, file_name)
     logger.info(str(datetime.now()) + "\tExporting barcodes: " + barcodes_path)
-    # Export to csv, to be consistent with usher barcodes format
     barcodes_df.to_csv(barcodes_path, sep="\t", index=False)
 
     clade_path = os.path.join(params.outdir, "lineage_to_clade.tsv")
@@ -450,6 +449,92 @@ def create_barcodes(params):
     # Finish
     logger.info(str(datetime.now()) + "\tFinished creating barcodes.")
     return info
+
+
+def create_barcodes_diagnostic(params):
+    """
+    Create tsv of lineage-diagnostic barcodes.
+    """
+
+    logger = params.logger
+    logger.info(str(datetime.now()) + "\t" + "-" * 40)
+    logger.info(str(datetime.now()) + "\tCreating diagnostic barcodes.")
+
+    # Import barcodes
+    barcodes = pd.read_csv(params.barcodes, sep="\t")
+
+    # import tree
+    tree = Phylo.read(params.tree, "newick")
+
+    diagnostic = {
+        "mutation": [],
+        "coord": [],
+        "lineage": [],
+        "include_descendants": [],
+    }
+
+    # Exclude the first column, which is lineage
+    mutations = barcodes.columns[2:]
+
+    for mutation in mutations:
+
+        sub = Substitution(mutation)
+        coord = sub.coord
+        include_descendants = False
+        # Identify the lineages that have this mutation
+        present_df = barcodes[barcodes[mutation] == 1]
+
+        # Case 1: No lineages have this mutation
+        if len(present_df) == 0:
+            continue
+        # Case 2: A single lineage has this mutation
+        elif len(present_df) == 1:
+            lineage = list(present_df["lineage"])[0]
+        # Case 3: Multiple lineages have this mutation, check if monophyletic
+        else:
+            lineages = list(present_df["lineage"])
+            # Use the first lineage as parent (barcodes df is ordered)
+            parent = lineages[0]
+            parent_tree = [c for c in tree.find_clades(parent)]
+
+            # skip if we couldn't find the lineage
+            if len(parent_tree) != 1:
+                continue
+
+            parent_tree = parent_tree[0]
+            children = [c.name for c in parent_tree.find_clades()]
+
+            # Check if monophyletic (found only in descendants)
+            monophyletic = True
+            for lineage in children:
+                if lineage not in lineages:
+                    monophyletic = False
+                    break
+
+            # If it wasn't monophyletic, continue
+            if not monophyletic:
+                continue
+
+            include_descendants = True
+            lineage = parent
+
+        diagnostic["mutation"].append(mutation)
+        diagnostic["coord"].append(coord)
+        diagnostic["lineage"].append(lineage)
+        diagnostic["include_descendants"].append(include_descendants)
+
+    # Convert dict to dataframe
+    diagnostic_df = pd.DataFrame(diagnostic)
+
+    # Sort by coordinate
+    diagnostic_df.sort_values(by="coord", inplace=True)
+
+    # Export
+    diagnostic_path = os.path.join(params.outdir, "diagnostic.tsv")
+    logger.info(
+        str(datetime.now()) + "\tExporting diagnostic barcodes: " + diagnostic_path
+    )
+    diagnostic_df.to_csv(diagnostic_path, sep="\t", index=False)
 
 
 def create_tree(params):

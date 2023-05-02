@@ -16,6 +16,7 @@ from .utils import (
     create_annotations,
     create_tree,
     create_barcodes,
+    create_barcodes_diagnostic,
     detect_recombination,
 )
 from . import RebarError
@@ -62,6 +63,10 @@ def dataset(params):
             # barcodes needs tree for clade to lineage mapping
             params.tree = os.path.join(params.outdir, "tree.nwk")
             info["barcodes"] = create_barcodes(params)
+
+            # barcodes needs tree for clade to lineage mapping
+            params.barcodes = os.path.join(params.outdir, "barcodes.tsv")
+            info["diagnostic"] = create_barcodes_diagnostic(params)
 
             # Summarize dataset in yaml file
             info_yaml = yaml.dump(info, sort_keys=False, indent=2)
