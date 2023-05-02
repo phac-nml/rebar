@@ -486,7 +486,7 @@ class Recombination:
             if prev_start_coord:
                 breakpoint_start = prev_end_coord + 1
                 breakpoint_end = start_coord - 1
-                breakpoint = "{}:{}".format(breakpoint_start, breakpoint_end)
+                breakpoint = "{}-{}".format(breakpoint_start, breakpoint_end)
                 breakpoints.append(breakpoint)
 
             prev_start_coord = start_coord

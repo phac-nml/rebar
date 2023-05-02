@@ -38,19 +38,28 @@ class Export:
         result = {r: {} for r in recombinants}
 
         for recombinant in recombinants:
+
             for genome in self.genomes:
                 if genome.lineage.recombinant != recombinant:
                     continue
 
-                # parents = sorted(
                 parents = [
                     genome.recombination.parent_1.name,
                     genome.recombination.parent_2.name,
                 ]
+                # No parent 2, no recombation
+                if not parents[1]:
+                    continue
+
                 parents = "{}_{}".format(parents[0], parents[1])
                 if parents not in result[recombinant]:
-                    result[recombinant][parents] = []
-                result[recombinant][parents].append(genome)
+                    result[recombinant][parents] = {}
+
+                breakpoints_str = "_".join(genome.recombination.breakpoints)
+
+                if breakpoints_str not in result[recombinant][parents]:
+                    result[recombinant][parents][breakpoints_str] = []
+                result[recombinant][parents][breakpoints_str].append(genome)
 
         return result
 
@@ -88,62 +97,74 @@ class Export:
 
             # Process parent groups within recombinant
             for parents in self.recombinants[recombinant]:
+                self.barcodes[recombinant][parents] = {}
+
                 parents_data = self.recombinants[recombinant][parents]
                 parent_1 = parents.split("_")[0]
                 parent_2 = parents.split("_")[1]
 
-                # First pass, identify all ref and parent subs
-                parent_dict = {
-                    "coord": [],
-                    "Reference": [],
-                    parent_1: [],
-                    parent_2: [],
-                }
-                for genome in parents_data:
-                    df = genome.recombination.dataframe
-                    # If we know this is a recombinant, but couldn't detect
-                    # breakpoints, skip over
-                    if type(df) != pd.core.frame.DataFrame:
-                        continue
-                    for rec in df.iterrows():
-                        coord = rec[1]["coord"]
-                        ref = rec[1]["Reference"]
-                        p1 = rec[1][parent_1]
-                        p2 = rec[1][parent_2]
+                # No parent 2 means no recombination
+                if not parent_2:
+                    continue
 
-                        if coord not in parent_dict["coord"]:
-                            parent_dict["coord"].append(coord)
-                            parent_dict["Reference"].append(ref)
-                            parent_dict[parent_1].append(p1)
-                            parent_dict[parent_2].append(p2)
+                # Process breakpoint groups within parents
+                for breakpoints in parents_data:
 
-                parent_df = pd.DataFrame(parent_dict).sort_values(by=["coord"])
+                    # First pass, identify all ref and parent subs
+                    parent_dict = {
+                        "coord": [],
+                        "Reference": [],
+                        parent_1: [],
+                        parent_2: [],
+                    }
 
-                # Second pass, add sample subs
-                for genome in parents_data:
-                    df = genome.recombination.dataframe
-                    bases = []
+                    breakpoints_data = parents_data[breakpoints]
+                    for genome in breakpoints_data:
+                        df = genome.recombination.dataframe
+                        # If we know this is a recombinant, but couldn't detect
+                        # breakpoints, skip over
+                        if type(df) != pd.core.frame.DataFrame:
+                            continue
+                        for rec in df.iterrows():
+                            coord = rec[1]["coord"]
+                            ref = rec[1]["Reference"]
+                            p1 = rec[1][parent_1]
+                            p2 = rec[1][parent_2]
 
-                    for rec in parent_df.iterrows():
-                        coord = rec[1]["coord"]
-                        ref = rec[1]["Reference"]
-                        # If this coord is missing, set to ref
-                        base = ref
-                        coord_row = df[df["coord"] == coord]
-                        if len(coord_row) == 0:
+                            if coord not in parent_dict["coord"]:
+                                parent_dict["coord"].append(coord)
+                                parent_dict["Reference"].append(ref)
+                                parent_dict[parent_1].append(p1)
+                                parent_dict[parent_2].append(p2)
+
+                    parent_df = pd.DataFrame(parent_dict).sort_values(by=["coord"])
+
+                    # Second pass, add sample subs
+                    for genome in breakpoints_data:
+                        df = genome.recombination.dataframe
+                        bases = []
+
+                        for rec in parent_df.iterrows():
+                            coord = rec[1]["coord"]
+                            ref = rec[1]["Reference"]
+                            # If this coord is missing, set to ref
                             base = ref
-                        else:
-                            base = coord_row[genome.id].values[0]
+                            coord_row = df[df["coord"] == coord]
+                            if len(coord_row) == 0:
+                                base = ref
+                            else:
+                                base = coord_row[genome.id].values[0]
 
-                        bases.append(base)
+                            bases.append(base)
 
-                    parent_df[genome.id] = bases
+                        parent_df[genome.id] = bases
 
-                self.barcodes[recombinant][parents] = parent_df
-                file_path = os.path.join(
-                    outdir_barcodes, "{}_{}.tsv".format(recombinant, parents)
-                )
-                parent_df.to_csv(file_path, sep="\t", index=False)
+                    self.barcodes[recombinant][parents][breakpoints] = parent_df
+                    file_path = os.path.join(
+                        outdir_barcodes,
+                        "{}_{}_{}.tsv".format(recombinant, parents, breakpoints),
+                    )
+                    parent_df.to_csv(file_path, sep="\t", index=False)
 
         return self.barcodes
 
@@ -164,34 +185,44 @@ class Export:
 
         # Process recombinant groups
         for recombinant in self.recombinants:
+            # print(recombinant)
             self.alignments[recombinant] = {}
 
             # Process parent groups within recombinant
             for parents in self.recombinants[recombinant]:
+                # print("\t", parents)
+                parents_data = self.recombinants[recombinant][parents]
 
                 # In the summary table, parents are seperated by comma
                 parents_csv = parents.replace("_", ",")
 
-                # Get barcodes and summary for this recombinant
-                barcodes_df = self.barcodes[recombinant][parents]
+                for breakpoints in parents_data:
+                    # Get barcodes and summary for this recombinant
+                    barcodes_df = self.barcodes[recombinant][parents][breakpoints]
 
-                # If we know this is a recombinant, but couldn't detect
-                # breakpoints, skip over
-                if type(barcodes_df) != pd.core.frame.DataFrame:
-                    continue
+                    # If we know this is a recombinant, but couldn't detect
+                    # breakpoints, skip over
+                    if type(barcodes_df) != pd.core.frame.DataFrame:
+                        continue
 
-                summary_df = self.dataframe[
-                    (self.dataframe["recombinant"] == recombinant)
-                    & (self.dataframe["parents_lineage"] == parents_csv)
-                ]
-                output_path = os.path.join(
-                    self.outdir, "plots", "{}_{}.{}".format(recombinant, parents, ext)
-                )
-                plot(
-                    barcodes_df=barcodes_df,
-                    summary_df=summary_df,
-                    annot_df=self.annotations,
-                    output=output_path,
-                )
+                    summary_df = self.dataframe[
+                        (self.dataframe["recombinant"] == recombinant)
+                        & (self.dataframe["parents_lineage"] == parents_csv)
+                        * (
+                            self.dataframe["breakpoints"]
+                            == breakpoints.replace("_", ",")
+                        )
+                    ]
+                    output_path = os.path.join(
+                        self.outdir,
+                        "plots",
+                        "{}_{}_{}.{}".format(recombinant, parents, breakpoints, ext),
+                    )
+                    plot(
+                        barcodes_df=barcodes_df,
+                        summary_df=summary_df,
+                        annot_df=self.annotations,
+                        output=output_path,
+                    )
 
         return 0

@@ -199,8 +199,6 @@ class Genome:
             # Genomic coordinates are 1 based
             coord = i + 1
 
-            # print(i, r, s)
-
             # Missing Data
             if s == "N":
                 self.missing.append(coord)
@@ -604,6 +602,12 @@ class Genome:
         # This section is for legacy detection of SARS-CoV-2 lineages, which have
         # little to no diagnostic mutation/barcode support.
 
+        # num_conflicts = (
+        #   len(self.lineage.conflict_alt) + len(self.lineage.conflict_ref
+        # )
+
+        # Edge cases are for designated recombinants, so only run if the genome
+        # was a perfect match (no conflicts)
         if edge_cases:
             # `handle_edge_cases` will adjust these global parameters, just
             #   for this genome if it's an edge case.
@@ -632,13 +636,16 @@ class Genome:
 
         # If parent_1 has no conflict_refs, don't search for more parents
         # i.e. it's a perfect match, no evidence of recombination
-        if self.debug and len(self.recombination.parent_1.conflict_ref) == 0:
-            self.logger.info(
-                str(datetime.now())
-                + "\t\t"
-                + self.recombination.parent_1.name
-                + " is a perfect match, halting recombinant search."
-            )
+        if len(self.recombination.parent_1.conflict_ref) == 0:
+            if self.debug:
+                self.logger.info(
+                    str(datetime.now())
+                    + "\t\t"
+                    + self.recombination.parent_1.name
+                    + " is a perfect match, halting recombinant search."
+                )
+            # Override the existing lineage assignment with parent_1?
+            self.lineage = self.recombination.parent_1
             self.lineage.recombinant = False
             return 0
 
@@ -713,7 +720,8 @@ class Genome:
                     str(datetime.now())
                     + "\t\t"
                     + self.recombination.parent_1.name
-                    + " has no conflict_alt subs, halting recombinant search."
+                    + " has no lineages that match it's conflict_alt subs"
+                    + " halting recombinant search."
                 )
                 self.lineage.recombinant = False
             return 0

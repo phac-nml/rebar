@@ -21,8 +21,30 @@ def plot(barcodes_df, summary_df, annot_df, output, max_samples=10):
 
     genome_length = int(summary_df["genome_length"].values[0])
 
-    # Check if this is an edge case recombinant
+    # Check if this is an edge case recombinant, annotate with footnote char
     edge_case = summary_df["edge_case"].values[0]
+
+    # Map parent to clade
+    parents_lineage = summary_df["parents_lineage"].values[0]
+    parents_clade = summary_df["parents_clade_lineage"].values[0]
+    lineage_to_clade = {
+        parents_lineage.split(",")[0]: parents_clade.split(",")[0],
+        parents_lineage.split(",")[1]: parents_clade.split(",")[1],
+    }
+
+    # Sort parents according to their region order
+    regions = summary_df["regions"].values[0]
+    # Example: 261-22896|BJ.1,22942-29118|CJ.1
+    regions_split = regions.split(",")
+    parent_order = []
+    for region in regions_split:
+        parent = region.split("|")[1]
+        if parent not in parent_order:
+            parent_order.append(parent)
+
+    # Reorder dataframe columns to have correct parent order
+    cols_order = ["coord", "Reference"] + parent_order + list(barcodes_df.columns[4:])
+    barcodes_df = barcodes_df[cols_order]
 
     # Identify the first and second parent lineage
     parent_1 = barcodes_df.columns[2]
@@ -30,8 +52,8 @@ def plot(barcodes_df, summary_df, annot_df, output, max_samples=10):
 
     # Identify clade of each parent
     parents = summary_df["parents_clade_lineage"].values[0]
-    parent_1_clade_lineage = parents.split(",")[0]
-    parent_2_clade_lineage = parents.split(",")[1]
+    parent_1_clade_lineage = lineage_to_clade[parent_1]
+    parent_2_clade_lineage = lineage_to_clade[parent_2]
 
     # Set up palette to distinguish parents and mutation source
     cmap = plt.get_cmap("tab20", 20)
@@ -154,23 +176,8 @@ def plot(barcodes_df, summary_df, annot_df, output, max_samples=10):
         section_label_x, section_label_y, "Parents", size=fs, ha="right", va="center"
     )
 
-    # Parse regions from summary
-    regions = list(summary_df["regions"])
-    # Check if there are multiple different breakpoint versions
-    # Use whichever one is most common
-    if len(set(regions)) > 1:
-        max_count = 0
-        max_regions = None
-        for r in regions:
-            count = regions.count(r)
-            if count > max_count:
-                max_count = count
-                max_regions = r
-
-        regions = max_regions
-    else:
-        regions = regions[0]
-
+    # Parse regions from summary, use first one, should be similar except 5' 3'
+    regions = summary_df["regions"].values[0]
     regions_split = regions.split(",")
     prev_end = None
 
@@ -429,8 +436,8 @@ def plot(barcodes_df, summary_df, annot_df, output, max_samples=10):
     for i, breakpoint in enumerate(breakpoints_split):
 
         # get region start and end
-        start = int(breakpoint.split(":")[0]) - 1
-        end = int(breakpoint.split(":")[1]) + 1
+        start = int(breakpoint.split("-")[0]) - 1
+        end = int(breakpoint.split("-")[1]) + 1
 
         start_match = barcodes_df[barcodes_df["coord"] == start]
         end_match = barcodes_df[barcodes_df["coord"] == end]
@@ -768,38 +775,14 @@ def plot(barcodes_df, summary_df, annot_df, output, max_samples=10):
 
 # annot_df = pd.read_csv("dataset/sars-cov-2-latest/annotations.tsv", sep="\t")
 
-# barcodes_df = pd.read_csv("output/XAY/barcodes/XAY_CH.1.1.16_B.1.617.2.tsv", sep="\t")
-# summary_df = pd.read_csv("output/XAY/summary.tsv", sep="\t")
-# plot(
-#     barcodes_df=barcodes_df,
-#     summary_df=summary_df,
-#     annot_df=annot_df,
-#     output="output/XAY/plots/XAY_CH.1.1.16_B.1.617.2.png",
-# )
 
-# barcodes_df = pd.read_csv("output/XBC/barcodes/XBC_CJ.1_B.1.617.2.tsv", sep="\t")
-# summary_df = pd.read_csv("output/XBC/summary.tsv", sep="\t")
-# plot(
-#     barcodes_df=barcodes_df,
-#     summary_df=summary_df,
-#     annot_df=annot_df,
-#     output="output/XBC/plots/XBC_CJ.1_B.1.617.2.png",
+# barcodes_df = pd.read_csv(
+# "output/XBB.1.16/barcodes/XBB_BJ.1_CJ.1_22897-22941.tsv", sep="\t"
 # )
-
-# barcodes_df = pd.read_csv("output/XBJ/barcodes/XBJ_BA.2.3.20_BA.5.2.tsv", sep="\t")
-# summary_df = pd.read_csv("output/XBJ/summary.tsv", sep="\t")
-# plot(
-#     barcodes_df=barcodes_df,
-#     summary_df=summary_df,
-#     annot_df=annot_df,
-#     output="output/XBJ/plots/XBJ_BA.2.3.20_BA.5.2.png",
-# )
-
-# barcodes_df = pd.read_csv("output/XBB.1.16/barcodes/XBB_BJ.1_CJ.1.tsv", sep="\t")
 # summary_df = pd.read_csv("output/XBB.1.16/summary.tsv", sep="\t")
 # plot(
 #     barcodes_df=barcodes_df,
 #     summary_df=summary_df,
 #     annot_df=annot_df,
-#     output="output/XBB.1.16/plots/XBB_BJ.1_CJ.1.png",
+#     output="output/XBB.1.16/plots/XBB_BJ.1_CJ.1_22897-22941.png",
 # )
