@@ -61,6 +61,9 @@ def test_handle_edge_cases(params, edge_cases_expected):
     edge_case_lineages = list(subs_df["strain"])
     edge_case_recombinants = []
 
+    # Debugging
+    # edge_case_lineages = ["XP"]
+
     conflict = False
 
     for lineage in edge_case_lineages:
@@ -85,6 +88,12 @@ def test_handle_edge_cases(params, edge_cases_expected):
         )
 
         recombinant = lineage_genome.lineage.recombinant
+
+        if recombinant is False:
+            conflict = True
+            print("lineage: {}, no recombination detected.".format(lineage))
+            continue
+
         if recombinant not in edge_case_recombinants:
             edge_case_recombinants.append(recombinant)
 
