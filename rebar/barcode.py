@@ -36,6 +36,7 @@ class Barcode:
         self.conflict_ref = []
         self.conflict_alt = []
         self.definition = None
+        self.definition_aa = None
 
         # Run search
         if (
@@ -156,6 +157,10 @@ class Barcode:
         largest_totals.reverse()
         max_barcodes = largest_totals[0:top_n]
 
+        # Subs must be within top_n of largest total
+        max_total = largest_totals[0]
+        max_barcodes = [t for t in largest_totals[0:top_n] if t > (max_total - top_n)]
+
         # max_barcodes = barcode_summary["total"].max()
         top_lineages = list(
             barcode_summary[barcode_summary["total"].isin(max_barcodes)]["lineage"]
@@ -214,6 +219,8 @@ class Barcode:
                 l for l in top_lineages if l not in lineage_descendants
             ]
 
+            print("outlier_lineages_1:", outlier_lineages)
+
             # 2ND OUTLIER STAGE: minimum conflicts, aka parsimony
             top_lineages_subsample_filtered = [
                 l for l in top_lineages_subsample if l not in outlier_lineages
@@ -247,6 +254,8 @@ class Barcode:
             outlier_lineages += [
                 l for l in top_lineages if l not in lineage_descendants
             ]
+
+            print("outlier_lineages_2:", outlier_lineages)
 
         # ---------------------------------------------------------------------
         # Lineage to Clade
@@ -395,7 +404,7 @@ class Barcode:
 
         return 0
 
-    def set_definition(self):  # annotations):
+    def set_definition(self):
         self.definition = self.name
         if len(self.conflict_alt) > 0:
             self.definition += "+" + ",".join([str(s) for s in self.conflict_alt])
