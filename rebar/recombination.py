@@ -292,6 +292,12 @@ class Recombination:
 
         # Reconcile 5' vs. 3' differences, by increasing uncertainty
         regions_intersect = self.intersect_regions(regions_5p, regions_3p)
+        # During reconciliation, it's possible that a region from 1 single parent
+        # got broken up into multiple adjacent sections. Put it through the
+        # filter again to collapse it.
+        regions_intersect = self.filter_regions_5p(
+            regions_intersect, min_consecutive, min_length
+        )
 
         if genome.debug:
             genome.logger.info(
@@ -471,6 +477,9 @@ class Recombination:
                     "subs": sorted(subs_intersect),
                 }
 
+        # We should probably repeat this doing r2 to r1 comparisons
+        # because there might be r2 regions not at all contained by r1
+        # I need to find an exmaple or simulate to test this
         return regions_intersect
 
     def identify_breakpoints(self, regions):

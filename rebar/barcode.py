@@ -18,6 +18,7 @@ class Barcode:
         recombinant_lineages=None,
         recombinant_tree=None,
         lineage_to_clade=None,
+        top_n=1,
     ):
         # Initialize attributes
         self.name = None
@@ -50,6 +51,7 @@ class Barcode:
                 barcodes,
                 tree,
                 lineage_to_clade,
+                top_n=top_n,
             )
 
         # Set recombinant status (self.recombinant and self.recursive)
@@ -141,8 +143,8 @@ class Barcode:
         barcodes,
         tree,
         lineage_to_clade,
-        max_top_lineages=10,
-        outlier_method="min_conflict",
+        subsample_threshold=10,
+        top_n=1,
     ):
 
         # No barcode matches
@@ -150,9 +152,13 @@ class Barcode:
             return 0
 
         # Identify the lineages with the largest number of barcode matches
-        max_barcodes = barcode_summary["total"].max()
+        largest_totals = sorted(list(set(barcode_summary["total"])))
+        largest_totals.reverse()
+        max_barcodes = largest_totals[0:top_n]
+
+        # max_barcodes = barcode_summary["total"].max()
         top_lineages = list(
-            barcode_summary[barcode_summary["total"] == max_barcodes]["lineage"]
+            barcode_summary[barcode_summary["total"].isin(max_barcodes)]["lineage"]
         )
         top_lineages_subsample = top_lineages
 
@@ -165,25 +171,55 @@ class Barcode:
 
         outlier_lineages = []
 
+        # ---------------------------------------------------------------------
+        # Outlier Detection
+
         # if there's only one or two top lineages, there's no outliers
         if len(top_lineages) < 2:
             outlier_lineages = []
 
-        # For future interest, I might want to combine the 'min_conflict' and
-        # 'distance' outlier methods into one
-
-        elif outlier_method == "min_conflict":
+        else:
 
             # Fix the seed, so that results are the same every rerun
             random.seed(123456)
             # If there are a large number of top_lineages, subsample down for speed
-            if len(top_lineages) > max_top_lineages:
+            if len(top_lineages) > subsample_threshold:
                 top_lineages_subsample = random.choices(
-                    top_lineages, k=max_top_lineages
+                    top_lineages, k=subsample_threshold
                 )
 
-            conflict_count = {lin: 0 for lin in top_lineages_subsample}
-            for lin in top_lineages_subsample:
+            # 1ST OUTLIER STAGE: phylogenetic distance to mrca
+            #   Ex. needed for XAT
+            distances_summary = {}
+            for l1 in top_lineages_subsample:
+                distances = []
+                for l2 in top_lineages_subsample:
+                    if l1 == l2:
+                        continue
+                    distances.append(tree.distance(l1, l2))
+                distances_summary[l1] = statistics.mean(distances)
+
+            distances_mode = statistics.mode(distances_summary.values())
+
+            # Identify all the non-outliers in the subsampled lineages
+            keep_lineages = [
+                l for l, d in distances_summary.items() if d <= distances_mode
+            ]
+            # Grab the MRCA+descendants of the non-outliers subsample
+            lineage_tree = tree.common_ancestor(keep_lineages)
+            lineage = lineage_tree.name
+            lineage_descendants = [c.name for c in lineage_tree.find_clades()]
+            # Filter out top_lineages if outside the MRCA clade
+            outlier_lineages += [
+                l for l in top_lineages if l not in lineage_descendants
+            ]
+
+            # 2ND OUTLIER STAGE: minimum conflicts, aka parsimony
+            top_lineages_subsample_filtered = [
+                l for l in top_lineages_subsample if l not in outlier_lineages
+            ]
+            conflict_count = {lin: 0 for lin in top_lineages_subsample_filtered}
+            for lin in top_lineages_subsample_filtered:
                 row = barcodes.query("lineage == @lin")
                 subs = sorted(
                     [Substitution(s) for s in row.columns[1:] if list(row[s])[0] == 1]
@@ -196,54 +232,24 @@ class Barcode:
 
             min_conflict_count = min(conflict_count.values())
 
-            # Redo outlier lineages, and MRCA
+            # Identify all the non-outliers in the subsampled lineages
             keep_lineages = [
                 lin
                 for lin, count in conflict_count.items()
                 if count == min_conflict_count
             ]
 
+            # Grab the MRCA+descendants of the non-outliers subsample
             lineage_tree = tree.common_ancestor(keep_lineages)
             lineage = lineage_tree.name
             lineage_descendants = [c.name for c in lineage_tree.find_clades()]
+            # Filter out top_lineages if outside the MRCA clade
             outlier_lineages += [
                 l for l in top_lineages if l not in lineage_descendants
             ]
 
-        elif outlier_method == "distance":
-
-            # Fix the seed, so that results are the same every rerun
-            random.seed(123456)
-            # If there are a large number of top_lineages, subsample down for speed
-            if len(top_lineages) > max_top_lineages:
-                top_lineages_subsample = random.choices(
-                    top_lineages, k=max_top_lineages
-                )
-
-            distances_summary = {}
-            for l1 in top_lineages_subsample:
-                distances = []
-                for l2 in top_lineages_subsample:
-                    if l1 == l2:
-                        continue
-                    distances.append(tree.distance(l1, l2))
-                distances_summary[l1] = statistics.mean(distances)
-
-            distances_mode = statistics.mode(distances_summary.values())
-
-            # Redo top lineages, outlier lineages, and MRCA
-            keep_lineages = [
-                l for l, d in distances_summary.items() if d <= distances_mode
-            ]
-            outlier_lineages = [
-                l for l, d in distances_summary.items() if d > distances_mode
-            ]
-            lineage_tree = tree.common_ancestor(keep_lineages)
-            lineage = lineage_tree.name
-            lineage_descendants = [c.name for c in lineage_tree.find_clades()]
-            outlier_lineages += [
-                l for l in top_lineages if l not in lineage_descendants
-            ]
+        # ---------------------------------------------------------------------
+        # Lineage to Clade
 
         # Get clade of lineage
         if lineage in list(lineage_to_clade["lineage"]):
@@ -265,6 +271,9 @@ class Barcode:
                     + "\t\t\tWARNING: unknown clade for lineage "
                     + str(lineage)
                 )
+
+        # ---------------------------------------------------------------------
+        # Substitution Conflicts
 
         # There might be a case where a sub conflicts with the mrca of top_lineages
         # but is still found in all of the top_lineages. Don't consider these subs
@@ -336,6 +345,9 @@ class Barcode:
         conflict_ref = [s for s in conflict_ref if s in conflict_subs]
         conflict_alt = [s for s in conflict_alt if s in conflict_subs]
 
+        # ---------------------------------------------------------------------
+        # Update Attributes
+
         self.name = lineage
         self.definition = lineage
         self.clade = clade
@@ -383,7 +395,7 @@ class Barcode:
 
         return 0
 
-    def set_definition(self):
+    def set_definition(self):  # annotations):
         self.definition = self.name
         if len(self.conflict_alt) > 0:
             self.definition += "+" + ",".join([str(s) for s in self.conflict_alt])

@@ -34,6 +34,7 @@ def plot(barcodes_df, summary_df, annot_df, output, max_samples=10):
 
     # Sort parents according to their region order
     regions = summary_df["regions"].values[0]
+
     # Example: 261-22896|BJ.1,22942-29118|CJ.1
     regions_split = regions.split(",")
     parent_order = []
@@ -775,6 +776,17 @@ def plot(barcodes_df, summary_df, annot_df, output, max_samples=10):
 
 # annot_df = pd.read_csv("dataset/sars-cov-2-latest/annotations.tsv", sep="\t")
 
+# barcodes_df = pd.read_csv(
+# "output/controls_gisaid/barcodes/XAC_BA.2.3_BA.5.1.34_26530-27437.tsv", sep="\t"
+# )
+# summary_df = pd.read_csv("output/controls_gisaid/summary.tsv", sep="\t")
+# summary_df = summary_df[summary_df["strain"] == "hCoV-19/USA/CA-CDC-QDX36262131/2022"]
+# plot(
+#     barcodes_df=barcodes_df,
+#     summary_df=summary_df,
+#     annot_df=annot_df,
+#     output="output/controls_gisaid/plots/XAC_BA.2.3_BA.5.1.34_26530-27437.png",
+# )
 
 # barcodes_df = pd.read_csv(
 # "output/XBB.1.16/barcodes/XBB_BJ.1_CJ.1_22897-22941.tsv", sep="\t"

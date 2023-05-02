@@ -47,8 +47,9 @@ class Export:
                     genome.recombination.parent_1.name,
                     genome.recombination.parent_2.name,
                 ]
+                parent_2 = parents[1]
                 # No parent 2, no recombation
-                if not parents[1]:
+                if not parent_2:
                     continue
 
                 parents = "{}_{}".format(parents[0], parents[1])

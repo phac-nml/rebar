@@ -44,6 +44,7 @@ class Genome:
         edge_cases=False,
         validate=None,
         dataset_info=None,
+        annotations=None,
     ):
         """
         Genome constructor. Parses genomic features from a sequence records or
@@ -134,6 +135,7 @@ class Genome:
         ):
             if self.debug:
                 self.logger.info(str(datetime.now()) + "\t\t" + "LINEAGE ASSIGNMENT:")
+
             self.lineage = self.lineage_assignment(
                 barcode_summary=self.barcode_summary,
                 barcodes=barcodes,
@@ -141,6 +143,7 @@ class Genome:
                 recombinant_lineages=recombinant_lineages,
                 recombinant_tree=recombinant_tree,
                 lineage_to_clade=lineage_to_clade,
+                top_n=3,
             )
             self.lineage.set_definition()
 
@@ -266,7 +269,10 @@ class Genome:
         # Count up barcode mutations by lineage
         cols = ["lineage"] + barcodes_subs
         df = copy(barcodes[cols])
+
+        # Count up total support for each lineage
         df["total"] = df[barcodes_subs].sum(axis=1)
+
         summary_df = (
             df[["lineage", "total"]]
             .query("total > 0")
@@ -481,6 +487,8 @@ class Genome:
         recombinant_lineages,
         recombinant_tree,
         lineage_to_clade,
+        top_n=1,
+        # annotations,
     ):
         """
         Assign genome to a lineage based on the top barcode matches.
@@ -510,6 +518,7 @@ class Genome:
             recombinant_lineages=recombinant_lineages,
             recombinant_tree=recombinant_tree,
             lineage_to_clade=lineage_to_clade,
+            top_n=top_n,
         )
 
         if self.debug:
@@ -635,8 +644,16 @@ class Genome:
         )
 
         # If parent_1 has no conflict_refs, don't search for more parents
-        # i.e. it's a perfect match, no evidence of recombination
-        if len(self.recombination.parent_1.conflict_ref) == 0:
+        #     i.e. it's a perfect match, no evidence of recombination
+        # exception: recursive recombinants such as XBL are a perfect match
+        #    to their recombinant parent XBB conflict_ref
+        #    I'm not 100% convinced by this logic, I think the problem is more
+        #    generally when the recombinant lineage is extremely closely related
+        #    to it's parents.
+        if (
+            len(self.recombination.parent_1.conflict_ref) == 0
+            and not self.lineage.recursive
+        ):
             if self.debug:
                 self.logger.info(
                     str(datetime.now())
@@ -795,8 +812,18 @@ class Genome:
                     if l not in parent_2.outlier_lineages
                 ]
 
+        # No recombination detected
         if not recombination_detected and not self.lineage.recombinant:
             self.lineage.recombinant = False
+
+        # Both parents are the same, something has gone wrong!!
+        if self.recombination.parent_1.name == self.recombination.parent_2.name:
+            msg = "RebarError: {} parent_1 and parent_2 are identical ({})".format(
+                self.id, self.recombination.parent_1.name
+            )
+            # # has multiprocess hang complications
+            # raise SystemExit(RebarError(msg))
+            self.logger.info(str(datetime.now()) + "\t\t" + msg)
 
         return 0
 
