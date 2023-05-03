@@ -506,8 +506,8 @@ def create_barcodes_diagnostic(params):
 
             # Check if monophyletic (found only in descendants)
             monophyletic = True
-            for lineage in children:
-                if lineage not in lineages:
+            for lineage in lineages:
+                if lineage not in children:
                     monophyletic = False
                     break
 
@@ -789,6 +789,13 @@ def detect_recombination(params):
     logger.info(str(datetime.now()) + "\tImporting barcodes: " + params.barcodes)
     barcodes_df = pd.read_csv(params.barcodes, sep="\t")
 
+    # Import diagnostic barcodes
+    diagnostic_path = os.path.join(params.dataset, "diagnostic.tsv")
+    logger.info(
+        str(datetime.now()) + "\tImporting diagnostic barcodes: " + diagnostic_path
+    )
+    diagnostic_df = pd.read_csv(diagnostic_path, sep="\t")
+
     # Import tree
     logger.info(str(datetime.now()) + "\tImporting tree: " + params.tree)
     tree = Phylo.read(params.tree, "newick")
@@ -823,6 +830,7 @@ def detect_recombination(params):
         logger=params.logger,
         dataset_info=dataset_info,
         barcodes=barcodes_df,
+        diagnostic=diagnostic_df,
         tree=tree,
         recombinant_tree=recombinant_tree,
         recombinant_lineages=recombinant_lineages,

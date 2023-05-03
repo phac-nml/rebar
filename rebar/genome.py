@@ -29,6 +29,7 @@ class Genome:
         reference=None,
         subs_row=None,
         barcodes=None,
+        diagnostic=None,
         tree=None,
         recombinant_tree=None,
         recombinant_lineages=None,
@@ -128,6 +129,7 @@ class Genome:
         if (
             type(self.barcode_summary) == pd.core.frame.DataFrame
             and type(lineage_to_clade) == pd.core.frame.DataFrame
+            and type(diagnostic) == pd.core.frame.DataFrame
             and tree
             and recombinant_lineages
             and recombinant_tree
@@ -142,12 +144,14 @@ class Genome:
                 recombinant_lineages=recombinant_lineages,
                 recombinant_tree=recombinant_tree,
                 lineage_to_clade=lineage_to_clade,
+                diagnostic=diagnostic,
                 top_n=3,
             )
             self.lineage.set_definition()
 
             self.parent_assignment(
                 barcodes=barcodes,
+                diagnostic=diagnostic,
                 tree=tree,
                 recombinant_lineages=recombinant_lineages,
                 recombinant_tree=recombinant_tree,
@@ -482,6 +486,7 @@ class Genome:
         self,
         barcode_summary,
         barcodes,
+        diagnostic,
         tree,
         recombinant_lineages,
         recombinant_tree,
@@ -516,6 +521,7 @@ class Genome:
             recombinant_lineages=recombinant_lineages,
             recombinant_tree=recombinant_tree,
             lineage_to_clade=lineage_to_clade,
+            diagnostic=diagnostic,
             top_n=top_n,
         )
 
@@ -528,6 +534,7 @@ class Genome:
     def parent_assignment(
         self,
         barcodes,
+        diagnostic,
         tree,
         recombinant_lineages,
         recombinant_tree,
@@ -639,6 +646,7 @@ class Genome:
             recombinant_lineages=recombinant_lineages,
             recombinant_tree=recombinant_tree,
             lineage_to_clade=lineage_to_clade,
+            diagnostic=diagnostic,
         )
 
         # If parent_1 has no conflict_refs, don't search for more parents
@@ -774,6 +782,7 @@ class Genome:
             parent_2 = self.lineage_assignment(
                 barcode_summary=barcode_summary,
                 barcodes=barcodes,
+                diagnostic=diagnostic,
                 tree=tree,
                 recombinant_lineages=recombinant_lineages,
                 recombinant_tree=recombinant_tree,

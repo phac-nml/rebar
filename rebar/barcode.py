@@ -1,6 +1,7 @@
 import yaml
 import statistics
-import random
+
+# import random
 from datetime import datetime
 
 import pandas as pd
@@ -19,6 +20,7 @@ class Barcode:
         recombinant_tree=None,
         lineage_to_clade=None,
         top_n=1,
+        diagnostic=None,
     ):
         # Initialize attributes
         self.name = None
@@ -30,6 +32,7 @@ class Barcode:
         self.recombinant = None
         self.recursive = None
         self.edge_case = False
+        self.diagnostic = []
         self.barcode = []
         self.support = []
         self.missing = []
@@ -42,17 +45,21 @@ class Barcode:
         if (
             genome
             and tree
+            and recombinant_lineages
             and type(barcode_summary) == pd.core.frame.DataFrame
             and type(barcodes) == pd.core.frame.DataFrame
+            and type(diagnostic) == pd.core.frame.DataFrame
             and type(lineage_to_clade) == pd.core.frame.DataFrame
         ):
             self.search(
-                genome,
-                barcode_summary,
-                barcodes,
-                tree,
-                lineage_to_clade,
+                genome=genome,
+                barcode_summary=barcode_summary,
+                barcodes=barcodes,
+                tree=tree,
+                recombinant_lineages=recombinant_lineages,
+                lineage_to_clade=lineage_to_clade,
                 top_n=top_n,
+                diagnostic=diagnostic,
             )
 
         # Set recombinant status (self.recombinant and self.recursive)
@@ -81,6 +88,8 @@ class Barcode:
             + str(self.outlier_lineages)
             + "\nbarcode:      "
             + str(self.barcode)
+            + "\ndiagnostic:      "
+            + str(self.diagnostic)
             + "\nsupport:      "
             + str(self.support)
             + "\nmissing:      "
@@ -142,124 +151,282 @@ class Barcode:
         genome,
         barcode_summary,
         barcodes,
+        recombinant_lineages,
         tree,
         lineage_to_clade,
-        subsample_threshold=10,
+        diagnostic,
+        max_lineages=10,
         top_n=1,
     ):
-
-        # No barcode matches
+        # No barcode matches, stop the search
         if len(barcode_summary) == 0:
             return 0
 
-        # Identify the lineages with the largest number of barcode matches
+        # ---------------------------------------------------------------------
+        # Iterative Searches
+
+        # print(barcode_summary)
+        # Search Method #1 : Candidate Top Lineage Matches
+        top_lineages = self.search_candidate_matches(barcode_summary, top_n)
+        # print("search_1:", top_lineages)
+
+        # Assume all lineages are outliers to begin with, we will remove
+        # lineages from this list that survive all search methods.
+        outlier_lineages = top_lineages
+
+        # Search Method #2: Lineage-diagnostic mutations
+        top_lineages = self.search_diagnostic_mutations(
+            genome, top_lineages, diagnostic, tree
+        )
+        # print("search_2:", top_lineages)
+
+        # If our top_lineages list is too long ( > subsample_threshold ), subsample
+        top_lineages_subsample = top_lineages
+        if len(top_lineages) > max_lineages:
+            # Option 1: Take top subsample_threshold samples
+            top_lineages_subsample = top_lineages[0:max_lineages]
+            # Option 2: Randomly select samples, this is not working well
+            # Fix the seed, so that results are the same every rerun
+            # random.seed(123456)
+            # top_lineages_subsample = random.choices(
+            #     top_lineages, k=subsample_threshold
+            # )
+
+        # print("search_2:", top_lineages_subsample)
+        # Search Method #3: Pairwise Distance
+        #   If our top_lineages are a mix of recombinants and non-recombinants
+        #   don't use this filter, because distances will be uninformative
+        #   since recombinants have pseudo-tree placements under a fake "X" node
+        top_lineages_rec = [l for l in top_lineages if l in recombinant_lineages]
+        top_lineages_non_rec = [l for l in top_lineages if l not in top_lineages_rec]
+        if len(top_lineages_rec) == 0 or len(top_lineages_non_rec) == 0:
+            top_lineages = self.search_pairwise_distance(top_lineages_subsample, tree)
+        else:
+            top_lineages = top_lineages_subsample
+        # print("search_3:", top_lineages)
+
+        # Search Method #4: Maximum Parsimony
+        top_lineages = self.search_maximum_parsimony(genome, top_lineages, barcodes)
+        # print("search_4:", top_lineages)
+
+        # ---------------------------------------------------------------------
+        # Summarize Search
+
+        outlier_lineages = [l for l in outlier_lineages if l not in top_lineages]
+        lineage = tree.common_ancestor(top_lineages).name
+        clade, clade_lineage = self.convert_lineage_to_clade(
+            genome, lineage, lineage_to_clade
+        )
+        (
+            lineage_barcode,
+            support,
+            conflict_alt,
+            conflict_ref,
+            missing,
+        ) = self.summarise_top_lineages(genome, lineage, top_lineages, barcodes)
+
+        # ---------------------------------------------------------------------
+        # Update Attributes
+
+        self.name = lineage
+        self.definition = lineage
+        self.clade = clade
+        self.clade_lineage = clade_lineage
+        self.top_lineages = top_lineages
+        self.top_lineages_subsample = top_lineages_subsample
+        self.outlier_lineages = outlier_lineages
+        self.barcode = lineage_barcode
+        self.support = support
+        self.missing = missing
+        self.conflict_ref = conflict_ref
+        self.conflict_alt = conflict_alt
+
+        return 0
+
+    def search_candidate_matches(self, barcode_summary, top_n):
+        # Identify the lineage(s) with the largest number of barcode matches
+        # taking the top_n matches. Lineages such as XV require relaxation of
+        # the top_n parameter (top_n=3) because XV is NOT the lineage with
+        # the hightest number of matches.
+        #   Example: XV
+        #   top_n=3
+        #   XJ [61, yes], XV [60, yes],  XY [60, yes], XAF [59, yes], XE [58, no]
         largest_totals = sorted(list(set(barcode_summary["total"])))
         largest_totals.reverse()
         max_barcodes = largest_totals[0:top_n]
 
-        # Subs must be within top_n of largest total
+        # Restrict to lineages with subs within top_n of largest total
+        #   Lineage: B.1.634
+        #   largest_total=27
+        #   min_subs=25
+        #   B.1.634 [27, yes], XB [15, no], XAY.3 [10, no], XAY.2.3 [10, no]
         max_total = largest_totals[0]
-        max_barcodes = [t for t in largest_totals[0:top_n] if t > (max_total - top_n)]
+        min_subs = max_total - top_n - 1
+        max_barcodes = [t for t in largest_totals[0:top_n] if t > min_subs]
 
-        # max_barcodes = barcode_summary["total"].max()
+        # Identify our top lineages based on the above criteria
         top_lineages = list(
             barcode_summary[barcode_summary["total"].isin(max_barcodes)]["lineage"]
         )
-        top_lineages_subsample = top_lineages
 
-        # Get MRCA of all top_lineages
-        lineage = tree.common_ancestor(top_lineages).name
-        distances = {}
-        # Check for top lineage outliers
-        for l in top_lineages:
-            distances[l] = tree.distance(lineage, l)
+        return top_lineages
 
-        outlier_lineages = []
-
+    def search_diagnostic_mutations(self, genome, top_lineages, diagnostic, tree):
         # ---------------------------------------------------------------------
-        # Outlier Detection
+        # Outlier Detection #1: Lineage Diagnostic Mutations
+        #   If a sub in genome.substitutions is diagnostic for a particular
+        #   lineage or its descendants, we will retain only those lineages.
+        #
+        #   Example: XBK
+        #     XBK.1 [88], XBK [88], XBQ [87], CJ.1 [86], CJ [86], ...
+        #     There are so many CJ.1 close matches, diagnostic mutations
+        #     helps us resolve that XBK* is actually the best match.
 
-        # if there's only one or two top lineages, there's no outliers
-        if len(top_lineages) < 2:
-            outlier_lineages = []
+        # if there's only one top lineage, just return that
+        if len(top_lineages) <= 1:
+            return top_lineages
+
+        keep_lineages = []
+
+        # Search for diagnostic mutations in the genome subs
+        for s in genome.substitutions:
+
+            s_row = diagnostic[diagnostic["mutation"] == str(s)]
+
+            if len(s_row) == 0:
+                continue
+
+            s_lin = s_row["lineage"].values[0]
+            s_include_desc = s_row["include_descendants"].values[0]
+
+            s_top_lin = []
+            # Complex, descendant match
+            if s_include_desc:
+                s_desc = [c.name for c in next(tree.find_clades(s_lin)).find_clades()]
+                s_top_lin += [l for l in s_desc if l in top_lineages]
+
+            # Simple, exact match
+            elif s_lin in top_lineages:
+                s_top_lin.append(s_lin)
+
+            keep_lineages += s_top_lin
+
+        # Remove duplicates
+        keep_lineages = list(set(keep_lineages))
+
+        # If we found keepers, return those
+        if len(keep_lineages) > 0:
+            return keep_lineages
+        # otherwise, just return original top_lineages
+        else:
+            return top_lineages
+
+    def search_pairwise_distance(self, top_lineages, tree):
+        # ---------------------------------------------------------------------
+        # Outlier Detection #2: Pairwise-Phylogenetic Distance
+        #  If a lineage is too far away from the other candidate linages
+        #  (ie. phylogenetic outlier), we will remove it. The value of this
+        #  method is mainly when no diagnostic mutations are observed for
+        #  detection method #1.
+        #
+        #  Example: XAT
+
+        # if there's 2 or less top lineage, can't use this method
+        if len(top_lineages) <= 2:
+            return top_lineages
 
         else:
-
-            # Fix the seed, so that results are the same every rerun
-            random.seed(123456)
-            # If there are a large number of top_lineages, subsample down for speed
-            if len(top_lineages) > subsample_threshold:
-                top_lineages_subsample = random.choices(
-                    top_lineages, k=subsample_threshold
-                )
-
-            # 1ST OUTLIER STAGE: phylogenetic distance to mrca
-            #   Ex. needed for XAT
             distances_summary = {}
-            for l1 in top_lineages_subsample:
+
+            # Calculate all pairwise distances between lineages
+            # this is why we subsample, otherwise extraordinarily slow
+            for l1 in top_lineages:
                 distances = []
-                for l2 in top_lineages_subsample:
+                for l2 in top_lineages:
                     if l1 == l2:
                         continue
                     distances.append(tree.distance(l1, l2))
+
+                # Summarize the pairwise distances for this lineage by `mean`
                 distances_summary[l1] = statistics.mean(distances)
 
+            # The mode of all mean distances (confusing, I know) is how
+            # we'll find the threshold for outliers
             distances_mode = statistics.mode(distances_summary.values())
 
-            # Identify all the non-outliers in the subsampled lineages
+            # keeper lineages are ones where there mean pairwise distance
+            # was less than or equal to the mode (most frequently observed distance)
             keep_lineages = [
                 l for l, d in distances_summary.items() if d <= distances_mode
             ]
-            # Grab the MRCA+descendants of the non-outliers subsample
-            lineage_tree = tree.common_ancestor(keep_lineages)
-            lineage = lineage_tree.name
-            lineage_descendants = [c.name for c in lineage_tree.find_clades()]
-            # Filter out top_lineages if outside the MRCA clade
-            outlier_lineages += [
-                l for l in top_lineages if l not in lineage_descendants
-            ]
 
-            print("outlier_lineages_1:", outlier_lineages)
+        # If we found keepers, return those
+        if len(keep_lineages) > 0:
+            return keep_lineages
+        # otherwise, just return original top_lineages
+        else:
+            return top_lineages
 
-            # 2ND OUTLIER STAGE: minimum conflicts, aka parsimony
-            top_lineages_subsample_filtered = [
-                l for l in top_lineages_subsample if l not in outlier_lineages
-            ]
-            conflict_count = {lin: 0 for lin in top_lineages_subsample_filtered}
-            for lin in top_lineages_subsample_filtered:
+    def search_maximum_parsimony(self, genome, top_lineages, barcodes):
+        # ---------------------------------------------------------------------
+        # Outlier Detection #3: Maximum Parsimony (ie. minimum conflicts)
+        # If lineages are tied for best match at this point, we will prefer the
+        # lineage with the least sub conflicts with the genome.substitutions.
+        # This is deliberately put after the pairwise-distance method, for reasons
+        # I need to document.
+
+        # Subsampling was already done in detection #2. But we need to exclude
+        # any additional outliers from it. We don't directly modify the variable
+        # top_lineages_subsample, because we want to display it in the end for debug.
+
+        # if there's only one top lineage, there are no outliers
+        if len(top_lineages) <= 1:
+            return top_lineages
+
+        else:
+            parsimony_summary = {lin: 0 for lin in top_lineages}
+
+            for lin in top_lineages:
                 row = barcodes.query("lineage == @lin")
                 subs = sorted(
                     [Substitution(s) for s in row.columns[1:] if list(row[s])[0] == 1]
                 )
+
+                # support: sub in genome also in candidate's barcode
+                support = [s for s in genome.substitutions if s in subs]
+                # conflict_alt: sub in genome that is not in candidate's barcode
+                #               ie. unexpected ALT base.
                 conflict_alt = [s for s in genome.substitutions if s not in subs]
-                conflict_ref = [s for s in subs if s not in genome.substitutions]
+                # conflict_ref: sub in candidate's barcode that is not in genome
+                #               ie. unexpected REF base.
+                conflict_ref = [
+                    s
+                    for s in subs
+                    if s not in genome.substitutions
+                    and s.coord not in genome.missing
+                    and s.coord not in genome.deletions
+                ]
 
-                conflict_total = len(conflict_alt) + len(conflict_ref)
-                conflict_count[lin] = conflict_total
+                # our parsimony score is support - conflict
+                parsimony_score = len(support) - (len(conflict_alt) + len(conflict_ref))
+                parsimony_summary[lin] = parsimony_score
 
-            min_conflict_count = min(conflict_count.values())
+            # Identify maximum parsimony lineage
+            max_parsimony_count = max(parsimony_summary.values())
 
             # Identify all the non-outliers in the subsampled lineages
             keep_lineages = [
-                lin
-                for lin, count in conflict_count.items()
-                if count == min_conflict_count
+                l for l, c in parsimony_summary.items() if c == max_parsimony_count
             ]
 
-            # Grab the MRCA+descendants of the non-outliers subsample
-            lineage_tree = tree.common_ancestor(keep_lineages)
-            lineage = lineage_tree.name
-            lineage_descendants = [c.name for c in lineage_tree.find_clades()]
-            # Filter out top_lineages if outside the MRCA clade
-            outlier_lineages += [
-                l for l in top_lineages if l not in lineage_descendants
-            ]
+        # If we found keepers, return those
+        if len(keep_lineages) > 0:
+            return keep_lineages
+        # otherwise, just return original top_lineages
+        else:
+            return top_lineages
 
-            print("outlier_lineages_2:", outlier_lineages)
-
-        # ---------------------------------------------------------------------
-        # Lineage to Clade
-
+    def convert_lineage_to_clade(self, genome, lineage, lineage_to_clade):
         # Get clade of lineage
         if lineage in list(lineage_to_clade["lineage"]):
             clade = lineage_to_clade[lineage_to_clade["lineage"] == lineage][
@@ -280,25 +447,36 @@ class Barcode:
                     + "\t\t\tWARNING: unknown clade for lineage "
                     + str(lineage)
                 )
+        return clade, clade_lineage
 
-        # ---------------------------------------------------------------------
-        # Substitution Conflicts
-
+    def summarise_top_lineages(self, genome, lineage, top_lineages, barcodes):
         # There might be a case where a sub conflicts with the mrca of top_lineages
         # but is still found in all of the top_lineages. Don't consider these subs
         # to be conflicts.
         # Ex. XAJ. T15009C is a conflict for MRCA BA.2.12.1, but all top_lineages
         #          (BG*) have that sub.
-        # Identify the subs that all the top lineages shared
+
+        # Get the full barcode for the final lineage
+        lineage_row = barcodes[barcodes["lineage"] == lineage]
+        # No lineages may match if it was MRCA:
+        lineage_barcode = []
+        if len(lineage_row) > 0:
+            lineage_barcode = [
+                Substitution(s)
+                for s in lineage_row.columns[1:]
+                if list(lineage_row[s])[0] == 1
+            ]
+
+        # Identify subs for each top lineage
         top_lineages_subs = []
-        for lin in top_lineages_subsample:
-            if lin in outlier_lineages:
-                continue
-            row = barcodes.query("lineage == @lin")
+        for lin in top_lineages:
+            row = barcodes[barcodes["lineage"] == lin]
             subs = sorted(
                 [Substitution(s) for s in row.columns[1:] if list(row[s])[0] == 1]
             )
             top_lineages_subs += subs
+
+        # Identify the subs that are shared among all
         top_lineages_subs_shared = sorted(
             [
                 s
@@ -307,29 +485,13 @@ class Barcode:
             ]
         )
 
-        # Query the levels of support/conflict in this barcode
-        lineage_row = barcodes.query("lineage == @lineage")
-
-        # No lineages matching, possibly because it's MRCA:
-        if len(lineage_row) == 0:
-            lineage_subs = []
-        else:
-            lineage_subs = [
-                Substitution(s)
-                for s in lineage_row.columns[1:]
-                if list(lineage_row[s])[0] == 1
-            ]
-            # Add in the top_lineages shared subs
-            # This interferes with plotting of XBJ. Where is it a benefit?
-            # lineage_subs = sorted(list(set(lineage_subs + top_lineages_subs_shared)))
-
         # Get the barcode subs that were observed
-        support = sorted([s for s in lineage_subs if s in genome.substitutions])
+        support = sorted([s for s in lineage_barcode if s in genome.substitutions])
         # Get the barcodes subs that were missing data
         missing = sorted(
             [
                 s
-                for s in lineage_subs
+                for s in lineage_barcode
                 if s not in genome.substitutions and s.coord in genome.missing
             ]
         )
@@ -337,7 +499,7 @@ class Barcode:
         conflict_ref = sorted(
             [
                 s
-                for s in lineage_subs
+                for s in lineage_barcode
                 if s not in genome.substitutions and s.coord not in genome.missing
             ]
         )
@@ -347,30 +509,14 @@ class Barcode:
             [
                 s
                 for s in genome.substitutions
-                if s not in lineage_subs and s not in top_lineages_subs_shared
+                if s not in lineage_barcode and s not in top_lineages_subs_shared
             ]
         )
         conflict_subs = sorted(conflict_ref + conflict_alt)
         conflict_ref = [s for s in conflict_ref if s in conflict_subs]
         conflict_alt = [s for s in conflict_alt if s in conflict_subs]
 
-        # ---------------------------------------------------------------------
-        # Update Attributes
-
-        self.name = lineage
-        self.definition = lineage
-        self.clade = clade
-        self.clade_lineage = clade_lineage
-        self.top_lineages = top_lineages
-        self.top_lineages_subsample = top_lineages_subsample
-        self.outlier_lineages = outlier_lineages
-        self.barcode = lineage_subs
-        self.support = support
-        self.missing = missing
-        self.conflict_ref = conflict_ref
-        self.conflict_alt = conflict_alt
-
-        return 0
+        return lineage_barcode, support, conflict_alt, conflict_ref, missing
 
     def set_recombinant_status(self, genome, recombinant_lineages, recombinant_tree):
 
