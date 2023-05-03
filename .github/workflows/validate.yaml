@@ -52,4 +52,4 @@ jobs:
       # a positive recombinant that we couldn't find breakpoints for.
       - name: check
         run: |
-          if [[ $(grep -E "false|no_breakpoints") ]]; then echo exit 1; fi
+          if [[ $(grep -E "false|no_breakpoints") ]]; then echo "Validation Failure!"; exit 1; fi
