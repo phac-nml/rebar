@@ -23,7 +23,8 @@ PANGO_SEQUENCES_URL = (
 )
 
 # Lineages that produce undesireable results across all recombinants.
-PROBLEMATIC_LINEAGES = ["BA.2.85"]
+# PROBLEMATIC_LINEAGES = ["BA.2.85"]
+PROBLEMATIC_LINEAGES = []
 
 BARCODE_MANUAL_EDITS = {
     # This substitution is found in the UShER tree, but missing from Nextclade
