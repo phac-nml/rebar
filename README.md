@@ -8,7 +8,15 @@
 [![Examples CI](https://github.com/phac-nml/rebar/actions/workflows/examples.yaml/badge.svg)](https://github.com/phac-nml/rebar/actions/workflows/examples.yaml)
 [![Validate CI](https://github.com/phac-nml/rebar/actions/workflows/validate.yaml/badge.svg)](https://github.com/phac-nml/rebar/actions/workflows/validate.yaml)
 
-**RE**combination detection using **BAR**codes for SARS-CoV-2.
+**RE**combination **BAR**code detector for SARS-CoV-2.
+
+## Why rebar?
+
+`rebar` is a command-line application that _detects_ and _visualizes_ recombination between SARS-CoV-2 lineages. It follows the [PHA4GE Guidance for Detecting and Characterizing SARS-CoV-2 Recombinants](https://github.com/pha4ge/pipeline-resources/blob/main/docs/sc2-recombinants.md) which outlines three steps:
+
+1. Assess the genomic evidence for recombination.
+1. Classify sequences as _designated_ or _novel_ recombinant lineages.
+1. Identify the breakpoint coordinates and parental regions.
 
 ## Install
 
