@@ -167,20 +167,32 @@ class Barcode:
         # Search Method #1 : Candidate Top Lineage Matches
         top_lineages = self.search_candidate_matches(barcode_summary, top_n)
         if genome.debug:
-            msg = str(datetime.now()) + "\t\t\tsearch_1: " + str(top_lineages)
+            msg = str(datetime.now()) + "\t\t\tsearch_candidates: " + str(top_lineages)
             genome.logger.info(msg)
 
         # Assume all lineages are outliers to begin with, we will remove
         # lineages from this list that survive all search methods.
         outlier_lineages = top_lineages
 
-        # Search Method #2: Lineage-diagnostic mutations
-        top_lineages = self.search_diagnostic_mutations(
+        # Search Method #2: Lineage-diagnostic mutations presence
+        top_lineages = self.search_diagnostic_mutations_presence(
             genome, top_lineages, diagnostic, tree
         )
         if genome.debug:
-            msg = str(datetime.now()) + "\t\t\tsearch_2: " + str(top_lineages)
+            msg = str(datetime.now()) + "\t\t\tsearch_diagnostic: " + str(top_lineages)
             genome.logger.info(msg)
+
+        # Search Method #3: Perfect matches (ie. no conflict_ref)
+        # THIS WILL DRAMATICALLY SLOW THINGS DOWN when a large number of
+        # top lineages are present
+        # top_lineages = self.search_conflict_ref(genome, top_lineages, barcodes)
+        # if genome.debug:
+        #     msg = (
+        #         str(datetime.now())
+        #         + "\t\t\tsearch_conflict_ref: "
+        #         + str(top_lineages)
+        #     )
+        #     genome.logger.info(msg)
 
         # If our top_lineages list is too long ( > subsample_threshold ), subsample
         top_lineages_subsample = top_lineages
@@ -210,7 +222,7 @@ class Barcode:
         if genome.debug:
             msg = (
                 str(datetime.now())
-                + "\t\t\tsearch_2_subsample: "
+                + "\t\t\tsearch_subsample: "
                 + str(top_lineages_subsample)
             )
             genome.logger.info(msg)
@@ -226,13 +238,13 @@ class Barcode:
         else:
             top_lineages = top_lineages_subsample
         if genome.debug:
-            msg = str(datetime.now()) + "\t\t\tsearch_3: " + str(top_lineages)
+            msg = str(datetime.now()) + "\t\t\tsearch_distance: " + str(top_lineages)
             genome.logger.info(msg)
 
         # Search Method #4: Maximum Parsimony
         top_lineages = self.search_maximum_parsimony(genome, top_lineages, barcodes)
         if genome.debug:
-            msg = str(datetime.now()) + "\t\t\tsearch_4: " + str(top_lineages)
+            msg = str(datetime.now()) + "\t\t\tsearch_parsimony: " + str(top_lineages)
             genome.logger.info(msg)
             # Some whitespace before next debug info
             genome.logger.info(str(datetime.now()))
@@ -299,7 +311,9 @@ class Barcode:
 
         return top_lineages
 
-    def search_diagnostic_mutations(self, genome, top_lineages, diagnostic, tree):
+    def search_diagnostic_mutations_presence(
+        self, genome, top_lineages, diagnostic, tree
+    ):
         # ---------------------------------------------------------------------
         # Outlier Detection #1: Lineage Diagnostic Mutations
         #   If a sub in genome.substitutions is diagnostic for a particular
@@ -341,6 +355,38 @@ class Barcode:
 
         # Remove duplicates
         keep_lineages = list(set(keep_lineages))
+
+        # If we found keepers, return those
+        if len(keep_lineages) > 0:
+            return keep_lineages
+        # otherwise, just return original top_lineages
+        else:
+            return top_lineages
+
+    def search_conflict_ref(self, genome, top_lineages, barcodes):
+        # Check if any are a perfect match (ie. no conflict_ref)
+        # This is needed for BM.1.1 otherwise can be a false positive
+        # for XBQ.
+
+        # if there's only one top lineage, just return that
+        if len(top_lineages) <= 1:
+            return top_lineages
+        else:
+            keep_lineages = []
+
+            for lin in top_lineages:
+                row = barcodes.query("lineage == @lin")
+                subs = [
+                    Substitution(s) for s in row.columns[1:] if list(row[s])[0] == 1
+                ]
+                conflict_ref = [
+                    s
+                    for s in subs
+                    if s not in genome.substitutions and s.coord not in genome.missing
+                ]
+
+                if len(conflict_ref) == 0:
+                    keep_lineages.append(lin)
 
         # If we found keepers, return those
         if len(keep_lineages) > 0:
@@ -412,7 +458,13 @@ class Barcode:
             return top_lineages
 
         else:
-            parsimony_summary = {lin: 0 for lin in top_lineages}
+            parsimony_summary = {
+                "lineage": [],
+                "support": [],
+                "conflict_alt": [],
+                "conflict_ref": [],
+                "parsimony": [],
+            }
 
             for lin in top_lineages:
                 row = barcodes.query("lineage == @lin")
@@ -437,15 +489,26 @@ class Barcode:
 
                 # our parsimony score is support - conflict
                 parsimony_score = len(support) - (len(conflict_alt) + len(conflict_ref))
-                parsimony_summary[lin] = parsimony_score
+
+                parsimony_summary["lineage"].append(lin)
+                parsimony_summary["support"].append(len(support))
+                parsimony_summary["conflict_alt"].append(len(conflict_alt))
+                parsimony_summary["conflict_ref"].append(len(conflict_ref))
+                parsimony_summary["parsimony"].append(parsimony_score)
+
+            parsimony_df = pd.DataFrame(parsimony_summary).sort_values(
+                by=["support", "parsimony"], ascending=True
+            )
 
             # Identify maximum parsimony lineage
-            max_parsimony_count = max(parsimony_summary.values())
+            max_parsimony_count = parsimony_df["parsimony"].max()
 
             # Identify all the non-outliers in the subsampled lineages
-            keep_lineages = [
-                l for l, c in parsimony_summary.items() if c == max_parsimony_count
-            ]
+            keep_lineages = list(
+                parsimony_df[parsimony_df["parsimony"] == max_parsimony_count][
+                    "lineage"
+                ]
+            )
 
         # If we found keepers, return those
         if len(keep_lineages) > 0:
