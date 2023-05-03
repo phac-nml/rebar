@@ -1,7 +1,6 @@
 import yaml
 import statistics
-
-# import random
+import random
 from datetime import datetime
 
 import pandas as pd
@@ -155,7 +154,7 @@ class Barcode:
         tree,
         lineage_to_clade,
         diagnostic,
-        max_lineages=10,
+        subsample_threshold=10,
         top_n=1,
     ):
         # No barcode matches, stop the search
@@ -165,10 +164,11 @@ class Barcode:
         # ---------------------------------------------------------------------
         # Iterative Searches
 
-        # print(barcode_summary)
         # Search Method #1 : Candidate Top Lineage Matches
         top_lineages = self.search_candidate_matches(barcode_summary, top_n)
-        # print("search_1:", top_lineages)
+        if genome.debug:
+            msg = str(datetime.now()) + "\t\t\tsearch_1: " + str(top_lineages)
+            genome.logger.info(msg)
 
         # Assume all lineages are outliers to begin with, we will remove
         # lineages from this list that survive all search methods.
@@ -178,21 +178,43 @@ class Barcode:
         top_lineages = self.search_diagnostic_mutations(
             genome, top_lineages, diagnostic, tree
         )
-        # print("search_2:", top_lineages)
+        if genome.debug:
+            msg = str(datetime.now()) + "\t\t\tsearch_2: " + str(top_lineages)
+            genome.logger.info(msg)
 
         # If our top_lineages list is too long ( > subsample_threshold ), subsample
         top_lineages_subsample = top_lineages
-        if len(top_lineages) > max_lineages:
-            # Option 1: Take top subsample_threshold samples
-            top_lineages_subsample = top_lineages[0:max_lineages]
-            # Option 2: Randomly select samples, this is not working well
-            # Fix the seed, so that results are the same every rerun
-            # random.seed(123456)
-            # top_lineages_subsample = random.choices(
-            #     top_lineages, k=subsample_threshold
-            # )
+        if len(top_lineages) > subsample_threshold:
 
-        # print("search_2:", top_lineages_subsample)
+            max_total = barcode_summary["total"].max()
+            max_lineages = list(
+                barcode_summary[
+                    (barcode_summary["lineage"].isin(top_lineages))
+                    & (barcode_summary["total"] == max_total)
+                ]["lineage"]
+            )
+
+            # Option 1: Randomly select samples, this is the preferred
+            #  method when a large number of samples are tied for top place
+            if len(max_lineages) > subsample_threshold:
+
+                random.seed(123456)
+                top_lineages_subsample = random.choices(
+                    top_lineages, k=subsample_threshold
+                )
+            # Option 2: Take top subsample_threshold samples, this is the
+            # preferred method when there isn't a big top tie
+            else:
+                top_lineages_subsample = top_lineages[0:subsample_threshold]
+
+        if genome.debug:
+            msg = (
+                str(datetime.now())
+                + "\t\t\tsearch_2_subsample: "
+                + str(top_lineages_subsample)
+            )
+            genome.logger.info(msg)
+
         # Search Method #3: Pairwise Distance
         #   If our top_lineages are a mix of recombinants and non-recombinants
         #   don't use this filter, because distances will be uninformative
@@ -203,11 +225,17 @@ class Barcode:
             top_lineages = self.search_pairwise_distance(top_lineages_subsample, tree)
         else:
             top_lineages = top_lineages_subsample
-        # print("search_3:", top_lineages)
+        if genome.debug:
+            msg = str(datetime.now()) + "\t\t\tsearch_3: " + str(top_lineages)
+            genome.logger.info(msg)
 
         # Search Method #4: Maximum Parsimony
         top_lineages = self.search_maximum_parsimony(genome, top_lineages, barcodes)
-        # print("search_4:", top_lineages)
+        if genome.debug:
+            msg = str(datetime.now()) + "\t\t\tsearch_4: " + str(top_lineages)
+            genome.logger.info(msg)
+            # Some whitespace before next debug info
+            genome.logger.info(str(datetime.now()))
 
         # ---------------------------------------------------------------------
         # Summarize Search
