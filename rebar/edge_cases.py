@@ -83,10 +83,9 @@ def handle_edge_cases(
 
     # ---------------------------------------------------------------------
     # XAS: The pango designation required deletions to resolve the first parent
-    #     force the first parent to be BA.2
     elif genome.lineage.recombinant in ["XAS"]:
         genome.lineage.edge_case = True
-        include_tree = next(tree.find_clades("BA.2"))
+        include_tree = next(tree.find_clades("BA.4"))
         include_descendants = [c.name for c in include_tree.find_clades()]
         result["barcode_summary"] = barcode_summary[
             barcode_summary["lineage"].isin(include_descendants)
