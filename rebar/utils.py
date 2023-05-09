@@ -3,7 +3,6 @@ import logging
 import os
 from datetime import datetime
 from io import StringIO
-import re
 import requests
 import urllib
 import functools
@@ -27,6 +26,7 @@ from .constants import (
     BARCODE_MANUAL_EDITS,
     PROBLEMATIC_LINEAGES,
     LINEAGE_SUMMARY_URL,
+    ALIAS_KEY_URL,
 )
 from .export import Export
 
@@ -585,21 +585,15 @@ def create_tree(params):
             continue
         lineages.append(lineage)
 
-        # Check for recursive recombination
-        # Recombinant lineage of .... Delta and BA.1
-        if "Recombinant lineage" in line:
-            line_split = line.split("Recombinant lineage")[1]
-            line_words = line_split.split(" ")
-            # Check for words that match lineage format
-            # Bit risky, also catches "UK" if not comma after
-            patterns = "^([A-Z]{2,}$|[A-Z]+\\.[0-9]+)"
-            for word in line_words:
-                lineage_matches = re.findall(patterns, word)
-                if len(lineage_matches) > 0:
-                    parent = word.replace(",", "").replace("*", "")
-                    if lineage not in recombinant_parents:
-                        recombinant_parents[lineage] = []
-                    recombinant_parents[lineage].append(parent)
+    logger.info(str(datetime.now()) + "\tDownloading alias key.")
+    r = requests.get(ALIAS_KEY_URL)
+    alias_key = r.json()
+
+    recombinant_parents = {}
+    for lineage, parents in alias_key.items():
+        if len(parents) < 2:
+            continue
+        recombinant_parents[lineage] = parents
 
     # Initialize the aliasor, which will download the latest aliases
     logger.info(str(datetime.now()) + "\tInitialising aliases.")

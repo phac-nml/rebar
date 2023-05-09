@@ -9,6 +9,11 @@ LINEAGE_SUMMARY_URL = (
     "lineage_notes.txt"
 )
 
+ALIAS_KEY_URL = (
+    "https://raw.githubusercontent.com/cov-lineages/pango-designation/master/"
+    "pango_designation/alias_key.json"
+)
+
 BARCODES_USHER_URL = (
     "https://github.com/andersen-lab/Freyja-data/raw/main/usher_barcodes.csv"
 )
