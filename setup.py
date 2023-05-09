@@ -18,7 +18,7 @@ with open("requirements.txt", "r") as r:
     require_list = r.read().strip().split("\n")
 
 setup(
-    name="ncov-rebar",
+    name="bio-rebar",
     version=get_version(),
     author="Katherine Eaton",
     author_email="katherine.eaton@phac-aspc.gc.ca",
