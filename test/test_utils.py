@@ -91,6 +91,18 @@ def test_create_barcodes(params):
         outfile.write(info_yaml + "\n")
 
 
+def test_create_barcodes_diagnostic(params):
+    """Test function utils.create_barcodes_diagnostic."""
+
+    params.outdir = params.dataset
+    if not os.path.exists(params.outdir):
+        os.makedirs(params.outdir)
+    params.logger = utils.create_logger(os.path.join(params.outdir, "test.log"))
+    params.tree = os.path.join(params.outdir, "tree.nwk")
+    params.barcodes = os.path.join(params.outdir, "barcodes.tsv")
+    utils.create_barcodes_diagnostic(params)
+
+
 def test_create_annotations(params):
     """Test function utils.create_annotations."""
 
