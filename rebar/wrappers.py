@@ -66,7 +66,7 @@ def dataset(params):
 
             # barcodes needs tree for clade to lineage mapping
             params.barcodes = os.path.join(params.outdir, "barcodes.tsv")
-            info["diagnostic"] = create_barcodes_diagnostic(params)
+            create_barcodes_diagnostic(params)
 
             # Summarize dataset in yaml file
             info_yaml = yaml.dump(info, sort_keys=False, indent=2)

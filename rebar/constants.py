@@ -43,3 +43,22 @@ MIN_SUBS = 1
 MIN_CONSECUTIVE = 3
 MAX_BREAKPOINTS = 10
 PLOT_EXT = "png"
+
+# These are known edge case recombinants, which generally required
+# more relaxed parameters.
+EDGE_CASE_RECOMBINANTS = [
+    "XB",
+    "XP",
+    "XR",
+    "XAD",
+    "XAE",
+    "XAJ",
+    "XAS",
+    "XAV",
+    "XAY",
+    "XAZ",
+    "XBC",
+    "XBK",
+    "XBQ",
+    "XBZ",
+]

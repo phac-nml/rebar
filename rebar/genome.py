@@ -9,7 +9,7 @@ from Bio.SeqRecord import SeqRecord
 
 # rebar custom
 from . import RebarError
-from .constants import NO_DATA_CHAR
+from .constants import NO_DATA_CHAR, EDGE_CASE_RECOMBINANTS
 from .substitution import Substitution
 from .barcode import Barcode
 from .recombination import Recombination
@@ -281,6 +281,15 @@ class Genome:
             .query("total > 0")
             .sort_values(by=["total", "lineage"], ascending=False)
         )
+
+        # # Can I efficientially calculate conflicts? conflict_ref is the
+        # # most important, and means a sub in the lineage barcode that is
+        # # not in the genome
+        # conflict_ref_subs = [
+        #   c for c in barcodes.columns[1:] if c not in barcodes_subs
+        # ]
+        # print(conflict_ref_subs[0:10])
+        # df["total"] = df[barcodes_subs].sum(axis=1)
 
         return summary_df
 
@@ -622,7 +631,7 @@ class Genome:
 
         # Edge cases are for designated recombinants, so only run if the genome
         # was a perfect match (no conflicts)
-        if edge_cases:
+        if edge_cases and self.lineage.recombinant in EDGE_CASE_RECOMBINANTS:
             # `handle_edge_cases` will adjust these global parameters, just
             #   for this genome if it's an edge case.
             result = handle_edge_cases(

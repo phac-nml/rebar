@@ -28,7 +28,6 @@ def handle_edge_cases(
     #     force the first parent to be B.1.631
     #     there is maybe a small second breakpoint (~100 nuc)
     if genome.lineage.recombinant in ["XB"]:
-        genome.lineage.edge_case = True
         include_tree = next(tree.find_clades("B.1.631"))
         include_descendants = [c.name for c in include_tree.find_clades()]
         result["barcode_summary"] = barcode_summary[
@@ -40,7 +39,6 @@ def handle_edge_cases(
     # XP: second parent (BA.2) comes from only one barcode position: A29510C
     #     force first parent to be BA.2 and relax region/subs lengths
     elif genome.lineage.recombinant in ["XP"]:
-        genome.lineage.edge_case = True
         include_tree = next(tree.find_clades("BA.2"))
         include_descendants = [c.name for c in include_tree.find_clades()]
         result["barcode_summary"] = barcode_summary[
@@ -53,7 +51,6 @@ def handle_edge_cases(
     # XR: no diagnostic subs from second parent, only 2 consecutive barcodes
     #     relax region/subs lengths
     elif genome.lineage.recombinant in ["XR"]:
-        genome.lineage.edge_case = True
         result["min_subs"] = 0
         result["min_consecutive"] = 2
 
@@ -61,7 +58,6 @@ def handle_edge_cases(
     # XAD, XAE: second_parent only has 1 conflict sub
     #     force the first parent to be the minor parent (BA.1)
     elif genome.lineage.recombinant in ["XAD", "XAE"]:
-        genome.lineage.edge_case = True
         include_tree = next(tree.find_clades("BA.1"))
         include_descendants = [c.name for c in include_tree.find_clades()]
         result["barcode_summary"] = barcode_summary[
@@ -73,7 +69,6 @@ def handle_edge_cases(
     # XAJ: Parent 2 (BA.4) is tiny (120 nuc), force parent 1 to be BA.4
     #      and relax min_length.
     elif genome.lineage.recombinant in ["XAJ"]:
-        genome.lineage.edge_case = True
         include_tree = next(tree.find_clades("BA.4"))
         include_descendants = [c.name for c in include_tree.find_clades()]
         result["barcode_summary"] = barcode_summary[
@@ -84,7 +79,6 @@ def handle_edge_cases(
     # ---------------------------------------------------------------------
     # XAS: The pango designation required deletions to resolve the first parent
     elif genome.lineage.recombinant in ["XAS"]:
-        genome.lineage.edge_case = True
         include_tree = next(tree.find_clades("BA.4"))
         include_descendants = [c.name for c in include_tree.find_clades()]
         result["barcode_summary"] = barcode_summary[
@@ -95,7 +89,6 @@ def handle_edge_cases(
     # XAV: no diagnostic subs from second parent, only 2 consecutive barcodes
     #      BA.5.1.24 interferes
     elif genome.lineage.recombinant in ["XAV"]:
-        genome.lineage.edge_case = True
         exclude_tree = next(tree.find_clades("BA.5.1.24"))
         exclude_descendants = [c.name for c in exclude_tree.find_clades()]
         result["min_subs"] = 0
@@ -107,7 +100,6 @@ def handle_edge_cases(
     # ---------------------------------------------------------------------
     # XAY: Many breakpoints, some very small (200 nuc)
     elif genome.lineage.recombinant in ["XAY"]:
-        genome.lineage.edge_case = True
         result["min_length"] = 200
 
     # ---------------------------------------------------------------------
@@ -115,7 +107,6 @@ def handle_edge_cases(
     #     force the minor parent (BA.2) to be the first parent
     #     this improves the search for the major parent (BA.5)
     elif genome.lineage.recombinant in ["XAZ"]:
-        genome.lineage.edge_case = True
         include_tree = next(tree.find_clades("BA.2"))
         include_descendants = [c.name for c in include_tree.find_clades()]
         result["barcode_summary"] = barcode_summary[
@@ -133,7 +124,6 @@ def handle_edge_cases(
     # ---------------------------------------------------------------------
     # XBK, XBQ: only 2 consecutive barcodes
     elif genome.lineage.recombinant in ["XBK", "XBQ"]:
-        genome.lineage.edge_case = True
         include_tree = next(tree.find_clades("BA.2"))
         include_descendants = [c.name for c in include_tree.find_clades()]
         result["barcode_summary"] = barcode_summary[
@@ -144,7 +134,6 @@ def handle_edge_cases(
     # ---------------------------------------------------------------------
     # XBZ: only 2 consecutive barcodes, extremely short parent 2 length
     elif genome.lineage.recombinant in ["XBZ"]:
-        genome.lineage.edge_case = True
         result["min_consecutive"] = 2
         result["min_length"] = 300
 

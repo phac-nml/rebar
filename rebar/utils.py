@@ -536,6 +536,8 @@ def create_barcodes_diagnostic(params):
     )
     diagnostic_df.to_csv(diagnostic_path, sep="\t", index=False)
 
+    return 0
+
 
 def create_tree(params):
     """

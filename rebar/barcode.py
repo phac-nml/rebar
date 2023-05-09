@@ -6,6 +6,7 @@ from datetime import datetime
 import pandas as pd
 
 from .substitution import Substitution
+from .constants import EDGE_CASE_RECOMBINANTS
 
 
 class Barcode:
@@ -634,6 +635,10 @@ class Barcode:
             # it's recursive
             if len(node_path) > 1:
                 self.recursive = True
+
+            # Edge case status
+            if self.recombinant in EDGE_CASE_RECOMBINANTS:
+                self.edge_case = True
 
         # Option 2: Perfect match to non-recombinant
         elif len(self.conflict_ref) == 0:
