@@ -30,10 +30,10 @@ repos:
       - id: markdownlint
         args: [--config=.github/markdown_lint.yaml]
 
-  # # Rust lint
-  # - repo: https://github.com/doublify/pre-commit-rust
-  #   rev: master
-  #   hooks:
-  #   -   id: fmt
-  #   -   id: cargo-check
-  #   -   id: clippy
+  # Rust lint
+  - repo: https://github.com/doublify/pre-commit-rust
+    rev: master
+    hooks:
+    -   id: fmt
+    -   id: cargo-check
+    -   id: clippy
