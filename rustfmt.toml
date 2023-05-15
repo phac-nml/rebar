@@ -1,0 +1,8 @@
+edition = "2021"
+
+tab_spaces = 4
+max_width = 80
+
+newline_style = "Unix"
+reorder_imports = true
+reorder_modules = true
