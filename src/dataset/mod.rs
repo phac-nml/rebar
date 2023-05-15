@@ -4,9 +4,12 @@ use crate::sequence::Sequence;
 use crate::traits::ToYaml;
 use color_eyre::eyre::{eyre, Report};
 use color_eyre::section::Section;
+use log::info;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 use std::default::Default;
+use std::fs::create_dir_all;
+use std::path::Path;
 
 #[derive(Debug, Default, PartialEq, Deserialize, Serialize)]
 enum DatasetName {
@@ -55,8 +58,12 @@ impl std::fmt::Display for Dataset {
 impl ToYaml for Dataset {}
 
 impl Dataset {
-    pub fn new(name: String, version: String) -> Result<Dataset, Report> {
-        let dataset_name = match name.as_str() {
+    pub fn new(
+        name: String,
+        version: String,
+        outdir: &Path,
+    ) -> Result<Dataset, Report> {
+        let name = match name.as_str() {
             "rsv-a" => DatasetName::RsvA,
             "rsv-b" => DatasetName::RsvB,
             "sars-cov-2" => DatasetName::SarsCov2,
@@ -64,21 +71,32 @@ impl Dataset {
                 .suggestion("Please choose from: rsva, rsvb, sars-cov2")?,
         };
 
-        let dataset_version = match version.as_str() {
+        let version = match version.as_str() {
             "latest" => DatasetVersion::Latest,
             "nightly" => DatasetVersion::Nightly,
             _ => Err(eyre!("Unknown dataset version: {version}"))
                 .suggestion("Please choose from: latest, nightly")?,
         };
 
+        info!("Creating dataset output directory: {:?}", outdir);
+        create_dir_all(outdir)?;
+
         let dataset = Dataset {
-            name: dataset_name,
-            version: dataset_version,
+            name,
+            version,
             populations: BTreeMap::new(),
         };
 
         Ok(dataset)
     }
 
-    // pub fn import_sequences()
+    // async fn download_sequences(
+    //     outdir: &Path,
+    // ) -> Result<BTreeMap<String, Sequence>, Report> {
+    //     let sequences = BTreeMap::new();
+
+    //     println!("{:?}", outdir);
+
+    //     Ok(sequences)
+    // }
 }

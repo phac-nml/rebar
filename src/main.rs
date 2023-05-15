@@ -1,18 +1,14 @@
-use std::env;
-
 // System paths
 // use std::path::Path;
 //use tempfile::Builder;
-
 // Logging
 //use log::info;
 use color_eyre::eyre::Result;
 use rebar::cli::log::LogVerbosity;
-
-// Dataset
 use rebar::dataset::Dataset;
-
-// Traits
+use rebar::traits::ToYaml;
+use std::env;
+use std::path::Path;
 use std::str::FromStr;
 
 #[tokio::main]
@@ -31,14 +27,19 @@ async fn main() -> Result<()> {
 
     let dataset_name = "sars-cov-2";
     let dataset_version = "nightly";
+    let dataset_outdir = Path::new("dataset/sars-cov-2/nightly");
     // let mask = 200;
 
     // ------------------------------------------------------------------------
     // Dataset Creation
 
-    let dataset =
-        Dataset::new(dataset_name.to_string(), dataset_version.to_string())?;
-    println!("{}", dataset);
+    let dataset = Dataset::new(
+        dataset_name.to_string(),
+        dataset_version.to_string(),
+        dataset_outdir,
+    )?;
+    //dataset.populations = dataset.download_sequences(&dataset_outdir)?;
+    println!("{}", dataset.to_yaml());
     //let dataset = Dataset::create(dataset_name.to_string(), dataset_tag.to_string(), mask);
 
     // Sequences
