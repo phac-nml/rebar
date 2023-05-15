@@ -1,11 +1,12 @@
 use std::env;
 
 // System paths
-use std::path::Path;
-use tempfile::Builder;
+// use std::path::Path;
+//use tempfile::Builder;
 
 // Logging
-use log::info;
+//use log::info;
+use color_eyre::eyre::Result;
 use rebar::cli::log::LogVerbosity;
 
 // Dataset
@@ -13,10 +14,9 @@ use rebar::dataset::Dataset;
 
 // Traits
 use std::str::FromStr;
-use rebar::traits::ToYaml;
 
 #[tokio::main]
-async fn main() -> Result<(), std::io::Error> {
+async fn main() -> Result<()> {
     let log_verbosity = LogVerbosity::from_str("debug").unwrap();
 
     // Set default logging level if RUST_LOG is not set.
@@ -27,35 +27,24 @@ async fn main() -> Result<(), std::io::Error> {
 
     env_logger::init();
 
+    color_eyre::install()?;
+
     let dataset_name = "sars-cov-2";
-    let dataset_tag = "nightly";
-    let dataset_dir = Path::new("dataset/sars-cov-2/nightly");
-
-    let mask = 200;
-
-    let sequences_path = Path::new("data/XBB.1.16.fasta");
-    let reference_path = dataset_dir.join("reference.fasta");
-    let populations_path = dataset_dir.join("sequences.fasta");
-    let phylogeny_path = dataset_dir.join("graph.dot");
-
-
-    // let tmp_dir = Builder::new().prefix("example").tempdir()?;
-    // println!("{:?}", tmp_dir);
-    // let target = "https://www.rust-lang.org/logos/rust-logo-512x512.png";
-    // let response = reqwest::get(target).await?;
+    let dataset_version = "nightly";
+    // let mask = 200;
 
     // ------------------------------------------------------------------------
-    // Dataset
+    // Dataset Creation
 
+    let dataset =
+        Dataset::new(dataset_name.to_string(), dataset_version.to_string())?;
+    println!("{}", dataset);
+    //let dataset = Dataset::create(dataset_name.to_string(), dataset_tag.to_string(), mask);
 
-    let mut dataset = Dataset::new(dataset_name.to_string(), dataset_tag.to_string());
-
-    // // Sequences
-    // info!("Preparing dataset sequences: {}", &populations_path.display());
+    // Sequences
     // dataset.populations.set_sequences(&reference_path, &populations_path, &mask).unwrap();
     // dataset.populations.set_mutations().unwrap();
-    
-    println!("{}", dataset.to_yaml());
+
     // // Phylogeny
     // info!("Preparing dataset phylogeny: {}", &phylogeny_path.display());
     // let phylogeny
