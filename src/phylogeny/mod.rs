@@ -1,12 +1,6 @@
 use petgraph::graph::{Graph, NodeIndex};
-use std::default::Default;
 use std::collections::BTreeMap;
-
-#[derive(serde::Deserialize, Debug)]
-struct LineageNotesRow<'a> {
-    lineage: &'a str,
-    _description: &'a str,
-}
+use std::default::Default;
 
 #[derive(Debug, Default)]
 pub struct Phylogeny {
