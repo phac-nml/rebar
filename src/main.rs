@@ -3,16 +3,20 @@
 //use tempfile::Builder;
 // Logging
 //use log::info;
-use color_eyre::eyre::Result;
+use clap::Parser;
+use color_eyre::eyre::{Result, Report};
 use rebar::cli::log::LogVerbosity;
+use rebar::cli::Cli;
 use rebar::dataset::Dataset;
 use rebar::traits::ToYaml;
 use std::env;
 use std::path::Path;
 use std::str::FromStr;
 
-#[tokio::main]
-async fn main() -> Result<()> {
+fn setup () -> Result<(), Report> {
+
+    color_eyre::install()?;
+
     let log_verbosity = LogVerbosity::from_str("debug").unwrap();
 
     // Set default logging level if RUST_LOG is not set.
@@ -23,11 +27,24 @@ async fn main() -> Result<()> {
 
     env_logger::init();
 
-    color_eyre::install()?;
+    Ok(())
+}
 
+#[tokio::main]
+async fn main() -> Result<()> {
+
+    // Misc setup actions like logging
+    setup().unwrap();
+
+    // Parse CLI parameters
+    let cli = Cli::parse();
+    println!("{:?}", cli);
+
+    // These will become CLI parameters
     let dataset_name = "sars-cov-2";
+    //let dataset_reference = "MN908947";
     let dataset_version = "nightly";
-    let dataset_outdir = Path::new("dataset/sars-cov-2/nightly");
+    let dataset_dir = Path::new("dataset/sars-cov-2/nightly");
     // let mask = 200;
 
     // ------------------------------------------------------------------------
@@ -36,7 +53,7 @@ async fn main() -> Result<()> {
     let dataset = Dataset::new(
         dataset_name.to_string(),
         dataset_version.to_string(),
-        dataset_outdir,
+        dataset_dir,
     )?;
     //dataset.populations = dataset.download_sequences(&dataset_outdir)?;
     println!("{}", dataset.to_yaml());
