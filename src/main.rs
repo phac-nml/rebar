@@ -4,25 +4,22 @@
 // Logging
 //use log::info;
 use clap::Parser;
-use color_eyre::eyre::{Result, Report};
-use rebar::cli::log::LogVerbosity;
-use rebar::cli::Cli;
+use color_eyre::eyre::{Report, Result};
+use rebar::cli::verbosity::Verbosity;
+use rebar::cli::{Cli, Command};
 use rebar::dataset::Dataset;
-use rebar::traits::ToYaml;
 use std::env;
-use std::path::Path;
 use std::str::FromStr;
 
-fn setup () -> Result<(), Report> {
-
+fn setup() -> Result<(), Report> {
     color_eyre::install()?;
 
-    let log_verbosity = LogVerbosity::from_str("debug").unwrap();
+    let verbosity = Verbosity::from_str("debug").unwrap();
 
     // Set default logging level if RUST_LOG is not set.
     //let log_verbosity = "debug";
     if env::var("RUST_LOG").is_err() {
-        env::set_var("RUST_LOG", log_verbosity.to_string())
+        env::set_var("RUST_LOG", verbosity.to_string())
     }
 
     env_logger::init();
@@ -32,31 +29,30 @@ fn setup () -> Result<(), Report> {
 
 #[tokio::main]
 async fn main() -> Result<()> {
-
     // Misc setup actions like logging
     setup().unwrap();
 
     // Parse CLI parameters
-    let cli = Cli::parse();
-    println!("{:?}", cli);
+    let args = Cli::parse();
 
-    // These will become CLI parameters
-    let dataset_name = "sars-cov-2";
-    //let dataset_reference = "MN908947";
-    let dataset_version = "nightly";
-    let dataset_dir = Path::new("dataset/sars-cov-2/nightly");
-    // let mask = 200;
+    match args.command {
+        Command::Run { .. } => println!("run"),
+        Command::Dataset {
+            name,
+            tag,
+            reference,
+            output_dir,
+            ..
+        } => {
+            let _dataset =
+                Dataset::new(&name, &tag, &reference, &output_dir).await?;
+        }
+    }
 
     // ------------------------------------------------------------------------
     // Dataset Creation
 
-    let dataset = Dataset::new(
-        dataset_name.to_string(),
-        dataset_version.to_string(),
-        dataset_dir,
-    )?;
     //dataset.populations = dataset.download_sequences(&dataset_outdir)?;
-    println!("{}", dataset.to_yaml());
     //let dataset = Dataset::create(dataset_name.to_string(), dataset_tag.to_string(), mask);
 
     // Sequences

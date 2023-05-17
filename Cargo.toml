@@ -13,10 +13,7 @@ log = "0.4.17"
 petgraph = "0.6.3"
 serde = { version = "1.0.163", features = ["derive"] }
 serde_yaml = "0.9.21"
+tempfile = "3.5.0"
 tokio = { version = "1.28.1", features = ["macros", "rt-multi-thread"] }
-
-
-# bio = "1.1.0"
-# itertools = "0.10.5"
-# csv = "1.2.1"
-# tempfile = "3.5.0"
+reqwest = "0.11.18"
+url = "2.3.1"
