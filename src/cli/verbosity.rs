@@ -1,13 +1,13 @@
 use std::str::FromStr;
 
 #[derive(Debug)]
-pub enum LogVerbosity {
+pub enum Verbosity {
     Info,
     Warn,
     Debug,
 }
 
-impl std::fmt::Display for LogVerbosity {
+impl std::fmt::Display for Verbosity {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         // Convert to lowercase for RUST_LOG env var compatibility
         let lowercase = format!("{:?}", self).to_lowercase();
@@ -16,17 +16,17 @@ impl std::fmt::Display for LogVerbosity {
 }
 
 #[derive(Debug)]
-pub struct UnknownLogVerbosityError;
+pub struct UnknownVerbosityError;
 
-impl FromStr for LogVerbosity {
-    type Err = UnknownLogVerbosityError;
+impl FromStr for Verbosity {
+    type Err = UnknownVerbosityError;
 
     fn from_str(input: &str) -> Result<Self, Self::Err> {
         match input {
-            "debug" => Ok(LogVerbosity::Debug),
-            "info" => Ok(LogVerbosity::Info),
-            "warn" => Ok(LogVerbosity::Warn),
-            _ => Err(UnknownLogVerbosityError),
+            "debug" => Ok(Verbosity::Debug),
+            "info" => Ok(Verbosity::Info),
+            "warn" => Ok(Verbosity::Warn),
+            _ => Err(UnknownVerbosityError),
         }
     }
 }
