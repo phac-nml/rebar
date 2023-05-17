@@ -5,6 +5,7 @@ use color_eyre::section::Section;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 use std::fs::create_dir_all;
+use std::io::Read;
 use std::path::{Path, PathBuf};
 
 const NEXTCLADE_DATA_URL: &str = "https://raw.githubusercontent.com/nextstrain/nextclade_data/master/data/datasets";
@@ -87,38 +88,58 @@ impl Dataset {
             populations: BTreeMap::new(),
         };
 
+        create_dir_all(output_dir)?;
         dataset.download_reference(output_dir).await?;
+        dataset.download_populations(output_dir).await?;
         Ok(dataset)
     }
 
     pub async fn download_reference(
         &self,
-        output_dir: &PathBuf,
+        output_dir: &Path,
     ) -> Result<(), Report> {
         let url = format!(
             "{}/{}/references/{}/versions/{}/files/reference.fasta",
             NEXTCLADE_DATA_URL, self.name, self.reference, self.tag,
         );
+        let output_path = output_dir.join("reference.fasta");
 
-        download_file(&url, output_dir).await?;
+        download_file(&url, &output_path).await?;
 
         Ok(())
     }
 
-    // pub async fn download_populations(&self, output_dir: &PathBuf) -> Result<(), Report> {
+    pub async fn download_populations(
+        &self,
+        output_dir: &Path,
+    ) -> Result<(), Report> {
+        println!("download_populations");
+        let url = match self.name {
+            Name::SarsCov2 => "https://raw.githubusercontent.com/corneliusroemer/pango-sequences/main/data/pango-consensus-sequences_genome-nuc.fasta.zst",
+            Name::RsvA => return Err(eyre!("Not implemented yet")),
+            Name::RsvB => return Err(eyre!("Not implemented yet")),
+        };
 
-    //     println!("download_populations");
-    //     Ok(())
-    // }
+        let file_ext = Path::new(url).extension().unwrap();
+
+        let output_path = match file_ext.to_str().unwrap() {
+            "zst" => output_dir.join("populations.fasta.zst"),
+            _ => output_dir.join("populations.fasta"),
+        };
+        download_file(url, &output_path).await?;
+
+        let input_path = output_path;
+        let output_path = output_dir.join("populations.fasta");
+        decompress_file(&input_path, &output_path)?;
+
+        Ok(())
+    }
 }
 
 pub async fn download_file(
     url: &str,
-    output_dir: &PathBuf,
+    output_path: &PathBuf,
 ) -> Result<(), Report> {
-    let file_name = Path::new(url).file_name().unwrap();
-    let file_path = output_dir.join(file_name);
-
     let response = reqwest::get(url).await?;
     if response.status() != 200 {
         return Err(eyre!(
@@ -128,7 +149,27 @@ pub async fn download_file(
     }
     let content = response.text().await?;
 
-    create_dir_all(output_dir)?;
-    std::fs::write(&file_path, content)
-        .wrap_err(format!("Unable to write file: {:?}", file_path))
+    std::fs::write(output_path, content)
+        .wrap_err(format!("Unable to write file: {:?}", output_path))
+}
+
+pub fn decompress_file(
+    input: &PathBuf,
+    output: &PathBuf,
+) -> Result<(), Report> {
+    let ext = input.extension().unwrap();
+
+    match ext.to_str().unwrap() {
+        "zst" => {
+            let mut f = std::fs::File::open(input)?;
+            let mut buffer = String::new();
+            f.read_to_string(&mut buffer)?;
+            std::fs::write(output, buffer)
+                .wrap_err(format!("Unable to write file: {:?}", output))?;
+            std::fs::remove_file(input)?;
+        }
+        _ => println!("Not implemented yet"),
+    };
+
+    Ok(())
 }
