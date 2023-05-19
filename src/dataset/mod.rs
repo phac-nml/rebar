@@ -51,6 +51,7 @@ impl Default for Dataset {
 impl ToYaml for Dataset {}
 
 impl Dataset {
+    /// Download a remote dataset
     pub async fn download(
         name: &String,
         tag: &String,
@@ -132,24 +133,27 @@ impl Dataset {
         Ok(())
     }
 
-    pub fn load(dataset_dir: &Path) -> Result<Dataset, Report> {
+    /// Load a local dataset
+    pub fn load(dataset_dir: &Path, mask: usize) -> Result<Dataset, Report> {
         // Load the reference (required)
         let reference_path = dataset_dir.join("reference.fasta");
         info!("Loading reference: {:?}", reference_path);
         let reference_reader =
             fasta::Reader::from_file(reference_path).expect("Unable to load reference");
         let reference = reference_reader.records().next().unwrap().unwrap();
-        let reference = Sequence::from_record(reference);
+        let reference = Sequence::from_record(reference, None, Some(mask))?;
 
         // Load the populations (required)
+        // Also parse mutations
         let populations_path = dataset_dir.join("populations.fasta");
         info!("Loading populations: {:?}", populations_path);
         let populations_reader = fasta::Reader::from_file(populations_path)
             .expect("Unable to load populations");
         let mut populations = BTreeMap::new();
+        //let mut mutations = BTreeMap::new();
         for result in populations_reader.records() {
             let record = result?;
-            let sequence = Sequence::from_record(record);
+            let sequence = Sequence::from_record(record, Some(&reference), Some(mask))?;
             populations.insert(sequence.id.clone(), sequence);
         }
 

@@ -36,10 +36,6 @@ pub enum Command {
         /// Dataset output directory
         #[arg(short, long, required = true)]
         output_dir: PathBuf,
-
-        /// Dataset output directory
-        #[arg(short, long, default_value_t = 200)]
-        mask: usize,
     },
 
     /// Run rebar on input alignment.
@@ -51,5 +47,9 @@ pub enum Command {
         /// Input fasta alignment
         #[arg(short, long, required = true)]
         alignment: PathBuf,
+
+        /// Mask 5' and 3' ends of alignment
+        #[arg(short, long, default_value_t = 200)]
+        mask: usize,
     },
 }
