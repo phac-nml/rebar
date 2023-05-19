@@ -10,6 +10,7 @@ bio = "1.1.0"
 clap = { version = "4.2.7", features = ["derive"] }
 color-eyre = "0.6.2"
 env_logger = "0.10.0"
+itertools = "0.10.5"
 log = "0.4.17"
 petgraph = "0.6.3"
 serde = { version = "1.0.163", features = ["derive"] }
