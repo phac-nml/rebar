@@ -42,6 +42,14 @@ pub enum Command {
         mask: usize,
     },
 
-    /// Run rebar on querry sequences.
-    Run { sequences: PathBuf },
+    /// Run rebar on input alignment.
+    Run {
+        /// Dataset directory
+        #[arg(short, long, required = true)]
+        dataset_dir: PathBuf,
+
+        /// Input fasta alignment
+        #[arg(short, long, required = true)]
+        alignment: PathBuf,
+    },
 }
