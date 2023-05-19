@@ -8,6 +8,7 @@ use color_eyre::eyre::{Report, Result};
 use rebar::cli::verbosity::Verbosity;
 use rebar::cli::{Cli, Command};
 use rebar::dataset::Dataset;
+use rebar::query::Query;
 use std::env;
 use std::str::FromStr;
 
@@ -47,10 +48,15 @@ async fn main() -> Result<()> {
         }
         // Run on input alignment
         Command::Run {
-            dataset_dir, mask, ..
+            alignment,
+            dataset_dir,
+            mask,
+            ..
         } => {
             // Load dataset
-            Dataset::load(&dataset_dir, mask)?;
+            let dataset = Dataset::load(&dataset_dir, mask)?;
+            // Load the query alignment
+            let _query = Query::load(alignment, &dataset, mask);
         }
     }
 

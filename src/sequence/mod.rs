@@ -137,7 +137,7 @@ impl Sequence {
     pub fn from_record(
         record: bio::io::fasta::Record,
         reference: Option<&Sequence>,
-        mask: Option<usize>,
+        mask: usize,
     ) -> Result<Self, Report> {
         let mut sample = Sequence::new();
         sample.id = record.id().to_string();
@@ -153,10 +153,8 @@ impl Sequence {
                 let mut s = *s;
                 let r = *r;
                 // Mask 5' and 3' ends
-                if let Some(mask) = mask {
-                    if coord <= mask || coord > genome_length - mask {
-                        s = 'N';
-                    }
+                if coord <= mask || coord > genome_length - mask {
+                    s = 'N';
                 }
 
                 match s {
