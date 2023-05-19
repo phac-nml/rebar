@@ -36,14 +36,18 @@ async fn main() -> Result<()> {
     let args = Cli::parse();
 
     match args.command {
-        Command::Run { .. } => println!("run"),
+        // Download a dataset
         Command::Dataset {
             name,
             tag,
             output_dir,
             ..
         } => {
-            let _dataset = Dataset::new(&name, &tag, &output_dir).await?;
+            Dataset::download(&name, &tag, &output_dir).await?;
+        }
+        // Run on input alignment
+        Command::Run { .. } => {
+            // Load dataset
         }
     }
 

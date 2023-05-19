@@ -54,8 +54,7 @@ impl std::fmt::Display for Tag {
 pub struct Dataset {
     name: Name,
     tag: Tag,
-    reference_url: String,
-    populations_url: String,
+    reference: Sequence,
     populations: BTreeMap<String, Sequence>,
 }
 
@@ -68,104 +67,88 @@ impl std::fmt::Display for Dataset {
 impl ToYaml for Dataset {}
 
 impl Dataset {
-    pub async fn new(
+    pub async fn download(
         name: &String,
         tag: &String,
         output_dir: &Path,
-    ) -> Result<Dataset, Report> {
+    ) -> Result<(), Report> {
         let name = match name.as_str() {
-            "rsv-a" | "rsv-b" => {
-                Err(eyre!("Dataset is not implemented yet: {name}"))?
-            }
+            "rsv-a" | "rsv-b" => Err(eyre!("Dataset is not implemented yet: {name}"))?,
             "sars-cov-2" => Name::SarsCov2,
             _ => Err(eyre!("Unknown dataset name: {name}"))
                 .suggestion("Please choose from:")?,
         };
 
-        let tag = match tag.as_str() {
+        let _tag = match tag.as_str() {
             "latest" => Tag::Latest,
             "nightly" => Tag::Nightly,
             _ => Tag::Archive(tag.to_string()),
         };
 
-        let reference_url = match name {
-            Name::SarsCov2 => SARSCOV2_REFERENCE_URL.to_string(),
-            _ => "".to_string(),
-        };
-
-        let populations_url = match name {
-            Name::SarsCov2 => SARSCOV2_POPULATIONS_URL.to_string(),
-            _ => "".to_string(),
-        };
-
-        let dataset = Dataset {
-            name,
-            tag,
-            reference_url,
-            populations_url,
-            populations: BTreeMap::new(),
-        };
-
-        dataset.download_reference(output_dir).await?;
-        dataset.download_populations(output_dir).await?;
-        // TBD phylogeny
-        Ok(dataset)
-    }
-
-    pub async fn download_reference(
-        &self,
-        output_dir: &Path,
-    ) -> Result<(), Report> {
-        let output_path = output_dir.join("reference.fasta");
-
         if !output_dir.exists() {
             create_dir_all(output_dir)?;
             info!("Creating output directory: {:?}", output_dir);
         }
-        info!(
-            "Downloading reference: {} to {:?}",
-            self.reference_url, output_path
-        );
 
-        download_file(&self.reference_url, &output_path).await?;
+        // --------------------------------------------------------------------
+        // Download Reference
+        // --------------------------------------------------------------------
+        let url = match name {
+            Name::SarsCov2 => SARSCOV2_REFERENCE_URL.to_string(),
+            _ => {
+                return Err(eyre!(
+                    "Downloading the {name} dataset is not implemented yet."
+                ))
+            }
+        };
+        let ext = Path::new(&url).extension().unwrap().to_str().unwrap();
+        let output_path = match ext {
+            "fasta" | "fa" => output_dir.join("reference.fasta"),
+            _ => output_dir.join(format!("reference.fasta.{ext}")),
+        };
+        info!("Downloading reference: {} to {:?}", url, output_path);
+        download_file(&url, &output_path).await?;
+        if ext != "fasta" && ext != "fa" {
+            let output_path_decompress = output_dir.join("reference.fasta");
+            decompress_file(&output_path, &output_path_decompress)?;
+        }
+
+        // --------------------------------------------------------------------
+        // Download Populations
+        // --------------------------------------------------------------------
+        let url = match name {
+            Name::SarsCov2 => SARSCOV2_POPULATIONS_URL.to_string(),
+            _ => {
+                return Err(eyre!(
+                    "Downloading the {name} dataset is not implemented yet."
+                ))
+            }
+        };
+        let ext = Path::new(&url).extension().unwrap().to_str().unwrap();
+        let output_path = match ext {
+            "fasta" | "fa" => output_dir.join("populations.fasta"),
+            _ => output_dir.join(format!("populations.fasta.{ext}")),
+        };
+        info!("Downloading populations: {} to {:?}", url, output_path);
+        download_file(&url, &output_path).await?;
+        if ext != "fasta" && ext != "fa" {
+            let output_path_decompress = output_dir.join("populations.fasta");
+            decompress_file(&output_path, &output_path_decompress)?;
+        }
+
+        // TBD phylogeny
 
         Ok(())
     }
 
-    pub async fn download_populations(
-        &self,
-        output_dir: &Path,
-    ) -> Result<(), Report> {
-        let file_ext = Path::new(&self.populations_url).extension().unwrap();
-
-        let output_path = match file_ext.to_str().unwrap() {
-            "zst" => output_dir.join("populations.fasta.zst"),
-            _ => output_dir.join("populations.fasta"),
-        };
-
-        if !output_dir.exists() {
-            create_dir_all(output_dir)?;
-            info!("Creating output directory: {:?}", output_dir);
-        }
-        info!(
-            "Downloading populations: {} to {:?}",
-            self.populations_url, output_path
-        );
-
-        download_file(&self.populations_url, &output_path).await?;
-
-        let input_path = output_path;
-        let output_path = output_dir.join("populations.fasta");
-        decompress_file(&input_path, &output_path)?;
-
+    pub fn load(dataset_dir: &Path) -> Result<(), Report> {
+        let reference_path = dataset_dir.join("reference.fasta");
+        println!("{reference_path:?}");
         Ok(())
     }
 }
 
-pub async fn download_file(
-    url: &str,
-    output_path: &PathBuf,
-) -> Result<(), Report> {
+pub async fn download_file(url: &str, output_path: &PathBuf) -> Result<(), Report> {
     let response = reqwest::get(url).await?;
     if response.status() != 200 {
         return Err(eyre!(
@@ -179,10 +162,7 @@ pub async fn download_file(
         .wrap_err(format!("Unable to write file: {:?}", output_path))
 }
 
-pub fn decompress_file(
-    input: &PathBuf,
-    output: &PathBuf,
-) -> Result<(), Report> {
+pub fn decompress_file(input: &PathBuf, output: &PathBuf) -> Result<(), Report> {
     let ext = input.extension().unwrap();
 
     match ext.to_str().unwrap() {
