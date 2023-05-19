@@ -40,12 +40,10 @@ async fn main() -> Result<()> {
         Command::Dataset {
             name,
             tag,
-            reference,
             output_dir,
             ..
         } => {
-            let _dataset =
-                Dataset::new(&name, &tag, &reference, &output_dir).await?;
+            let _dataset = Dataset::new(&name, &tag, &output_dir).await?;
         }
     }
 
