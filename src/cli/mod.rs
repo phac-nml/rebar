@@ -30,10 +30,9 @@ pub enum Command {
         #[arg(short, long, required = true)]
         tag: String,
 
-        /// Dataset reference accession
-        #[arg(short, long, required = true)]
-        reference: String,
-
+        // /// Dataset reference accession
+        // #[arg(short, long, required = true)]
+        // reference: String,
         /// Dataset output directory
         #[arg(short, long, required = true)]
         output_dir: PathBuf,

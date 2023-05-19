@@ -2,14 +2,19 @@ use crate::sequence::Sequence;
 use crate::traits::ToYaml;
 use color_eyre::eyre::{eyre, Report, WrapErr};
 use color_eyre::section::Section;
+use log::info;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 use std::fs::create_dir_all;
 use std::io::Read;
 use std::path::{Path, PathBuf};
 
-const NEXTCLADE_DATA_URL: &str = "https://raw.githubusercontent.com/nextstrain/nextclade_data/master/data/datasets";
+// const NEXTCLADE_DATA_URL: &str = "https://raw.githubusercontent.com/nextstrain/nextclade_data/master/data/datasets";
+const SARSCOV2_REFERENCE_URL: &str = "https://raw.githubusercontent.com/nextstrain/ncov/master/data/references_sequences.fasta";
+const SARSCOV2_POPULATIONS_URL: &str = "https://raw.githubusercontent.com/corneliusroemer/pango-sequences/main/data/pango-consensus-sequences_genome-nuc.fasta.zst";
 
+// At minimum, we need a reference and aligned sequences fasta
+// Eventually, we might need to wrangle the phylogeny
 #[derive(Clone, Debug, PartialEq, Deserialize, Serialize)]
 pub enum Name {
     RsvA,
@@ -27,10 +32,11 @@ impl std::fmt::Display for Name {
     }
 }
 
+// Just implement nightly first, we'll figure out latest and archive later
 #[derive(Clone, Debug, PartialEq, Deserialize, Serialize)]
 pub enum Tag {
-    Latest,
     Nightly,
+    Latest,
     Archive(String),
 }
 
@@ -48,7 +54,8 @@ impl std::fmt::Display for Tag {
 pub struct Dataset {
     name: Name,
     tag: Tag,
-    reference: String,
+    reference_url: String,
+    populations_url: String,
     populations: BTreeMap<String, Sequence>,
 }
 
@@ -64,15 +71,15 @@ impl Dataset {
     pub async fn new(
         name: &String,
         tag: &String,
-        reference: &String,
-        output_dir: &PathBuf,
+        output_dir: &Path,
     ) -> Result<Dataset, Report> {
         let name = match name.as_str() {
-            "rsv-a" => Name::RsvA,
-            "rsv-b" => Name::RsvB,
+            "rsv-a" | "rsv-b" => {
+                Err(eyre!("Dataset is not implemented yet: {name}"))?
+            }
             "sars-cov-2" => Name::SarsCov2,
             _ => Err(eyre!("Unknown dataset name: {name}"))
-                .suggestion("Please choose from: rsv-a, rsv-b, sars-cov2")?,
+                .suggestion("Please choose from:")?,
         };
 
         let tag = match tag.as_str() {
@@ -81,16 +88,27 @@ impl Dataset {
             _ => Tag::Archive(tag.to_string()),
         };
 
+        let reference_url = match name {
+            Name::SarsCov2 => SARSCOV2_REFERENCE_URL.to_string(),
+            _ => "".to_string(),
+        };
+
+        let populations_url = match name {
+            Name::SarsCov2 => SARSCOV2_POPULATIONS_URL.to_string(),
+            _ => "".to_string(),
+        };
+
         let dataset = Dataset {
             name,
             tag,
-            reference: reference.to_string(),
+            reference_url,
+            populations_url,
             populations: BTreeMap::new(),
         };
 
-        create_dir_all(output_dir)?;
         dataset.download_reference(output_dir).await?;
         dataset.download_populations(output_dir).await?;
+        // TBD phylogeny
         Ok(dataset)
     }
 
@@ -98,13 +116,18 @@ impl Dataset {
         &self,
         output_dir: &Path,
     ) -> Result<(), Report> {
-        let url = format!(
-            "{}/{}/references/{}/versions/{}/files/reference.fasta",
-            NEXTCLADE_DATA_URL, self.name, self.reference, self.tag,
-        );
         let output_path = output_dir.join("reference.fasta");
 
-        download_file(&url, &output_path).await?;
+        if !output_dir.exists() {
+            create_dir_all(output_dir)?;
+            info!("Creating output directory: {:?}", output_dir);
+        }
+        info!(
+            "Downloading reference: {} to {:?}",
+            self.reference_url, output_path
+        );
+
+        download_file(&self.reference_url, &output_path).await?;
 
         Ok(())
     }
@@ -113,20 +136,23 @@ impl Dataset {
         &self,
         output_dir: &Path,
     ) -> Result<(), Report> {
-        println!("download_populations");
-        let url = match self.name {
-            Name::SarsCov2 => "https://raw.githubusercontent.com/corneliusroemer/pango-sequences/main/data/pango-consensus-sequences_genome-nuc.fasta.zst",
-            Name::RsvA => return Err(eyre!("Not implemented yet")),
-            Name::RsvB => return Err(eyre!("Not implemented yet")),
-        };
-
-        let file_ext = Path::new(url).extension().unwrap();
+        let file_ext = Path::new(&self.populations_url).extension().unwrap();
 
         let output_path = match file_ext.to_str().unwrap() {
             "zst" => output_dir.join("populations.fasta.zst"),
             _ => output_dir.join("populations.fasta"),
         };
-        download_file(url, &output_path).await?;
+
+        if !output_dir.exists() {
+            create_dir_all(output_dir)?;
+            info!("Creating output directory: {:?}", output_dir);
+        }
+        info!(
+            "Downloading populations: {} to {:?}",
+            self.populations_url, output_path
+        );
+
+        download_file(&self.populations_url, &output_path).await?;
 
         let input_path = output_path;
         let output_path = output_dir.join("populations.fasta");
