@@ -25,10 +25,10 @@ use zstd::stream::read::Decoder;
 
 #[derive(Debug, Deserialize, Serialize)]
 pub struct Dataset {
-    name: Name,
-    tag: Tag,
-    reference: Sequence,
-    populations: BTreeMap<String, Sequence>,
+    pub name: Name,
+    pub tag: Tag,
+    pub reference: Sequence,
+    pub populations: BTreeMap<String, Sequence>,
 }
 
 impl std::fmt::Display for Dataset {
@@ -141,7 +141,7 @@ impl Dataset {
         let reference_reader =
             fasta::Reader::from_file(reference_path).expect("Unable to load reference");
         let reference = reference_reader.records().next().unwrap().unwrap();
-        let reference = Sequence::from_record(reference, None, Some(mask))?;
+        let reference = Sequence::from_record(reference, None, mask)?;
 
         // Load the populations (required)
         // Also parse mutations
@@ -153,7 +153,7 @@ impl Dataset {
         //let mut mutations = BTreeMap::new();
         for result in populations_reader.records() {
             let record = result?;
-            let sequence = Sequence::from_record(record, Some(&reference), Some(mask))?;
+            let sequence = Sequence::from_record(record, Some(&reference), mask)?;
             populations.insert(sequence.id.clone(), sequence);
         }
 
