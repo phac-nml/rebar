@@ -1,3 +1,12 @@
+pub mod constants;
+pub mod name;
+pub mod summary;
+pub mod tag;
+
+use crate::dataset::constants::*;
+use crate::dataset::name::Name;
+use crate::dataset::summary::Summary;
+use crate::dataset::tag::Tag;
 use crate::sequence::Sequence;
 use crate::traits::ToYaml;
 use bio::io::fasta;
@@ -13,86 +22,6 @@ use std::path::{Path, PathBuf};
 use std::str::FromStr;
 use tempfile::TempDir;
 use zstd::stream::read::Decoder;
-
-// const NEXTCLADE_DATA_URL: &str = "https://raw.githubusercontent.com/nextstrain/nextclade_data/master/data/datasets";
-const SARSCOV2_REFERENCE_URL: &str = "https://raw.githubusercontent.com/nextstrain/ncov/master/data/references_sequences.fasta";
-const SARSCOV2_POPULATIONS_URL: &str = "https://raw.githubusercontent.com/corneliusroemer/pango-sequences/main/data/pango-consensus-sequences_genome-nuc.fasta.zst";
-
-// At minimum, we need a reference and aligned sequences fasta
-// Eventually, we might need to wrangle the phylogeny
-#[derive(Clone, Debug, PartialEq, Deserialize, Serialize)]
-pub enum Name {
-    RsvA,
-    RsvB,
-    SarsCov2,
-    Unknown,
-}
-
-impl std::fmt::Display for Name {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        match self {
-            Name::RsvA => write!(f, "rsv-a"),
-            Name::RsvB => write!(f, "rsv-b"),
-            Name::SarsCov2 => write!(f, "sars-cov-2"),
-            Name::Unknown => write!(f, "unknown"),
-        }
-    }
-}
-
-impl FromStr for Name {
-    type Err = Report;
-
-    fn from_str(s: &str) -> Result<Name, Report> {
-        match s {
-            "rsv-a" => Ok(Name::RsvA),
-            "rsv-b" => Ok(Name::RsvB),
-            "sars-cov-2" => Ok(Name::SarsCov2),
-            "unknown" => Ok(Name::Unknown),
-            _ => Err(eyre!("Unknown dataset name: {s:?}")),
-        }
-    }
-}
-
-// Just implement nightly first, we'll figure out latest and archive later
-#[derive(Clone, Debug, PartialEq, Deserialize, Serialize)]
-pub enum Tag {
-    Nightly,
-    Latest,
-    Archive(String),
-    Unknown,
-}
-
-impl std::fmt::Display for Tag {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        match self {
-            Tag::Latest => write!(f, "latest"),
-            Tag::Nightly => write!(f, "nightly"),
-            Tag::Archive(tag) => write!(f, "{tag}"),
-            Tag::Unknown => write!(f, "unknown"),
-        }
-    }
-}
-
-impl FromStr for Tag {
-    type Err = Report;
-
-    fn from_str(s: &str) -> Result<Tag, Report> {
-        match s {
-            "latest" => Ok(Tag::Latest),
-            "nightly" => Ok(Tag::Nightly),
-            "unknown" => Ok(Tag::Unknown),
-            _ => Err(eyre!("Unknown dataset tag: {s:?}")),
-        }
-    }
-}
-
-#[derive(Debug, Deserialize, Serialize)]
-pub struct Summary {
-    name: String,
-    tag: String,
-}
-
-impl ToYaml for Summary {}
 
 #[derive(Debug, Deserialize, Serialize)]
 pub struct Dataset {
