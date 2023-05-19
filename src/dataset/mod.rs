@@ -10,6 +10,7 @@ use std::default::Default;
 use std::fs::{create_dir_all, remove_file, write, File};
 use std::io::Read;
 use std::path::{Path, PathBuf};
+use std::str::FromStr;
 use tempfile::TempDir;
 use zstd::stream::read::Decoder;
 
@@ -38,6 +39,20 @@ impl std::fmt::Display for Name {
     }
 }
 
+impl FromStr for Name {
+    type Err = Report;
+
+    fn from_str(s: &str) -> Result<Name, Report> {
+        match s {
+            "rsv-a" => Ok(Name::RsvA),
+            "rsv-b" => Ok(Name::RsvB),
+            "sars-cov-2" => Ok(Name::SarsCov2),
+            "unknown" => Ok(Name::Unknown),
+            _ => Err(eyre!("Unknown dataset name: {s:?}")),
+        }
+    }
+}
+
 // Just implement nightly first, we'll figure out latest and archive later
 #[derive(Clone, Debug, PartialEq, Deserialize, Serialize)]
 pub enum Tag {
@@ -54,6 +69,19 @@ impl std::fmt::Display for Tag {
             Tag::Nightly => write!(f, "nightly"),
             Tag::Archive(tag) => write!(f, "{tag}"),
             Tag::Unknown => write!(f, "unknown"),
+        }
+    }
+}
+
+impl FromStr for Tag {
+    type Err = Report;
+
+    fn from_str(s: &str) -> Result<Tag, Report> {
+        match s {
+            "latest" => Ok(Tag::Latest),
+            "nightly" => Ok(Tag::Nightly),
+            "unknown" => Ok(Tag::Unknown),
+            _ => Err(eyre!("Unknown dataset tag: {s:?}")),
         }
     }
 }
@@ -175,7 +203,7 @@ impl Dataset {
         Ok(())
     }
 
-    pub fn load(dataset_dir: &Path) -> Result<(), Report> {
+    pub fn load(dataset_dir: &Path) -> Result<Dataset, Report> {
         // Load the reference (required)
         let reference_path = dataset_dir.join("reference.fasta");
         info!("Loading reference: {:?}", reference_path);
@@ -187,16 +215,25 @@ impl Dataset {
         // Load the populations (required)
         let populations_path = dataset_dir.join("populations.fasta");
         info!("Loading populations: {:?}", populations_path);
-        let _populations_reader = fasta::Reader::from_file(populations_path)
+        let populations_reader = fasta::Reader::from_file(populations_path)
             .expect("Unable to load populations");
-        // for record in populations_reader.records() {
-        //     println!("{record:?}");
-        // }
+        let mut populations = BTreeMap::new();
+        for result in populations_reader.records() {
+            let record = result?;
+            let sequence = Sequence::from_record(record);
+            populations.insert(sequence.id.clone(), sequence);
+        }
 
         // Load the summary (optional)
         let summary_path = dataset_dir.join("summary.yaml");
+        let mut tag = Tag::Unknown;
+        let mut name = Name::Unknown;
         if summary_path.exists() {
             info!("Loading summary: {:?}", summary_path);
+            let reader = File::open(summary_path)?;
+            let summary: Summary = serde_yaml::from_reader(&reader)?;
+            name = Name::from_str(&summary.name)?;
+            tag = Tag::from_str(&summary.tag)?;
         }
 
         // Load the phylogeny (optional)
@@ -205,18 +242,15 @@ impl Dataset {
             info!("Loading phylogeny: {:?}", phylogeny_path);
         }
 
-        // Debug
-        let populations = BTreeMap::new();
-        let name = Name::Unknown;
-        let tag = Tag::Unknown;
-        let _dataset = Dataset {
+        // Finally assemble into dataset collection
+        let dataset = Dataset {
             name,
             tag,
             reference,
             populations,
         };
 
-        Ok(())
+        Ok(dataset)
     }
 }
 
