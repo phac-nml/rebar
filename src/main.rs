@@ -46,8 +46,9 @@ async fn main() -> Result<()> {
             Dataset::download(&name, &tag, &output_dir).await?;
         }
         // Run on input alignment
-        Command::Run { .. } => {
+        Command::Run { dataset_dir, .. } => {
             // Load dataset
+            Dataset::load(&dataset_dir)?;
         }
     }
 
