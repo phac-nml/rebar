@@ -5,10 +5,12 @@
 //use log::info;
 use clap::Parser;
 use color_eyre::eyre::{Report, Result};
+use log::info;
 use rebar::cli::verbosity::Verbosity;
 use rebar::cli::{Cli, Command};
 use rebar::dataset::Dataset;
 use rebar::query::Query;
+use rebar::traits::ToYaml;
 use std::env;
 use std::str::FromStr;
 
@@ -56,7 +58,13 @@ async fn main() -> Result<()> {
             // Load dataset
             let dataset = Dataset::load(&dataset_dir, mask)?;
             // Load the query alignment
-            let _query = Query::load(alignment, &dataset, mask);
+            let query = Query::load(alignment, &dataset, mask)?;
+            info!("Identifying consensus populations.");
+            for (id, sequence) in query.sequences {
+                println!("{id}");
+                let best_match = dataset.find_best_match(&sequence)?;
+                println!("\t{}", best_match.to_yaml().replace("\n", "\n\t"));
+            }
         }
     }
 

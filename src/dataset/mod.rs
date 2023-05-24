@@ -7,7 +7,8 @@ use crate::dataset::constants::*;
 use crate::dataset::name::Name;
 use crate::dataset::summary::Summary;
 use crate::dataset::tag::Tag;
-use crate::sequence::Sequence;
+use crate::query::match_summary::MatchSummary;
+use crate::sequence::{Sequence, Substitution};
 use crate::traits::ToYaml;
 use bio::io::fasta;
 use color_eyre::eyre::{eyre, Report, WrapErr};
@@ -29,6 +30,7 @@ pub struct Dataset {
     pub tag: Tag,
     pub reference: Sequence,
     pub populations: BTreeMap<String, Sequence>,
+    pub mutations: BTreeMap<Substitution, Vec<String>>,
 }
 
 impl std::fmt::Display for Dataset {
@@ -44,6 +46,7 @@ impl Default for Dataset {
             tag: Tag::Unknown,
             reference: Sequence::new(),
             populations: BTreeMap::new(),
+            mutations: BTreeMap::new(),
         }
     }
 }
@@ -150,11 +153,18 @@ impl Dataset {
         let populations_reader = fasta::Reader::from_file(populations_path)
             .expect("Unable to load populations");
         let mut populations = BTreeMap::new();
-        //let mut mutations = BTreeMap::new();
+        let mut mutations: BTreeMap<Substitution, Vec<String>> = BTreeMap::new();
         for result in populations_reader.records() {
             let record = result?;
             let sequence = Sequence::from_record(record, Some(&reference), mask)?;
-            populations.insert(sequence.id.clone(), sequence);
+            populations.insert(sequence.id.clone(), sequence.clone());
+
+            for sub in sequence.substitutions {
+                mutations
+                    .entry(sub)
+                    .or_insert(Vec::new())
+                    .push(sequence.id.clone());
+            }
         }
 
         // Load the summary (optional)
@@ -181,9 +191,116 @@ impl Dataset {
             tag,
             reference,
             populations,
+            mutations,
         };
 
         Ok(dataset)
+    }
+
+    pub fn find_best_match(&self, sequence: &Sequence) -> Result<MatchSummary, Report> {
+        let mut match_summary = MatchSummary::new();
+
+        // support: check which population have a matching sub
+        for sub in &sequence.substitutions {
+            if self.mutations.contains_key(sub) {
+                let matches: &Vec<String> = &self.mutations[sub];
+                for population in matches {
+                    *match_summary
+                        .support
+                        .entry(population.to_owned())
+                        .or_insert(0) += 1;
+                }
+            } else {
+                match_summary.private.push(sub.to_owned());
+            }
+        }
+
+        if match_summary.support.is_empty() {
+            return Ok(match_summary);
+        }
+
+        // conflict: check which populations have extra subs/lacking subs
+        for population in match_summary.support.keys() {
+            let pop_sub = &self.populations[population].substitutions;
+
+            // conflict_ref: sub in pop that is not in query
+            let pop_conflict_ref: usize = pop_sub
+                .iter()
+                .filter(|sub| !sequence.substitutions.contains(sub))
+                .collect::<Vec<_>>()
+                .len();
+            // conflict_alt: sub in query that is not in pop
+            let pop_conflict_alt: usize = sequence
+                .substitutions
+                .iter()
+                .filter(|sub| !pop_sub.contains(sub))
+                .collect::<Vec<_>>()
+                .len();
+
+            let pop_total =
+                match_summary.support[population] as isize - pop_conflict_ref as isize;
+
+            match_summary
+                .conflict_ref
+                .insert(population.to_owned(), pop_conflict_ref);
+            match_summary
+                .conflict_alt
+                .insert(population.to_owned(), pop_conflict_alt);
+            match_summary.total.insert(population.to_owned(), pop_total);
+        }
+
+        // Undecided if this filter is a good idea
+        // match_summary.total = match_summary
+        //     .total
+        //     .iter()
+        //     .filter(|(_pop, count)| count >= &&0)
+        //     .map(|(pop, count)| (*pop, *count))
+        //     .collect::<BTreeMap<_, _>>();
+
+        // match_summary.support = match_summary
+        //     .support
+        //     .iter()
+        //     .filter(|(pop, _count)| match_summary.total.contains_key(pop.clone()))
+        //     .map(|(pop, count)| (pop.clone(), count.clone()))
+        //     .collect::<BTreeMap<_, _>>();
+        // match_summary.conflict_ref = match_summary
+        //     .conflict_ref
+        //     .iter()
+        //     .filter(|(pop, _count)| match_summary.total.contains_key(pop.clone()))
+        //     .map(|(pop, count)| (*pop, *count))
+        //     .collect::<BTreeMap<_, _>>();
+        // match_summary.conflict_alt = match_summary
+        //     .conflict_alt
+        //     .iter()
+        //     .filter(|(pop, _count)| match_summary.total.contains_key(pop.clone()))
+        //     .map(|(pop, count)| (*pop, *count))
+        //     .collect::<BTreeMap<_, _>>();
+
+        // which population(s) has the highest total?
+        let max_total = match_summary
+            .total
+            .iter()
+            .max_by(|a, b| a.1.cmp(&b.1))
+            .map(|(_pop, count)| count.clone())
+            .expect(
+                format!("No populations in the summary total for: {}", sequence.id)
+                    .as_str(),
+            );
+
+        match_summary.top_populations = match_summary
+            .total
+            .iter()
+            .filter(|(_pop, count)| count.clone() >= &max_total)
+            .map(|(pop, _count)| pop.clone())
+            .collect::<Vec<_>>();
+
+        // TBD: Remove outliers from top graph
+        // Based on diagonstic mutations, phylo distance,
+
+        // TBD: Use graph to get consensus pop
+        match_summary.consensus_population = match_summary.top_populations[0].clone();
+
+        Ok(match_summary)
     }
 }
 
