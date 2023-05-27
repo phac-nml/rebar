@@ -1,10 +1,13 @@
 pub mod constants;
 pub mod name;
+pub mod phylogeny;
 pub mod summary;
 pub mod tag;
+pub mod utils;
 
 use crate::dataset::constants::*;
 use crate::dataset::name::Name;
+use crate::dataset::phylogeny::Phylogeny;
 use crate::dataset::summary::Summary;
 use crate::dataset::tag::Tag;
 use crate::query::match_summary::MatchSummary;
@@ -17,12 +20,9 @@ use log::info;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 use std::default::Default;
-use std::fs::{create_dir_all, remove_file, write, File};
-use std::io::Read;
-use std::path::{Path, PathBuf};
+use std::fs::{create_dir_all, write, File};
+use std::path::Path;
 use std::str::FromStr;
-use tempfile::TempDir;
-use zstd::stream::read::Decoder;
 
 #[derive(Debug, Deserialize, Serialize)]
 pub struct Dataset {
@@ -31,6 +31,7 @@ pub struct Dataset {
     pub reference: Sequence,
     pub populations: BTreeMap<String, Sequence>,
     pub mutations: BTreeMap<Substitution, Vec<String>>,
+    pub phylogeny: Phylogeny,
 }
 
 impl std::fmt::Display for Dataset {
@@ -47,6 +48,7 @@ impl Default for Dataset {
             reference: Sequence::new(),
             populations: BTreeMap::new(),
             mutations: BTreeMap::new(),
+            phylogeny: Phylogeny::new(),
         }
     }
 }
@@ -94,11 +96,12 @@ impl Dataset {
         }
         let output_path = output_dir.join("reference.fasta");
         info!("Downloading reference: {} to {:?}", url, output_path);
-        download_file(&url, &output_path, decompress).await?;
+        utils::download_file(&url, &output_path, decompress).await?;
 
         // --------------------------------------------------------------------
         // Download Populations
         // --------------------------------------------------------------------
+
         let url = match name {
             Name::SarsCov2 => SARSCOV2_POPULATIONS_URL.to_string(),
             _ => {
@@ -114,10 +117,17 @@ impl Dataset {
         }
         let output_path = output_dir.join("populations.fasta");
         info!("Downloading populations: {} to {:?}", url, output_path);
-        download_file(&url, &output_path, decompress).await?;
+        utils::download_file(&url, &output_path, decompress).await?;
 
         // TBD phylogeny
 
+        // --------------------------------------------------------------------
+        // Dataset-Specific
+        // --------------------------------------------------------------------
+
+        if name == Name::SarsCov2 {
+            println!("HERE");
+        }
         // --------------------------------------------------------------------
         // Create Summary
         // --------------------------------------------------------------------
@@ -180,9 +190,16 @@ impl Dataset {
         }
 
         // Load the phylogeny (optional)
+        let mut phylogeny = Phylogeny::new();
         let phylogeny_path = dataset_dir.join("phylogeny.dot");
+        // Check if it already exists
         if phylogeny_path.exists() {
             info!("Loading phylogeny: {:?}", phylogeny_path);
+        }
+        // Otherwise we create it
+        else {
+            info!("Preparing dataset phylogeny: {}", &phylogeny_path.display());
+            //phylogeny.build_graph(&name, &tag, &dataset_dir).expect("Failed to build phylogeny.");
         }
 
         // Finally assemble into dataset collection
@@ -192,18 +209,38 @@ impl Dataset {
             reference,
             populations,
             mutations,
+            phylogeny,
         };
 
         Ok(dataset)
     }
 
-    pub fn find_best_match(&self, sequence: &Sequence) -> Result<MatchSummary, Report> {
+    pub fn find_best_match(
+        &self,
+        sequence: &Sequence,
+        exclude_populations: Option<Vec<String>>,
+    ) -> Result<MatchSummary, Report> {
         let mut match_summary = MatchSummary::new();
+
+        // Check if we are excluding certains pop
+        let mut exclude_pops = Vec::new();
+        if let Some(exclude_populations) = exclude_populations {
+            exclude_pops = exclude_populations;
+        } else {
+            exclude_pops = Vec::new();
+        }
+        let exclude_populations = exclude_pops;
 
         // support: check which population have a matching sub
         for sub in &sequence.substitutions {
             if self.mutations.contains_key(sub) {
-                let matches: &Vec<String> = &self.mutations[sub];
+                let mut matches: Vec<String> = self.mutations[sub]
+                    .clone()
+                    .iter()
+                    .filter(|pop| !exclude_populations.contains(pop))
+                    .map(|pop| pop.to_owned())
+                    .collect::<Vec<_>>();
+
                 for population in matches {
                     *match_summary
                         .support
@@ -249,50 +286,48 @@ impl Dataset {
             match_summary.total.insert(population.to_owned(), pop_total);
         }
 
-        // Undecided if this filter is a good idea
-        // match_summary.total = match_summary
-        //     .total
-        //     .iter()
-        //     .filter(|(_pop, count)| count >= &&0)
-        //     .map(|(pop, count)| (*pop, *count))
-        //     .collect::<BTreeMap<_, _>>();
-
-        // match_summary.support = match_summary
-        //     .support
-        //     .iter()
-        //     .filter(|(pop, _count)| match_summary.total.contains_key(pop.clone()))
-        //     .map(|(pop, count)| (pop.clone(), count.clone()))
-        //     .collect::<BTreeMap<_, _>>();
-        // match_summary.conflict_ref = match_summary
-        //     .conflict_ref
-        //     .iter()
-        //     .filter(|(pop, _count)| match_summary.total.contains_key(pop.clone()))
-        //     .map(|(pop, count)| (*pop, *count))
-        //     .collect::<BTreeMap<_, _>>();
-        // match_summary.conflict_alt = match_summary
-        //     .conflict_alt
-        //     .iter()
-        //     .filter(|(pop, _count)| match_summary.total.contains_key(pop.clone()))
-        //     .map(|(pop, count)| (*pop, *count))
-        //     .collect::<BTreeMap<_, _>>();
-
         // which population(s) has the highest total?
-        let max_total = match_summary
-            .total
+        let binding = match_summary.total.clone();
+        let max_total = binding
             .iter()
             .max_by(|a, b| a.1.cmp(&b.1))
-            .map(|(_pop, count)| count.clone())
-            .expect(
-                format!("No populations in the summary total for: {}", sequence.id)
-                    .as_str(),
-            );
+            .map(|(_pop, count)| count)
+            .unwrap_or_else(|| {
+                panic!("No populations in the summary total for: {}", sequence.id)
+            });
 
-        match_summary.top_populations = match_summary
-            .total
-            .iter()
-            .filter(|(_pop, count)| count.clone() >= &max_total)
-            .map(|(pop, _count)| pop.clone())
+        let binding = match_summary.total.clone();
+        match_summary.top_populations = binding
+            .into_iter()
+            .filter(|(_pop, count)| count >= &max_total)
+            .map(|(pop, _count)| pop)
             .collect::<Vec<_>>();
+
+        // Undecided if this filter is a good idea
+        // But it helps cut down on verbosity and data stored
+        match_summary.total = match_summary
+            .total
+            .into_iter()
+            .filter(|(pop, _count)| match_summary.top_populations.contains(pop))
+            .collect::<BTreeMap<_, _>>();
+
+        match_summary.support = match_summary
+            .support
+            .into_iter()
+            .filter(|(pop, _count)| match_summary.top_populations.contains(pop))
+            .collect::<BTreeMap<_, _>>();
+
+        match_summary.conflict_ref = match_summary
+            .conflict_ref
+            .into_iter()
+            .filter(|(pop, _count)| match_summary.top_populations.contains(pop))
+            .collect::<BTreeMap<_, _>>();
+
+        match_summary.conflict_alt = match_summary
+            .conflict_alt
+            .into_iter()
+            .filter(|(pop, _count)| match_summary.top_populations.contains(pop))
+            .collect::<BTreeMap<_, _>>();
 
         // TBD: Remove outliers from top graph
         // Based on diagonstic mutations, phylo distance,
@@ -302,62 +337,4 @@ impl Dataset {
 
         Ok(match_summary)
     }
-}
-
-pub async fn download_file(
-    url: &str,
-    output_path: &PathBuf,
-    decompress: bool,
-) -> Result<(), Report> {
-    let ext = Path::new(&url).extension().unwrap().to_str().unwrap();
-
-    let response = reqwest::get(url).await?;
-    if response.status() != 200 {
-        return Err(eyre!(
-            "Unable to download file: {url}\nStatus code {}.",
-            response.status()
-        ));
-    }
-
-    if decompress {
-        // Write bytes to a tmp file
-        let tmp_dir = TempDir::new()?;
-        let tmp_path = PathBuf::from(tmp_dir.path()).join(format!("tmpfile.{ext}"));
-        let content = response.bytes().await?;
-        write(&tmp_path, content)
-            .wrap_err(format!("Unable to write file: {:?}", tmp_path))?;
-        decompress_file(&tmp_path, output_path, true)?;
-    } else {
-        let content = response.text().await?;
-        write(output_path, content)
-            .wrap_err(format!("Unable to write file: {:?}", output_path))?;
-    }
-
-    Ok(())
-}
-
-pub fn decompress_file(
-    input: &PathBuf,
-    output: &PathBuf,
-    inplace: bool,
-) -> Result<(), Report> {
-    let ext = input.extension().unwrap();
-
-    match ext.to_str().unwrap() {
-        "zst" => {
-            let reader = File::open(input)?;
-            let mut decoder = Decoder::new(reader)?;
-            let mut buffer = String::new();
-            decoder.read_to_string(&mut buffer)?;
-            write(output, buffer)
-                .wrap_err(format!("Unable to write file: {:?}", output))?;
-
-            if inplace {
-                remove_file(input)?;
-            }
-        }
-        _ => return Err(eyre!("Decompression for .{ext:?} is not implemented yet.")),
-    };
-
-    Ok(())
 }

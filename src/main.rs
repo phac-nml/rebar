@@ -5,7 +5,7 @@
 //use log::info;
 use clap::Parser;
 use color_eyre::eyre::{Report, Result};
-use log::info;
+use log::{debug, info};
 use rebar::cli::verbosity::Verbosity;
 use rebar::cli::{Cli, Command};
 use rebar::dataset::Dataset;
@@ -58,13 +58,26 @@ async fn main() -> Result<()> {
             // Load dataset
             let dataset = Dataset::load(&dataset_dir, mask)?;
             // Load the query alignment
-            let query = Query::load(alignment, &dataset, mask)?;
-            info!("Identifying consensus populations.");
-            for (id, sequence) in query.sequences {
-                println!("{id}");
-                let best_match = dataset.find_best_match(&sequence)?;
-                println!("\t{}", best_match.to_yaml().replace("\n", "\n\t"));
-            }
+            // let query = Query::load(alignment, &dataset, mask)?;
+            // info!("Identifying consensus and parent populations.");
+            // for (id, sequence) in query.sequences {
+
+            //     if id != "XBB.1.16" { continue }
+            //     debug!("sequence: {id}");
+
+            //     // consensus population
+            //     let exclude_populations = None;
+            //     let best_match = dataset.find_best_match(&sequence, exclude_populations)?;
+            //     debug!("\n  {}", best_match.to_yaml().replace("\n", "\n  "));
+
+            //     // let mut exclude_populations = vec!(best_match.consensus_population);
+            //     // exclude_populations.push(String::from("XBB.1.16.1"));
+            //     // exclude_populations.push(String::from("XBB.1.16.3"));
+            //     // let parent_match = dataset.find_best_match(&sequence, Some(exclude_populations))?;
+            //     // debug!("  parent_1:");
+            //     // debug!("\n    {}", parent_match.to_yaml().replace("\n", "\n    "));
+            //     // parent populations
+            // }
         }
     }
 
