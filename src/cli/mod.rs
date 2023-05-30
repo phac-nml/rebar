@@ -12,10 +12,6 @@ use std::path::PathBuf;
 pub struct Cli {
     #[command(subcommand)]
     pub command: Command,
-
-    /// Make output more quiet or more verbose
-    #[arg(short, long)]
-    pub verbosity: Option<String>,
 }
 
 #[derive(Debug, Subcommand, Serialize)]
@@ -36,20 +32,32 @@ pub enum Command {
         /// Dataset output directory
         #[arg(short, long, required = true)]
         output_dir: PathBuf,
+
+        /// Make output more quiet or more verbose
+        #[arg(short, long, default_value_t=String::from("info"))]
+        verbosity: String,
     },
 
     /// Run rebar on input alignment.
     Run {
         /// Dataset directory
-        #[arg(short, long, required = true)]
+        #[arg(short = 'd', long, required = true)]
         dataset_dir: PathBuf,
 
         /// Input fasta alignment
-        #[arg(short, long, required = true)]
+        #[arg(short = 'a', long, required = true)]
         alignment: PathBuf,
 
         /// Mask 5' and 3' ends of alignment
-        #[arg(short, long, default_value_t = 200)]
+        #[arg(short = 'm', long, default_value_t = 200)]
         mask: usize,
+
+        /// Maximum number of parents
+        #[arg(short = 'p', long, default_value_t = 2)]
+        max_parents: usize,
+
+        /// Make output more quiet or more verbose
+        #[arg(short, long, default_value_t=String::from("info"))]
+        verbosity: String,
     },
 }

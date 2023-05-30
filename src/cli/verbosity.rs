@@ -1,3 +1,4 @@
+use color_eyre::eyre::{eyre, Report, Result};
 use std::str::FromStr;
 
 #[derive(Debug)]
@@ -15,18 +16,15 @@ impl std::fmt::Display for Verbosity {
     }
 }
 
-#[derive(Debug)]
-pub struct UnknownVerbosityError;
-
 impl FromStr for Verbosity {
-    type Err = UnknownVerbosityError;
+    type Err = Report;
 
     fn from_str(input: &str) -> Result<Self, Self::Err> {
         match input {
             "debug" => Ok(Verbosity::Debug),
             "info" => Ok(Verbosity::Info),
             "warn" => Ok(Verbosity::Warn),
-            _ => Err(UnknownVerbosityError),
+            _ => Err(eyre!("Unknown verbosity level {input}.")),
         }
     }
 }
