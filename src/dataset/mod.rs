@@ -7,7 +7,9 @@ pub mod utils;
 
 use crate::dataset::constants::*;
 use crate::dataset::name::Name;
-use crate::dataset::phylogeny::Phylogeny;
+use crate::dataset::phylogeny::{
+    Phylogeny, PhylogenyExportFormat, PhylogenyImportFormat,
+};
 use crate::dataset::summary::Summary;
 use crate::dataset::tag::Tag;
 use crate::query::match_summary::MatchSummary;
@@ -119,18 +121,23 @@ impl Dataset {
         info!("Downloading populations: {} to {:?}", url, output_path);
         utils::download_file(&url, &output_path, decompress).await?;
 
-        // TBD phylogeny
-
         // --------------------------------------------------------------------
-        // Dataset-Specific
+        // Phylogeny
         // --------------------------------------------------------------------
 
-        if name == Name::SarsCov2 {
-            println!("HERE");
-        }
+        let output_path = output_dir.join("phylogeny.dot");
+        info!("Creating phylogeny: {:?}", output_path);
+
+        let mut phylogeny = Phylogeny::new();
+        phylogeny.build_graph(&name, &output_dir).await?;
+        // Export to several formats
+        phylogeny.export(&output_dir, PhylogenyExportFormat::Dot)?;
+        phylogeny.export(&output_dir, PhylogenyExportFormat::Json)?;
+
         // --------------------------------------------------------------------
         // Create Summary
         // --------------------------------------------------------------------
+
         let output_path = output_dir.join("summary.yaml");
         info!("Creating info summary: {:?}", output_path);
 
@@ -148,7 +155,7 @@ impl Dataset {
 
     /// Load a local dataset
     pub fn load(dataset_dir: &Path, mask: usize) -> Result<Dataset, Report> {
-        // Load the reference (required)
+        // (required) load reference
         let reference_path = dataset_dir.join("reference.fasta");
         info!("Loading reference: {:?}", reference_path);
         let reference_reader =
@@ -156,8 +163,7 @@ impl Dataset {
         let reference = reference_reader.records().next().unwrap().unwrap();
         let reference = Sequence::from_record(reference, None, mask)?;
 
-        // Load the populations (required)
-        // Also parse mutations
+        // (required) load populations and parse mutations
         let populations_path = dataset_dir.join("populations.fasta");
         info!("Loading populations: {:?}", populations_path);
         let populations_reader = fasta::Reader::from_file(populations_path)
@@ -177,7 +183,7 @@ impl Dataset {
             }
         }
 
-        // Load the summary (optional)
+        // (optional) load summary
         let summary_path = dataset_dir.join("summary.yaml");
         let mut tag = Tag::Unknown;
         let mut name = Name::Unknown;
@@ -189,17 +195,12 @@ impl Dataset {
             tag = Tag::from_str(&summary.tag)?;
         }
 
-        // Load the phylogeny (optional)
+        // (optional) load phylogeny
+        let phylogeny_path = dataset_dir.join("phylogeny.json");
         let mut phylogeny = Phylogeny::new();
-        let phylogeny_path = dataset_dir.join("phylogeny.dot");
-        // Check if it already exists
         if phylogeny_path.exists() {
             info!("Loading phylogeny: {:?}", phylogeny_path);
-        }
-        // Otherwise we create it
-        else {
-            info!("Preparing dataset phylogeny: {}", &phylogeny_path.display());
-            //phylogeny.build_graph(&name, &tag, &dataset_dir).expect("Failed to build phylogeny.");
+            phylogeny = Phylogeny::import(&dataset_dir, PhylogenyImportFormat::Json)?;
         }
 
         // Finally assemble into dataset collection
@@ -223,7 +224,7 @@ impl Dataset {
         let mut match_summary = MatchSummary::new();
 
         // Check if we are excluding certains pop
-        let mut exclude_pops = Vec::new();
+        let exclude_pops: Vec<String>;
         if let Some(exclude_populations) = exclude_populations {
             exclude_pops = exclude_populations;
         } else {
@@ -234,7 +235,7 @@ impl Dataset {
         // support: check which population have a matching sub
         for sub in &sequence.substitutions {
             if self.mutations.contains_key(sub) {
-                let mut matches: Vec<String> = self.mutations[sub]
+                let matches: Vec<String> = self.mutations[sub]
                     .clone()
                     .iter()
                     .filter(|pop| !exclude_populations.contains(pop))

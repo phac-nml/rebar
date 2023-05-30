@@ -82,3 +82,9 @@ impl MatchSummary {
         }
     }
 }
+
+impl Default for MatchSummary {
+    fn default() -> Self {
+        Self::new()
+    }
+}

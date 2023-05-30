@@ -5,26 +5,26 @@
 //use log::info;
 use clap::Parser;
 use color_eyre::eyre::{Report, Result};
-use log::{debug, info};
 use rebar::cli::verbosity::Verbosity;
 use rebar::cli::{Cli, Command};
 use rebar::dataset::Dataset;
-use rebar::query::Query;
-use rebar::traits::ToYaml;
+//use rebar::query::Query;
+//use rebar::traits::ToYaml;
 use std::env;
 use std::str::FromStr;
 
-fn setup() -> Result<(), Report> {
+fn setup(args: &Cli) -> Result<(), Report> {
+    // initialize color_eyre for colorized logs
     color_eyre::install()?;
 
-    let verbosity = Verbosity::from_str("debug").unwrap();
+    let verbosity = match &args.command {
+        Command::Dataset { verbosity, .. } => Verbosity::from_str(verbosity)?,
+        Command::Run { verbosity, .. } => Verbosity::from_str(verbosity)?,
+    };
+    // Set default logging level via RUST_LOG
+    env::set_var("RUST_LOG", verbosity.to_string());
 
-    // Set default logging level if RUST_LOG is not set.
-    //let log_verbosity = "debug";
-    if env::var("RUST_LOG").is_err() {
-        env::set_var("RUST_LOG", verbosity.to_string())
-    }
-
+    // initialize env_logger for different verbosity levels
     env_logger::init();
 
     Ok(())
@@ -32,11 +32,11 @@ fn setup() -> Result<(), Report> {
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    // Misc setup actions like logging
-    setup().unwrap();
-
     // Parse CLI parameters
     let args = Cli::parse();
+
+    // Misc setup actions like logging
+    setup(&args)?;
 
     match args.command {
         // Download a dataset
@@ -50,13 +50,13 @@ async fn main() -> Result<()> {
         }
         // Run on input alignment
         Command::Run {
-            alignment,
+            //alignment,
             dataset_dir,
             mask,
             ..
         } => {
             // Load dataset
-            let dataset = Dataset::load(&dataset_dir, mask)?;
+            let _dataset = Dataset::load(&dataset_dir, mask)?;
             // Load the query alignment
             // let query = Query::load(alignment, &dataset, mask)?;
             // info!("Identifying consensus and parent populations.");

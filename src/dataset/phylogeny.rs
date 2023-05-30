@@ -1,28 +1,68 @@
-use crate::dataset::{Name, Tag};
-
-use std::collections::HashMap;
-use std::path::{Path, PathBuf};
-
+use crate::dataset::{constants, utils, Name};
 use color_eyre::Report;
+use csv;
 use itertools::Itertools;
+use log::{debug, info};
 use petgraph::dot::{Config, Dot};
 use petgraph::graph::{Graph, NodeIndex};
 use petgraph::visit::Dfs;
 use petgraph::Direction;
+//use serde;
 use serde::{Deserialize, Serialize};
+use serde_json;
+use std::collections::HashMap;
 use std::fs::File;
 use std::io::Write;
-
-use csv;
-
-// serde
-use serde;
-use serde_json;
+use std::path::{Path, PathBuf};
+use std::string::ToString;
 
 #[derive(serde::Deserialize, Debug)]
 struct LineageNotesRow<'a> {
     lineage: &'a str,
     _description: &'a str,
+}
+
+pub enum PhylogenyExportFormat {
+    Dot,
+    Json,
+}
+
+impl PhylogenyExportFormat {
+    pub fn extension(&self) -> String {
+        match self {
+            PhylogenyExportFormat::Dot => String::from("dot"),
+            PhylogenyExportFormat::Json => String::from("json"),
+        }
+    }
+}
+
+impl std::fmt::Display for PhylogenyExportFormat {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        match self {
+            PhylogenyExportFormat::Dot => write!(f, "dot"),
+            PhylogenyExportFormat::Json => write!(f, "json"),
+        }
+    }
+}
+
+pub enum PhylogenyImportFormat {
+    Json,
+}
+
+impl PhylogenyImportFormat {
+    pub fn extension(&self) -> String {
+        match self {
+            PhylogenyImportFormat::Json => String::from("json"),
+        }
+    }
+}
+
+impl std::fmt::Display for PhylogenyImportFormat {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        match self {
+            PhylogenyImportFormat::Json => write!(f, "json"),
+        }
+    }
 }
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -85,16 +125,17 @@ impl Phylogeny {
         Ok(recombinants)
     }
 
-    pub fn build_graph(
+    pub async fn build_graph(
         &mut self,
         dataset_name: &Name,
-        dataset_tag: &Tag,
         dataset_dir: &Path,
     ) -> Result<(), Report> {
-        let mut graph_data: HashMap<String, Vec<String>> = HashMap::new();
-        if dataset_name == &Name::SarsCov2 {
-            (graph_data, self.order) = create_sarscov2_graph_data(dataset_dir).unwrap();
-        }
+        let (graph_data, order) = match dataset_name {
+            &Name::SarsCov2 => create_sarscov2_graph_data(dataset_dir).await?,
+            _ => return Ok(()),
+        };
+
+        self.order = order;
 
         // ------------------------------------------------------------------------
         // Construct Graph
@@ -110,6 +151,8 @@ impl Phylogeny {
             self.lookup.insert(name.clone(), id.clone());
             let parents = &graph_data[&name.clone()];
 
+            debug!("Population: {name}; Parents: {parents:?}");
+
             // If multiple parents add this to recombinants list
             if parents.len() > 1 {
                 self.recombinants.push(name.clone());
@@ -123,20 +166,74 @@ impl Phylogeny {
         Ok(())
     }
 
-    pub fn export_graph(&self, dataset_dir: &Path) -> Result<(), Report> {
-        // Export graph to dot file
-        let graph_path = dataset_dir.join("graph.dot");
-        let mut graph_output =
-            format!("{}", Dot::with_config(&self.graph, &[Config::EdgeNoLabel]));
-        // Set horizontal
-        graph_output =
-            str::replace(&graph_output, "digraph {", "digraph {\n    rankdir=\"LR\";");
+    /// import phylogeny from specified format
+    pub fn import(
+        dataset_dir: &Path,
+        format: PhylogenyImportFormat,
+    ) -> Result<Phylogeny, Report> {
+        //  import path
+        let mut import_path = dataset_dir.join("phylogeny");
+        import_path.set_extension(format.extension());
 
-        let mut graph_file = File::create(graph_path).unwrap();
-        graph_file
-            .write_all(&graph_output.as_bytes())
-            .expect("Failed to write graph file.");
+        let phylogeny: Phylogeny = match format {
+            PhylogenyImportFormat::Json => {
+                let phylogeny = std::fs::read_to_string(import_path)
+                    .expect("Couldn't read phylogeny {import_path:?}.");
+                serde_json::from_str(&phylogeny)?
+            } // ... space for more enum options for import, like Auspice perhaps
+        };
 
+        Ok(phylogeny)
+    }
+
+    /// export phylogeny to specified format
+    pub fn export(
+        &self,
+        dataset_dir: &Path,
+        format: PhylogenyExportFormat,
+    ) -> Result<(), Report> {
+        // output path
+        let mut output_path = dataset_dir.join("phylogeny");
+        output_path.set_extension(format.extension());
+
+        info!("Exporting phylogeny to {format}: {output_path:?}");
+
+        // format conversion
+        let output = match format {
+            PhylogenyExportFormat::Dot => {
+                let mut output =
+                    format!("{}", Dot::with_config(&self.graph, &[Config::EdgeNoLabel]));
+                // set horizontal (Left to Right) format for tree-like visualizer
+                output =
+                    str::replace(&output, "digraph {", "digraph {\n    rankdir=\"LR\";");
+                output
+            }
+            PhylogenyExportFormat::Json => {
+                let output = serde_json::to_string_pretty(&self)
+                    .expect(format!("Failed to export phylogeny to {format}.").as_str());
+                output
+            }
+        };
+
+        // Write to file
+        let mut file = File::create(&output_path).expect(
+            format!("Failed to access output phylogeny path {:?}.", &output_path)
+                .as_str(),
+        );
+        file.write_all(&output.as_bytes())
+            .expect(format!("Failed to write phylogeny to {:?}.", &output_path).as_str());
+
+        Ok(())
+    }
+
+    pub fn export_json(&self, dataset_dir: &Path) -> Result<(), Report> {
+        let output_path = dataset_dir.join("phylogeny.json");
+        let output =
+            serde_json::to_string(&self).expect("Failed to export phylogeny to json.");
+
+        let mut file = File::create(output_path).unwrap();
+        file.write_all(&output.as_bytes())
+            .expect("Failed to export phylogeny as json.");
         Ok(())
     }
 
@@ -279,33 +376,47 @@ impl Phylogeny {
     }
 }
 
-pub fn download_lineage_notes(dataset_dir: &Path) -> Result<PathBuf, Report> {
-    // https://raw.githubusercontent.com/cov-lineages/pango-designation/master/lineage_notes.txt
-    let lineage_notes_path = dataset_dir.join("lineage_notes.txt");
-    Ok(lineage_notes_path)
+pub async fn download_lineage_notes(dataset_dir: &Path) -> Result<PathBuf, Report> {
+    let decompress = false;
+    let url = constants::SARSCOV2_LINEAGE_NOTES_URL;
+    let output_path = dataset_dir.join("lineage_notes.txt");
+    utils::download_file(url, &output_path, decompress).await?;
+
+    Ok(output_path)
 }
 
-pub fn download_alias_key(dataset_dir: &Path) -> Result<PathBuf, Report> {
+pub async fn download_alias_key(dataset_dir: &Path) -> Result<PathBuf, Report> {
     // https://raw.githubusercontent.com/cov-lineages/pango-designation/master/pango_designation/alias_key.json
-    let alias_key_path = dataset_dir.join("alias_key.json");
-    Ok(alias_key_path)
+
+    let decompress = false;
+    let url = constants::SARSCOV2_ALIAS_KEY_URL;
+    let output_path = dataset_dir.join("alias_key.json");
+    utils::download_file(url, &output_path, decompress).await?;
+
+    Ok(output_path)
 }
 
-pub fn import_alias_key(
+pub async fn import_alias_key(
     dataset_dir: &Path,
 ) -> Result<HashMap<String, Vec<String>>, Report> {
-    let alias_key_path =
-        download_alias_key(dataset_dir).expect("Couldn't download alias_key from url.");
+    // download
+    let alias_key_path = download_alias_key(dataset_dir)
+        .await
+        .expect("Couldn't download alias_key from url.");
+
+    // read to json
     let alias_key_str =
         std::fs::read_to_string(alias_key_path).expect("Couldn't read alias_key file.");
     let alias_key_val: serde_json::Value =
         serde_json::from_str(&alias_key_str).expect("Couldn't convert alias_key to json");
+    // deserialize to object (raw, mixed types)
     let alias_key_raw: serde_json::Map<String, serde_json::Value> = alias_key_val
         .as_object()
         .expect("Couldn't convert alias_key json to json Map")
         .clone();
 
-    // This should probably be a custom deserializer, but I don't know how to do that yet
+    // This should probably be a custom deserializer fn for brevity,
+    //   but I don't know how to do that yet :)
     let mut alias_key: HashMap<String, Vec<String>> = HashMap::new();
 
     for (alias, lineage) in &alias_key_raw {
@@ -343,17 +454,18 @@ pub fn import_alias_key(
     Ok(alias_key)
 }
 
-pub fn create_sarscov2_graph_data(
+pub async fn create_sarscov2_graph_data(
     dataset_dir: &Path,
 ) -> Result<(HashMap<String, Vec<String>>, Vec<String>), Report> {
     // ------------------------------------------------------------------------
     // Download and import data
 
     // Import the alias key
-    let alias_key = import_alias_key(dataset_dir).unwrap();
+    let alias_key = import_alias_key(dataset_dir).await?;
 
     // Import the lineage notes
     let lineage_notes_path = download_lineage_notes(dataset_dir)
+        .await
         .expect("Couldn't download lineage notes from url.");
     let mut reader = csv::ReaderBuilder::new()
         .delimiter(b'\t')
