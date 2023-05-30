@@ -13,6 +13,7 @@ pub struct MatchSummary {
     pub conflict_ref: BTreeMap<String, usize>,
     pub conflict_alt: BTreeMap<String, usize>,
     pub total: BTreeMap<String, isize>,
+    pub recombinant: Option<String>,
 }
 
 impl ToYaml for MatchSummary {
@@ -53,6 +54,7 @@ impl ToYaml for MatchSummary {
         format!(
             "consensus_population: {}
 top_populations: \n- {}
+recombinant: {}
 total:\n  {}
 support:\n  {}
 conflict_ref:\n  {}
@@ -60,6 +62,7 @@ conflict_alt:\n  {}
 private:\n  {}",
             self.consensus_population,
             self.top_populations.join("\n- "),
+            self.recombinant.clone().unwrap_or("None".to_string()),
             total_order.join("\n  "),
             support_order.join("\n  "),
             conflict_ref_order.join("\n  "),
@@ -79,6 +82,7 @@ impl MatchSummary {
             conflict_ref: BTreeMap::new(),
             conflict_alt: BTreeMap::new(),
             total: BTreeMap::new(),
+            recombinant: None,
         }
     }
 }

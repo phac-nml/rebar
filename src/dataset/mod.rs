@@ -18,7 +18,7 @@ use crate::traits::ToYaml;
 use bio::io::fasta;
 use color_eyre::eyre::{eyre, Report, WrapErr};
 use color_eyre::section::Section;
-use log::info;
+use log::{debug, info};
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 use std::default::Default;
@@ -203,7 +203,7 @@ impl Dataset {
             phylogeny = Phylogeny::import(dataset_dir, PhylogenyImportFormat::Json)?;
         }
 
-        // Finally assemble into dataset collection
+        // assembles pieces into full dataset
         let dataset = Dataset {
             name,
             tag,
@@ -224,13 +224,14 @@ impl Dataset {
         let mut match_summary = MatchSummary::new();
 
         // Check if we are excluding certains pop
-        let exclude_pops: Vec<String>;
-        if let Some(exclude_populations) = exclude_populations {
-            exclude_pops = exclude_populations;
-        } else {
-            exclude_pops = Vec::new();
-        }
-        let exclude_populations = exclude_pops;
+        let exclude_populations: Vec<String> = exclude_populations.unwrap_or(Vec::new());
+        // let exclude_pops: Vec<String>;
+        // if let Some(exclude_populations) = exclude_populations {
+        //     exclude_pops = exclude_populations;
+        // } else {
+        //     exclude_pops = Vec::new();
+        // }
+        // let exclude_populations = exclude_pops;
 
         // support: check which population have a matching sub
         for sub in &sequence.substitutions {
@@ -331,11 +332,45 @@ impl Dataset {
             .collect::<BTreeMap<_, _>>();
 
         // TBD: Remove outliers from top graph
-        // Based on diagonstic mutations, phylo distance,
+        // Based on diagnostic mutations, phylo distance
 
-        // TBD: Use graph to get consensus pop
-        match_summary.consensus_population = match_summary.top_populations[0].clone();
+        // Without a phylogeny, just use first
+        if self.phylogeny.is_empty() {
+            match_summary.consensus_population = match_summary.top_populations[0].clone();
+        }
+        // Otherwise, summarize top populations by common ancestor
+        else {
+            match_summary.consensus_population = self
+                .phylogeny
+                .get_common_ancestor(&match_summary.top_populations)?;
+        }
+
+        // Check if the consensus population is a known recombinant or descendant of one
+        for recombinant in self.phylogeny.recombinants.iter() {
+            let recombinant_descendants = self.phylogeny.get_descendants(recombinant)?;
+            if recombinant_descendants.contains(&match_summary.consensus_population) {
+                match_summary.recombinant = Some(recombinant.to_owned());
+            }
+        }
 
         Ok(match_summary)
+    }
+
+    pub fn find_parents(
+        &self,
+        sequence: &Sequence,
+        max_parents: usize,
+    ) -> Result<Vec<String>, Report> {
+        let parents = Vec::new();
+
+        if max_parents == 0 {
+            return Ok(parents);
+        }
+
+        debug!("{}", sequence.id);
+
+        // Exclude
+
+        Ok(parents)
     }
 }
