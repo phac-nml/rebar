@@ -21,7 +21,7 @@ impl ToYaml for MatchSummary {
 
         // total
         let mut total_order = self.total.iter().collect::<Vec<(_, _)>>();
-        total_order.sort_by(|a, b| b.1.cmp(&a.1));
+        total_order.sort_by(|a, b| b.1.cmp(a.1));
 
         // support
         let mut support_order: Vec<String> = Vec::new();

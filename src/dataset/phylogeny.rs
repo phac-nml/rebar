@@ -73,6 +73,12 @@ pub struct Phylogeny {
     pub recombinants: Vec<String>,
 }
 
+impl Default for Phylogeny {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl Phylogeny {
     pub fn new() -> Self {
         Phylogeny {
@@ -84,11 +90,7 @@ impl Phylogeny {
     }
 
     pub fn is_empty(&self) -> bool {
-        if self.lookup.len() == 0 {
-            true
-        } else {
-            false
-        }
+        self.lookup.len() == 0
     }
 
     pub fn is_recombinant(&self, name: &String) -> Result<bool, Report> {
@@ -148,7 +150,7 @@ impl Phylogeny {
         // Add descendants
         for name in &self.order {
             let id = self.graph.add_node(name.clone());
-            self.lookup.insert(name.clone(), id.clone());
+            self.lookup.insert(name.clone(), id);
             let parents = &graph_data[&name.clone()];
 
             debug!("Population: {name}; Parents: {parents:?}");
@@ -208,20 +210,17 @@ impl Phylogeny {
                     str::replace(&output, "digraph {", "digraph {\n    rankdir=\"LR\";");
                 output
             }
-            PhylogenyExportFormat::Json => {
-                let output = serde_json::to_string_pretty(&self)
-                    .expect(format!("Failed to export phylogeny to {format}.").as_str());
-                output
-            }
+            PhylogenyExportFormat::Json => serde_json::to_string_pretty(&self)
+                .unwrap_or_else(|_| panic!("Failed to export phylogeny to {format}.")),
         };
 
         // Write to file
-        let mut file = File::create(&output_path).expect(
-            format!("Failed to access output phylogeny path {:?}.", &output_path)
-                .as_str(),
-        );
-        file.write_all(&output.as_bytes())
-            .expect(format!("Failed to write phylogeny to {:?}.", &output_path).as_str());
+        let mut file = File::create(&output_path).unwrap_or_else(|_| {
+            panic!("Failed to access output phylogeny path {:?}.", &output_path)
+        });
+        file.write_all(output.as_bytes()).unwrap_or_else(|_| {
+            panic!("Failed to write phylogeny to {:?}.", &output_path)
+        });
 
         Ok(())
     }
@@ -232,7 +231,7 @@ impl Phylogeny {
             serde_json::to_string(&self).expect("Failed to export phylogeny to json.");
 
         let mut file = File::create(output_path).unwrap();
-        file.write_all(&output.as_bytes())
+        file.write_all(output.as_bytes())
             .expect("Failed to export phylogeny as json.");
         Ok(())
     }
@@ -243,7 +242,7 @@ impl Phylogeny {
         // Find the node that matches the name
         let node = self
             .get_node(name)
-            .expect(format!["Couldn't find node name in phylogeny: {}", name].as_str());
+            .unwrap_or_else(|| panic!("Couldn't find node name in phylogeny: {}", name));
         // Construct a depth-first-search (Dfs)
         let mut dfs = Dfs::new(&self.graph, node);
         // Skip over self?
@@ -266,7 +265,7 @@ impl Phylogeny {
 
         // Construct a backwards depth-first-search (Dfs)
         graph.reverse();
-        let node = self.get_node(&name).unwrap();
+        let node = self.get_node(name).unwrap();
         let mut dfs = Dfs::new(&graph, node);
 
         // Walk to the root, there might be multiple paths (recombinants)
@@ -441,7 +440,7 @@ pub async fn import_alias_key(
                     .expect("Couldn't convert lineage to str.")
                     .to_string();
                 // If there is not lineage_path (ex. "" for A, B), set to self
-                if lineage_path == "" {
+                if lineage_path.is_empty() {
                     lineage_path = alias.clone();
                 }
                 lineage_paths.push(lineage_path);
@@ -485,11 +484,13 @@ pub async fn create_sarscov2_graph_data(
         let lineage = row.lineage.to_string();
 
         // Lineages that start with '*' have been withdrawn
-        if lineage.starts_with("*") {
+        if lineage.starts_with('*') {
             continue;
         }
 
         let parents = get_lineage_parents(lineage.clone(), &alias_key).unwrap();
+
+        //debug!("Lineage: {lineage}; Parents: {parents:?}");
 
         graph_order.push(lineage.to_string().clone());
         graph_data.insert(lineage.clone(), parents.clone());
@@ -509,18 +510,18 @@ pub fn get_lineage_parents(
     if alias_key.contains_key(&lineage) {
         let lineage_paths = &alias_key[&lineage];
         if lineage_paths.len() > 1 {
-            // Dedup in case multiple breakpoints
+            // Dedup in case multiple breakpoints/parents
             parents = lineage_paths.clone().into_iter().unique().collect();
             return Ok(parents);
         }
     }
 
     // Otherwise, single parent
-    let decompress = decompress_lineage(lineage.clone(), &alias_key).unwrap();
+    let decompress = decompress_lineage(&lineage, alias_key).unwrap();
 
     // Ex. BA.5.2 -> ["BA", "5", "2"]
     let decompress_parts = decompress
-        .split(".")
+        .split('.')
         .map(|p| p.to_string())
         .collect::<Vec<_>>();
 
@@ -531,18 +532,18 @@ pub fn get_lineage_parents(
     }
 
     // Compress the full parent back down with aliases
-    parent = compress_lineage(parent.clone(), &alias_key).unwrap();
+    parent = compress_lineage(&parent, alias_key).unwrap();
     parents.push(parent);
 
     Ok(parents)
 }
 
 pub fn compress_lineage(
-    lineage: String,
+    lineage: &String,
     alias_key: &HashMap<String, Vec<String>>,
 ) -> Result<String, Report> {
     // By default, set compression level to self
-    let mut compress = lineage.clone();
+    let mut compress = lineage.to_string();
 
     // Reverse the alias-> lineage path lookup
     let mut alias_key_rev: HashMap<String, String> = HashMap::new();
@@ -558,7 +559,7 @@ pub fn compress_lineage(
 
     // Ex. BA.5.2 -> ["BA", "5", "2"]
     let compress_parts = compress
-        .split(".")
+        .split('.')
         .map(|p| p.to_string())
         .collect::<Vec<_>>();
 
@@ -572,7 +573,7 @@ pub fn compress_lineage(
                 let compress_suffix = &compress_parts[i..];
 
                 // Add the suffix
-                if compress_suffix.len() > 0 {
+                if !compress_suffix.is_empty() {
                     compress = format!["{compress}.{}", compress_suffix.join(".")];
                 }
                 break;
@@ -605,18 +606,18 @@ pub fn compress_lineage(
 /// decompress_lineage("BA.5.2", alias_key).unwrap();
 /// ```
 pub fn decompress_lineage(
-    lineage: String,
+    lineage: &str,
     alias_key: &HashMap<String, Vec<String>>,
 ) -> Result<String, Report> {
     // By default, set full path to lineage
-    let mut decompress = lineage.clone();
+    let mut decompress = lineage.to_string();
 
     // Split lineage into levels, Ex. BA.5.2 = ["BA", "5", "2"]
     // Can be a maximum of 4 levels before aliasing
     let mut lineage_level = 0;
     let mut lineage_parts = vec![String::new(); 4];
 
-    for (i, level) in lineage.split(".").enumerate() {
+    for (i, level) in lineage.split('.').enumerate() {
         lineage_parts[i] = level.to_string();
         lineage_level = i + 1;
     }

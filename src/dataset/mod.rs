@@ -129,10 +129,10 @@ impl Dataset {
         info!("Creating phylogeny: {:?}", output_path);
 
         let mut phylogeny = Phylogeny::new();
-        phylogeny.build_graph(&name, &output_dir).await?;
+        phylogeny.build_graph(&name, output_dir).await?;
         // Export to several formats
-        phylogeny.export(&output_dir, PhylogenyExportFormat::Dot)?;
-        phylogeny.export(&output_dir, PhylogenyExportFormat::Json)?;
+        phylogeny.export(output_dir, PhylogenyExportFormat::Dot)?;
+        phylogeny.export(output_dir, PhylogenyExportFormat::Json)?;
 
         // --------------------------------------------------------------------
         // Create Summary
@@ -200,7 +200,7 @@ impl Dataset {
         let mut phylogeny = Phylogeny::new();
         if phylogeny_path.exists() {
             info!("Loading phylogeny: {:?}", phylogeny_path);
-            phylogeny = Phylogeny::import(&dataset_dir, PhylogenyImportFormat::Json)?;
+            phylogeny = Phylogeny::import(dataset_dir, PhylogenyImportFormat::Json)?;
         }
 
         // Finally assemble into dataset collection
@@ -291,7 +291,7 @@ impl Dataset {
         let binding = match_summary.total.clone();
         let max_total = binding
             .iter()
-            .max_by(|a, b| a.1.cmp(&b.1))
+            .max_by(|a, b| a.1.cmp(b.1))
             .map(|(_pop, count)| count)
             .unwrap_or_else(|| {
                 panic!("No populations in the summary total for: {}", sequence.id)
@@ -300,7 +300,7 @@ impl Dataset {
         let binding = match_summary.total.clone();
         match_summary.top_populations = binding
             .into_iter()
-            .filter(|(_pop, count)| count >= &max_total)
+            .filter(|(_pop, count)| count >= max_total)
             .map(|(pop, _count)| pop)
             .collect::<Vec<_>>();
 
