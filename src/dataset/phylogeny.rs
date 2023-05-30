@@ -314,7 +314,7 @@ impl Phylogeny {
         Some(ancestors)
     }
 
-    pub fn get_common_ancestor(&self, names: &Vec<String>) -> Option<String> {
+    pub fn get_common_ancestor(&self, names: &Vec<String>) -> Result<String, Report> {
         // Phase 1: Count up the ancestors shared between all named populations
         let mut ancestor_counts: HashMap<String, Vec<String>> = HashMap::new();
         let mut ancestor_depths: HashMap<String, isize> = HashMap::new();
@@ -352,7 +352,7 @@ impl Phylogeny {
             }
         }
 
-        Some(common_ancestor)
+        Ok(common_ancestor)
     }
 
     pub fn get_node(&self, name: &String) -> Option<NodeIndex> {
