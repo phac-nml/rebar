@@ -13,6 +13,7 @@ use crate::dataset::phylogeny::{
 use crate::dataset::summary::Summary;
 use crate::dataset::tag::Tag;
 use crate::query::match_summary::MatchSummary;
+use crate::recombination::Recombination;
 use crate::sequence::{Sequence, Substitution};
 use crate::traits::ToYaml;
 use bio::io::fasta;
@@ -238,10 +239,11 @@ impl Dataset {
                     .collect::<Vec<_>>();
 
                 for population in matches {
-                    *match_summary
+                    match_summary
                         .support
                         .entry(population.to_owned())
-                        .or_insert(0) += 1;
+                        .or_insert(Vec::new())
+                        .push(*sub);
                 }
             } else {
                 match_summary.private.push(sub.to_owned());
@@ -254,31 +256,40 @@ impl Dataset {
 
         // conflict: check which populations have extra subs/lacking subs
         for population in match_summary.support.keys() {
-            let pop_sub = &self.populations[population].substitutions;
-
-            // conflict_ref: sub in pop that is not in query
-            let pop_conflict_ref: usize = pop_sub
-                .iter()
-                .filter(|sub| !sequence.substitutions.contains(sub))
-                .collect::<Vec<_>>()
-                .len();
-            // conflict_alt: sub in query that is not in pop
-            let pop_conflict_alt: usize = sequence
+            let pop_subs = &self.populations[population]
                 .substitutions
                 .iter()
-                .filter(|sub| !pop_sub.contains(sub))
-                .collect::<Vec<_>>()
-                .len();
+                .filter(|sub| {
+                    !sequence.missing.contains(&sub.coord)
+                        && !sequence.deletions.contains(&sub.to_deletion())
+                })
+                .map(|sub| sub.to_owned())
+                .collect::<Vec<_>>();
 
-            let pop_total =
-                match_summary.support[population] as isize - pop_conflict_ref as isize;
+            // conflict_ref: sub in pop that is not in query
+            let pop_conflict_ref = pop_subs
+                .iter()
+                .filter(|sub| !sequence.substitutions.contains(sub))
+                .map(|sub| sub.to_owned())
+                .collect::<Vec<_>>();
+
+            // conflict_alt: sub in query that is not in pop
+            let pop_conflict_alt = sequence
+                .substitutions
+                .iter()
+                .filter(|sub| !pop_subs.contains(sub))
+                .map(|sub| sub.to_owned())
+                .collect::<Vec<_>>();
+
+            let pop_total = match_summary.support[population].len() as isize
+                - pop_conflict_ref.len() as isize;
 
             match_summary
                 .conflict_ref
-                .insert(population.to_owned(), pop_conflict_ref);
+                .insert(population.to_owned(), pop_conflict_ref.to_owned());
             match_summary
                 .conflict_alt
-                .insert(population.to_owned(), pop_conflict_alt);
+                .insert(population.to_owned(), pop_conflict_alt.to_owned());
             match_summary.total.insert(population.to_owned(), pop_total);
         }
 
@@ -316,7 +327,7 @@ impl Dataset {
         match_summary.conflict_ref = match_summary
             .conflict_ref
             .into_iter()
-            .filter(|(pop, _count)| match_summary.top_populations.contains(pop))
+            .filter(|(pop, _subs)| match_summary.top_populations.contains(pop))
             .collect::<BTreeMap<_, _>>();
 
         match_summary.conflict_alt = match_summary
@@ -346,6 +357,18 @@ impl Dataset {
                 match_summary.recombinant = Some(recombinant.to_owned());
             }
         }
+
+        // set consensus population subs
+        match_summary.substitutions = self.populations
+            [&match_summary.consensus_population]
+            .substitutions
+            .iter()
+            .filter(|sub| {
+                !sequence.missing.contains(&sub.coord)
+                    && !sequence.deletions.contains(&sub.to_deletion())
+            })
+            .map(|sub| sub.to_owned())
+            .collect::<Vec<_>>();
 
         debug!(
             "{}",
@@ -378,8 +401,8 @@ impl Dataset {
 
         // Option 1. If this is a known recombinant, exclude the recombinant's
         //   descendants from parent 1 search.
-        debug!("parent_1");
 
+        debug!("parent_1");
         let recombinant = best_match.recombinant.clone();
         let parent_1 = if let Some(recombinant) = recombinant {
             let mut descendants = self.phylogeny.get_descendants(&recombinant)?;
@@ -405,7 +428,7 @@ impl Dataset {
         // which indicates little to no evidence of recombination.
         if conflict_ref.is_empty() {
             debug!(
-                "No recombination detected, parent_1 ({}) is a perfect match.",
+                "{} is a perfect match, stopping parent search.",
                 &parent_1.consensus_population
             );
             return Ok(parents);
@@ -425,9 +448,17 @@ impl Dataset {
 
         let mut num_iter = 0;
 
-        while num_parents < max_parents && num_iter < max_iter {
+        loop {
+            if num_parents >= max_parents {
+                debug!("Maximum number of parents reached ({max_parents}), stopping parent search.");
+                break;
+            }
+            if num_iter >= max_iter {
+                debug!("Maximum number of iterations reached ({num_iter}), stopping parent search.");
+                break;
+            }
+
             num_iter += 1;
-            debug!("find_parents iter: {num_iter}");
 
             // exclude descendants of previous parents
             for parent in &parents {
@@ -462,23 +493,13 @@ impl Dataset {
                 }
             }
 
+            debug!("parent_{}: iteration {num_iter}", num_parents + 1);
             let match_summary =
                 self.find_best_match(&sequence, Some(&exclude_populations))?;
 
-            debug!(
-                "parent_{}: {}",
-                num_parents + 1,
-                match_summary.consensus_population
-            );
-            debug!(
-                "{}",
-                match_summary
-                    .to_yaml()
-                    .replace('\n', format!("\n{}", " ".repeat(40)).as_str())
-            );
             // check for robust breakpoints based on cli params
-
-            // ... if breakpoints found
+            let mut recombination = Recombination::new();
+            recombination.detect(&sequence, &parents, &match_summary)?;
 
             // Update conflict_ref and conflict_alt based on the parents so far
 
@@ -486,13 +507,5 @@ impl Dataset {
         }
 
         Ok(parents)
-    }
-
-    pub fn find_breakpoints(
-        &self,
-        _sequence: &Sequence,
-        _match_summary: &MatchSummary,
-    ) -> Result<(), Report> {
-        Ok(())
     }
 }

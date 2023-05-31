@@ -89,6 +89,16 @@ impl PartialOrd for Substitution {
     }
 }
 
+impl Substitution {
+    pub fn to_deletion(&self) -> Deletion {
+        Deletion {
+            coord: self.coord,
+            reference: self.reference,
+            alt: '-',
+        }
+    }
+}
+
 // ----------------------------------------------------------------------------
 // Substitution
 // ----------------------------------------------------------------------------
