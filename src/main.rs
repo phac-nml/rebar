@@ -63,13 +63,13 @@ async fn main() -> Result<()> {
                 }
                 debug!("sequence: {id}");
 
-                // consensus population
+                // best match ie. consensus population
                 let exclude_populations = None;
                 let best_match =
                     dataset.find_best_match(&sequence, exclude_populations)?;
                 debug!("\n  {}", best_match.to_yaml().replace('\n', "\n  "));
 
-                let _parents = dataset.find_parents(&sequence, max_parents);
+                let _parents = dataset.find_parents(sequence, &best_match, max_parents);
 
                 //let mut exclude_populations = vec!(best_match.consensus_population);
                 // exclude_populations.push(String::from("XBB.1.16.1"));
