@@ -1,8 +1,10 @@
 use crate::query::match_summary::MatchSummary;
 use crate::sequence::Sequence;
+use crate::sequence::Substitution;
 use color_eyre::eyre::{Report, Result};
 use itertools::Itertools;
 use log::debug;
+use std::collections::BTreeMap;
 use std::default::Default;
 use tabled::builder::Builder;
 use tabled::settings::Style;
@@ -11,6 +13,15 @@ use tabled::settings::Style;
 pub struct Breakpoint {
     start: usize,
     end: usize,
+}
+
+#[derive(Debug)]
+#[allow(dead_code)]
+pub struct Region {
+    start: usize,
+    end: usize,
+    origin: String,
+    substitutions: Vec<Substitution>,
 }
 
 #[derive(Debug)]
@@ -40,17 +51,7 @@ impl Recombination {
         // Create a table where rows are coordinates and columns are
         // coord, parent, Reference, <parents...>, <match_summary> <sequence>
 
-        let mut table_builder = Builder::default();
-
-        // Construct the table header defaults
-        let mut headers = vec!["coord".to_string(), "Reference".to_string()];
-        for parent in parents {
-            headers.push(parent.consensus_population.to_owned());
-        }
-        headers.push(match_summary.consensus_population.to_owned());
-        headers.push(sequence.id.to_owned());
-        headers.push("origin".to_string());
-        table_builder.set_header(headers);
+        let mut table_rows = Vec::new();
 
         // Identify which subs are non-bi-allelic, these will wind up being
         // duplicate rows, which we'll need to reconcile and collapse
@@ -153,7 +154,28 @@ impl Recombination {
             let origins = origins.iter().join(", ");
             row.push(origins);
 
-            table_builder.push_record(row);
+            table_rows.push(row);
+        }
+
+        // --------------------------------------------------------------------
+        // Table
+        // --------------------------------------------------------------------
+
+        let mut table_builder = Builder::default();
+
+        // column headers
+        let mut headers = vec!["coord".to_string(), "Reference".to_string()];
+        for parent in parents {
+            headers.push(parent.consensus_population.to_owned());
+        }
+        headers.push(match_summary.consensus_population.to_owned());
+        headers.push(sequence.id.to_owned());
+        headers.push("origin".to_string());
+
+        table_builder.set_header(headers);
+
+        for row in &table_rows {
+            table_builder.push_record(row.to_owned());
         }
 
         let mut table = table_builder.build();
@@ -169,6 +191,12 @@ impl Recombination {
         // Group Substitutions Into Parental Regions
         // --------------------------------------------------------------------
 
+        // First: 5' -> 3'
+        let regions_5p = identify_regions(&table_rows)?;
+        // Filter separately on min_consecutive then min_length
+        debug!("{regions_5p:?}");
+        // Second: 5' -> 3'
+
         // --------------------------------------------------------------------
         // Breakpoints
         // --------------------------------------------------------------------
@@ -182,4 +210,46 @@ impl Recombination {
         // create the summary table
         Ok(())
     }
+}
+
+pub fn identify_regions(
+    table_rows: &Vec<Vec<String>>,
+) -> Result<BTreeMap<usize, Region>, Report> {
+    let mut origin_prev: Option<String> = None;
+    let mut regions = BTreeMap::new();
+    let mut start = 0;
+
+    for row in table_rows {
+        let coord = row[0].parse::<usize>().unwrap();
+        let origin = row[row.len() - 1].to_string();
+        let reference = row[2].chars().next().unwrap();
+        let alt = row[row.len() - 2].chars().next().unwrap();
+        let substitutions = vec![Substitution {
+            coord,
+            reference,
+            alt,
+        }];
+
+        // start of new region, either first or origin changes
+        if origin_prev.is_none() || origin_prev != Some(origin.clone()) {
+            start = coord;
+            let region = Region {
+                start,
+                end: coord,
+                origin: origin.clone(),
+                substitutions,
+            };
+            regions.insert(start, region);
+        }
+        // same origin, region continues. update end and subs
+        else {
+            let region = regions.get_mut(&start).unwrap();
+            region.end = coord;
+            region.substitutions.extend(substitutions)
+        }
+
+        origin_prev = Some(origin);
+    }
+
+    Ok(regions)
 }
