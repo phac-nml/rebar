@@ -1,0 +1,43 @@
+name: Build
+
+on:
+  push:
+    branches:
+      - '*'
+  pull_request:
+    branches:
+      - '*'
+  release:
+    types: [published]
+  schedule:
+    - cron: "0 0 * * *"
+
+jobs:
+
+  build:
+
+    runs-on: ubuntu-latest
+
+    strategy:
+      fail-fast: false
+      matrix:
+        arch:
+          #- aarch64-apple-darwin
+          #- aarch64-unknown-linux-gnu
+          #- aarch64-unknown-linux-musl
+          #- x86_64-apple-darwin
+          #- x86_64-pc-windows-gnu
+          - x86_64-unknown-linux-gnu
+          #- x86_64-unknown-linux-musl
+
+    steps:
+      - name: checkout repo
+        uses: actions/checkout@v3
+
+      - name: setup rust
+      - uses: actions-rs/toolchain@v1
+        with:
+          toolchain: 1.69.0
+
+      - name: build
+      - run: cargo build --release --all-features
