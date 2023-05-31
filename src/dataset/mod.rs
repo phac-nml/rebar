@@ -219,19 +219,13 @@ impl Dataset {
     pub fn find_best_match(
         &self,
         sequence: &Sequence,
-        exclude_populations: Option<Vec<String>>,
+        exclude_populations: Option<&Vec<String>>,
     ) -> Result<MatchSummary, Report> {
         let mut match_summary = MatchSummary::new();
 
-        // Check if we are excluding certains pop
-        let exclude_populations: Vec<String> = exclude_populations.unwrap_or(Vec::new());
-        // let exclude_pops: Vec<String>;
-        // if let Some(exclude_populations) = exclude_populations {
-        //     exclude_pops = exclude_populations;
-        // } else {
-        //     exclude_pops = Vec::new();
-        // }
-        // let exclude_populations = exclude_pops;
+        // Check if we are excluding certain populations
+        let binding = Vec::new();
+        let exclude_populations: &Vec<String> = exclude_populations.unwrap_or(&binding);
 
         // support: check which population have a matching sub
         for sub in &sequence.substitutions {
@@ -353,6 +347,12 @@ impl Dataset {
             }
         }
 
+        debug!(
+            "{}",
+            match_summary
+                .to_yaml()
+                .replace('\n', format!("\n{}", " ".repeat(40)).as_str())
+        );
         Ok(match_summary)
     }
 
@@ -361,36 +361,138 @@ impl Dataset {
         sequence: Sequence,
         best_match: &MatchSummary,
         max_parents: usize,
-    ) -> Result<Vec<String>, Report> {
-        let parents = Vec::new();
+        max_iter: usize,
+    ) -> Result<Vec<MatchSummary>, Report> {
+        let mut parents = Vec::new();
 
         if max_parents == 0 {
             return Ok(parents);
         }
 
-        debug!("{}", sequence.id);
-
         let mut num_parents = 0;
         let mut exclude_populations = Vec::new();
 
-        // Which populations to exclude?
+        // --------------------------------------------------------------------
+        // Parent 1
+        // --------------------------------------------------------------------
+
         // Option 1. If this is a known recombinant, exclude the recombinant's
-        //   descendants from parent search.
+        //   descendants from parent 1 search.
+        debug!("parent_1");
+
         let recombinant = best_match.recombinant.clone();
-        if let Some(recombinant) = recombinant {
+        let parent_1 = if let Some(recombinant) = recombinant {
             let mut descendants = self.phylogeny.get_descendants(&recombinant)?;
             exclude_populations.append(&mut descendants);
+            self.find_best_match(&sequence, Some(&exclude_populations))?
+        }
+        // Option 2. Not a known recombinant, just use best_match/consensus as parent 1
+        else {
+            best_match.to_owned()
+        };
+
+        // get conflict_ref and conflict_alt for subsequent searches
+        let parent_1_subs =
+            &self.populations[&parent_1.consensus_population].substitutions;
+
+        // conflict_ref: sub in pop that is not in query
+        let conflict_ref = parent_1_subs
+            .iter()
+            .filter(|sub| !sequence.substitutions.contains(sub))
+            .collect::<Vec<_>>();
+
+        // if there are no conflict_ref, this parent is considered a perfect match
+        // which indicates little to no evidence of recombination.
+        if conflict_ref.is_empty() {
+            debug!(
+                "No recombination detected, parent_1 ({}) is a perfect match.",
+                &parent_1.consensus_population
+            );
+            return Ok(parents);
         }
 
-        // Parent 1: If not a known recombinant, this is the same as the consensus population
-        //           (because we haven't excluded anything)
-        let parent_match = self.find_best_match(&sequence, Some(exclude_populations))?;
-        debug!("\n  {}", parent_match.to_yaml().replace('\n', "\n  "));
+        // conflict_alt: sub in query that is not in pop
+        let _conflict_alt = sequence
+            .substitutions
+            .iter()
+            .filter(|sub| !parent_1_subs.contains(sub))
+            .collect::<Vec<_>>();
 
-        while num_parents < max_parents {
+        // if there are no conflict_ref, this parent is considered a perfect match
+        // which indicates little to no evidence of recombination.
+        parents.push(parent_1.clone());
+        num_parents += 1;
+
+        let mut num_iter = 0;
+
+        while num_parents < max_parents && num_iter < max_iter {
+            num_iter += 1;
+            debug!("find_parents iter: {num_iter}");
+
+            // exclude descendants of previous parents
+            for parent in &parents {
+                let descendants = self
+                    .phylogeny
+                    .get_descendants(&parent.consensus_population)?;
+                let mut descendants_to_add = descendants
+                    .iter()
+                    .filter(|pop| !exclude_populations.contains(pop))
+                    .map(|pop| pop.to_owned())
+                    .collect::<Vec<_>>();
+                exclude_populations.append(&mut descendants_to_add);
+            }
+
+            // we want to keep populations in our search that:
+            //   - have at least one conflict_alt
+            //   - lack all conflict_ref
+
+            // so exclude_populations will contain populations that:
+            //   - have no conflict_alt
+            //   - have all conflict_ref
+            for sub in &conflict_ref {
+                if self.mutations.contains_key(sub) {
+                    let populations = &self.mutations[sub];
+                    let mut populations_to_exclude = populations
+                        .iter()
+                        .filter(|pop| !exclude_populations.contains(pop))
+                        .map(|pop| pop.to_owned())
+                        .collect::<Vec<_>>();
+
+                    exclude_populations.append(&mut populations_to_exclude);
+                }
+            }
+
+            let match_summary =
+                self.find_best_match(&sequence, Some(&exclude_populations))?;
+
+            debug!(
+                "parent_{}: {}",
+                num_parents + 1,
+                match_summary.consensus_population
+            );
+            debug!(
+                "{}",
+                match_summary
+                    .to_yaml()
+                    .replace('\n', format!("\n{}", " ".repeat(40)).as_str())
+            );
+            // check for robust breakpoints based on cli params
+
+            // ... if breakpoints found
+
+            // Update conflict_ref and conflict_alt based on the parents so far
+
             num_parents += 1;
         }
 
         Ok(parents)
+    }
+
+    pub fn find_breakpoints(
+        &self,
+        _sequence: &Sequence,
+        _match_summary: &MatchSummary,
+    ) -> Result<(), Report> {
+        Ok(())
     }
 }
