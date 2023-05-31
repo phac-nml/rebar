@@ -358,7 +358,8 @@ impl Dataset {
 
     pub fn find_parents(
         &self,
-        sequence: &Sequence,
+        sequence: Sequence,
+        best_match: &MatchSummary,
         max_parents: usize,
     ) -> Result<Vec<String>, Report> {
         let parents = Vec::new();
@@ -369,7 +370,26 @@ impl Dataset {
 
         debug!("{}", sequence.id);
 
-        // Exclude
+        let mut num_parents = 0;
+        let mut exclude_populations = Vec::new();
+
+        // Which populations to exclude?
+        // Option 1. If this is a known recombinant, exclude the recombinant's
+        //   descendants from parent search.
+        let recombinant = best_match.recombinant.clone();
+        if let Some(recombinant) = recombinant {
+            let mut descendants = self.phylogeny.get_descendants(&recombinant)?;
+            exclude_populations.append(&mut descendants);
+        }
+
+        // Parent 1: If not a known recombinant, this is the same as the consensus population
+        //           (because we haven't excluded anything)
+        let parent_match = self.find_best_match(&sequence, Some(exclude_populations))?;
+        debug!("\n  {}", parent_match.to_yaml().replace('\n', "\n  "));
+
+        while num_parents < max_parents {
+            num_parents += 1;
+        }
 
         Ok(parents)
     }
