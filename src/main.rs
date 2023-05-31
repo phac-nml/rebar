@@ -5,7 +5,6 @@ use rebar::cli::verbosity::Verbosity;
 use rebar::cli::{Cli, Command};
 use rebar::dataset::Dataset;
 use rebar::query::Query;
-use rebar::traits::ToYaml;
 use std::env;
 use std::str::FromStr;
 
@@ -50,6 +49,7 @@ async fn main() -> Result<()> {
             dataset_dir,
             mask,
             max_parents,
+            max_iter,
             ..
         } => {
             // Load dataset
@@ -58,62 +58,25 @@ async fn main() -> Result<()> {
             let query = Query::load(alignment, &dataset, mask)?;
             info!("Identifying consensus and parent populations.");
             for (id, sequence) in query.sequences {
-                if id != "XBB.1.16" {
+                if id != "XBB.1.16" && id != "BM.1.1.1" {
                     continue;
                 }
-                debug!("sequence: {id}");
 
                 // best match ie. consensus population
                 let exclude_populations = None;
+                debug!("sequence: {id}");
                 let best_match =
                     dataset.find_best_match(&sequence, exclude_populations)?;
-                debug!("\n  {}", best_match.to_yaml().replace('\n', "\n  "));
+                let _parents =
+                    dataset.find_parents(sequence, &best_match, max_parents, max_iter)?;
 
-                let _parents = dataset.find_parents(sequence, &best_match, max_parents);
-
-                //let mut exclude_populations = vec!(best_match.consensus_population);
-                // exclude_populations.push(String::from("XBB.1.16.1"));
-                // exclude_populations.push(String::from("XBB.1.16.3"));
-                // let parent_match = dataset.find_best_match(&sequence, Some(exclude_populations))?;
-                // debug!("  parent_1:");
-                // debug!("\n    {}", parent_match.to_yaml().replace("\n", "\n    "));
-                // parent populations
+                // for (i, match_summary) in parents.iter().enumerate() {
+                //     debug!("parent_{}: {}", i+1, match_summary.consensus_population);
+                //     debug!("{}", match_summary.to_yaml().replace('\n', format!("\n{}", " ".repeat(31)).as_str()));
+                // }
             }
         }
     }
-
-    // ------------------------------------------------------------------------
-    // Dataset Creation
-
-    //dataset.populations = dataset.download_sequences(&dataset_outdir)?;
-    //let dataset = Dataset::create(dataset_name.to_string(), dataset_tag.to_string(), mask);
-
-    // Sequences
-    // dataset.populations.set_sequences(&reference_path, &populations_path, &mask).unwrap();
-    // dataset.populations.set_mutations().unwrap();
-
-    // // Phylogeny
-    // info!("Preparing dataset phylogeny: {}", &phylogeny_path.display());
-    // let phylogeny
-    // dataset.phylogeny.build_graph(&dataset_name, &dataset_tag, &dataset_dir).expect("Failed to build phylogeny.");
-    // dataset.phylogeny.export_graph(&dataset_dir).expect("Failed to export phylogeny.");
-
-    // // Sequences
-    // info!("Preparing dataset sequences: {}", &populations_path.display());
-    // dataset.populations.set_sequences(&reference_path, &populations_path, &mask).unwrap();
-    // dataset.populations.set_mutations().unwrap();
-
-    // // ------------------------------------------------------------------------
-    // // Run
-
-    // info!("Importing query sequences: {}", &sequences_path.display());
-    // let mut query = Sequences::new();
-    // query.set_sequences(&reference_path, &sequences_path, &mask).unwrap();
-    // query.summarise_barcodes(&dataset).unwrap();
-
-    // 1. Sumarise the barcodes (conflicts, support, total), etc.
-    // 2. Assign consensus population (Barcode Match)
-    // 3. Find recombination parents (Barcode Match)
 
     Ok(())
 }

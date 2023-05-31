@@ -56,6 +56,10 @@ pub enum Command {
         #[arg(short = 'p', long, default_value_t = 2)]
         max_parents: usize,
 
+        /// Maximum number of iterations to find parents
+        #[arg(short = 'i', long, default_value_t = 3)]
+        max_iter: usize,
+
         /// Make output more quiet or more verbose
         #[arg(short, long, default_value_t=String::from("info"))]
         verbosity: String,
