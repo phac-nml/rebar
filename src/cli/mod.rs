@@ -52,13 +52,25 @@ pub enum Command {
         #[arg(short = 'm', long, default_value_t = 200)]
         mask: usize,
 
-        /// Maximum number of parents
+        /// Minimum length in bases of a parental region
         #[arg(short = 'p', long, default_value_t = 2)]
         max_parents: usize,
 
         /// Maximum number of iterations to find parents
         #[arg(short = 'i', long, default_value_t = 3)]
         max_iter: usize,
+
+        /// Minimum number of consecutive bases in a parental region
+        #[arg(short = 'c', long, default_value_t = 3)]
+        min_consecutive: usize,
+
+        /// Minimum number of consecutive bases in a parental region
+        #[arg(short = 'l', long, default_value_t = 500)]
+        min_length: usize,
+
+        /// Minimum number of substitutions in a parental region
+        #[arg(short = 's', long, default_value_t = 1)]
+        min_subs: usize,
 
         /// Make output more quiet or more verbose
         #[arg(short, long, default_value_t=String::from("info"))]

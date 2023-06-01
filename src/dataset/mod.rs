@@ -13,7 +13,7 @@ use crate::dataset::phylogeny::{
 use crate::dataset::summary::Summary;
 use crate::dataset::tag::Tag;
 use crate::query::match_summary::MatchSummary;
-use crate::recombination::Recombination;
+use crate::recombination::detect_recombination;
 use crate::sequence::{Sequence, Substitution};
 use crate::traits::ToYaml;
 use bio::io::fasta;
@@ -221,22 +221,33 @@ impl Dataset {
         &self,
         sequence: &Sequence,
         exclude_populations: Option<&Vec<String>>,
+        include_populations: Option<&Vec<String>>,
     ) -> Result<MatchSummary, Report> {
         let mut match_summary = MatchSummary::new();
 
-        // Check if we are excluding certain populations
-        let binding = Vec::new();
-        let exclude_populations: &Vec<String> = exclude_populations.unwrap_or(&binding);
+        // Check if we are excluding/including certain populations
+        let exclude_binding = Vec::new();
+        let exclude_populations: &Vec<String> = exclude_populations.unwrap_or(&exclude_binding);
 
+        let include_binding = Vec::new();
+        let include_populations: &Vec<String> = include_populations.unwrap_or(&include_binding);
+    
         // support: check which population have a matching sub
         for sub in &sequence.substitutions {
             if self.mutations.contains_key(sub) {
-                let matches: Vec<String> = self.mutations[sub]
+                let mut matches: Vec<String> = self.mutations[sub]
                     .clone()
                     .iter()
                     .filter(|pop| !exclude_populations.contains(pop))
                     .map(|pop| pop.to_owned())
                     .collect::<Vec<_>>();
+
+                if !include_populations.is_empty() {
+                    matches = matches
+                        .into_iter()
+                        .filter(|pop| include_populations.contains(pop))
+                        .collect::<Vec<_>>();
+                }
 
                 for population in matches {
                     match_summary
@@ -385,7 +396,11 @@ impl Dataset {
         best_match: &MatchSummary,
         max_parents: usize,
         max_iter: usize,
+        min_consecutive: usize,
+        min_length: usize,
+        min_subs: usize,
     ) -> Result<Vec<MatchSummary>, Report> {
+        
         let mut parents = Vec::new();
 
         if max_parents == 0 {
@@ -393,6 +408,7 @@ impl Dataset {
         }
 
         let mut num_parents = 0;
+        let mut include_populations = Vec::new();
         let mut exclude_populations = Vec::new();
 
         // --------------------------------------------------------------------
@@ -407,7 +423,7 @@ impl Dataset {
         let parent_1 = if let Some(recombinant) = recombinant {
             let mut descendants = self.phylogeny.get_descendants(&recombinant)?;
             exclude_populations.append(&mut descendants);
-            self.find_best_match(&sequence, Some(&exclude_populations))?
+            self.find_best_match(&sequence, Some(&exclude_populations), Some(&include_populations))?
         }
         // Option 2. Not a known recombinant, just use best_match/consensus as parent 1
         else {
@@ -415,8 +431,7 @@ impl Dataset {
         };
 
         // get conflict_ref and conflict_alt for subsequent searches
-        let parent_1_subs =
-            &self.populations[&parent_1.consensus_population].substitutions;
+        let parent_1_subs = &self.populations[&parent_1.consensus_population].substitutions;
 
         // conflict_ref: sub in pop that is not in query
         let conflict_ref = parent_1_subs
@@ -435,7 +450,7 @@ impl Dataset {
         }
 
         // conflict_alt: sub in query that is not in pop
-        let _conflict_alt = sequence
+        let conflict_alt = sequence
             .substitutions
             .iter()
             .filter(|sub| !parent_1_subs.contains(sub))
@@ -473,37 +488,73 @@ impl Dataset {
                 exclude_populations.append(&mut descendants_to_add);
             }
 
-            // we want to keep populations in our search that:
+            // we want to include populations in our search that:
             //   - have at least one conflict_alt
-            //   - lack all conflict_ref
+            //   - are not already in the exclude list
 
-            // so exclude_populations will contain populations that:
-            //   - have no conflict_alt
-            //   - have all conflict_ref
-            for sub in &conflict_ref {
+            for sub in &conflict_alt {
                 if self.mutations.contains_key(sub) {
-                    let populations = &self.mutations[sub];
-                    let mut populations_to_exclude = populations
+                    let populations_to_add = self.mutations[sub]
                         .iter()
-                        .filter(|pop| !exclude_populations.contains(pop))
+                        .filter(|pop| !exclude_populations.contains(&pop) && !include_populations.contains(&pop))
                         .map(|pop| pop.to_owned())
                         .collect::<Vec<_>>();
-
-                    exclude_populations.append(&mut populations_to_exclude);
+                    include_populations.extend(populations_to_add);
                 }
             }
 
+            // we want to exclude populations in our search that
+            //    - have all the conflict_ref
+
+                
+            // for sub in &conflict_ref {
+            //     if self.mutations.contains_key(sub) {
+            //         let populations = &self.mutations[sub];
+            //         for pop in populations {
+            //             *conflict_ref_count.entry(pop.clone()).or_insert(0) += 1
+            //         }
+            //     }
+            // }
+
+
+            debug!("include_populations: {include_populations:?}");    
+
+            // // filter out conflict_ref populations
+            // for (pop, count) in conflict_ref_count {
+            //     if count == conflict_ref.len() && !exclude_populations.contains(&pop) {
+            //         exclude_populations.push(pop);
+            //     }
+            // }
+            // // filter out conflict_alt populations
+            // for (pop, rcount) in conflict_alt_count {
+            //     if alt_count == conflict_alt.len() && alt_count == 0 && !exclude_populations.contains(&pop) {
+            //         exclude_populations.push(pop);
+            //     }
+            // }
+
+            debug!("exclude_populations: {exclude_populations:?}");
+
             debug!("parent_{}: iteration {num_iter}", num_parents + 1);
-            let match_summary =
-                self.find_best_match(&sequence, Some(&exclude_populations))?;
+            let match_summary = self.find_best_match(&sequence, Some(&exclude_populations), Some(&include_populations))?;
+            let recombination = detect_recombination(&sequence, &parents, &match_summary, min_consecutive, min_length, min_subs)?;
 
-            // check for robust breakpoints based on cli params
-            let mut recombination = Recombination::new();
-            recombination.detect(&sequence, &parents, &match_summary)?;
+            // if the recombination search failed, exclude match_summary descendants from next iteration
+            if recombination.breakpoints.is_empty() {
+                let descendants = self
+                    .phylogeny
+                    .get_descendants(&match_summary.consensus_population)?;
+                let mut descendants_to_add = descendants
+                    .iter()
+                    .filter(|pop| !exclude_populations.contains(pop))
+                    .map(|pop| pop.to_owned())
+                    .collect::<Vec<_>>();
+                exclude_populations.append(&mut descendants_to_add);
+            }
+            else {
+                num_parents += 1;
 
-            // Update conflict_ref and conflict_alt based on the parents so far
-
-            num_parents += 1;
+                // TBD: Check if all conflict_ref are resolved
+            }
         }
 
         Ok(parents)
