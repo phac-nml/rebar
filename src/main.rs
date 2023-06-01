@@ -48,8 +48,11 @@ async fn main() -> Result<()> {
             alignment,
             dataset_dir,
             mask,
-            max_parents,
             max_iter,
+            max_parents,
+            min_consecutive,
+            min_length,
+            min_subs,
             ..
         } => {
             // Load dataset
@@ -58,17 +61,19 @@ async fn main() -> Result<()> {
             let query = Query::load(alignment, &dataset, mask)?;
             info!("Identifying consensus and parent populations.");
             for (id, sequence) in query.sequences {
-                if id != "XBB.1.16" && id != "BM.1.1.1" {
+                //if id != "XBB.1.16" && id != "BM.1.1.1" {
+                if id != "XBB.1.16" {
                     continue;
                 }
 
                 // best match ie. consensus population
                 let exclude_populations = None;
+                let include_populations = None;
                 debug!("sequence: {id}");
                 let best_match =
-                    dataset.find_best_match(&sequence, exclude_populations)?;
+                    dataset.find_best_match(&sequence, exclude_populations, include_populations)?;
                 let _parents =
-                    dataset.find_parents(sequence, &best_match, max_parents, max_iter)?;
+                    dataset.find_parents(sequence, &best_match, max_parents, max_iter, min_consecutive, min_length, min_subs)?;
 
                 // for (i, match_summary) in parents.iter().enumerate() {
                 //     debug!("parent_{}: {}", i+1, match_summary.consensus_population);
