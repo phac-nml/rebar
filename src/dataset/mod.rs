@@ -1,21 +1,9 @@
-pub mod constants;
-pub mod name;
-pub mod phylogeny;
-pub mod summary;
-pub mod tag;
-pub mod utils;
-
-use crate::dataset::constants::*;
-use crate::dataset::name::Name;
-use crate::dataset::phylogeny::{
-    Phylogeny, PhylogenyExportFormat, PhylogenyImportFormat,
-};
-use crate::dataset::summary::Summary;
-use crate::dataset::tag::Tag;
+use crate::phylogeny::{Phylogeny, PhylogenyExportFormat, PhylogenyImportFormat};
 use crate::query::match_summary::MatchSummary;
 use crate::recombination::detect_recombination;
 use crate::sequence::{Sequence, Substitution};
 use crate::traits::ToYaml;
+use crate::utils;
 use bio::io::fasta;
 use color_eyre::eyre::{eyre, Report, WrapErr};
 use color_eyre::section::Section;
@@ -23,9 +11,118 @@ use log::{debug, info};
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 use std::default::Default;
+use std::fmt;
 use std::fs::{create_dir_all, write, File};
 use std::path::Path;
 use std::str::FromStr;
+
+// ----------------------------------------------------------------------------
+// Name
+// ----------------------------------------------------------------------------
+
+pub const SARSCOV2_POPULATIONS_URL: &str = "https://raw.githubusercontent.com/corneliusroemer/pango-sequences/main/data/pango-consensus-sequences_genome-nuc.fasta.zst";
+pub const SARSCOV2_REFERENCE_URL: &str = "https://raw.githubusercontent.com/nextstrain/ncov/master/data/references_sequences.fasta";
+pub const SARSCOV2_ALIAS_KEY_URL: &str = "https://raw.githubusercontent.com/cov-lineages/pango-designation/master/pango_designation/alias_key.json";
+pub const SARSCOV2_LINEAGE_NOTES_URL: &str = "https://raw.githubusercontent.com/cov-lineages/pango-designation/master/lineage_notes.txt";
+
+// ----------------------------------------------------------------------------
+// Name
+// ----------------------------------------------------------------------------
+
+#[derive(Copy, Clone, Debug, Serialize, Deserialize, PartialEq)]
+pub enum Name {
+    SarsCov2,
+    RsvA,
+    RsvB,
+    Unknown,
+}
+
+impl fmt::Display for Name {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let name = match self {
+            Name::SarsCov2 => String::from("sars-cov-2"),
+            Name::RsvA => String::from("rsv-a"),
+            Name::RsvB => String::from("rsv-b"),
+            Name::Unknown => String::from("unknown"),
+        };
+
+        write!(f, "{}", name)
+    }
+}
+
+impl FromStr for Name {
+    type Err = Report;
+
+    fn from_str(name: &str) -> Result<Self, Report> {
+        let name = match name {
+            "sars-cov-2" => Name::SarsCov2,
+            "rsv-a" => Name::RsvA,
+            "rsv-b" => Name::RsvB,
+            "unknown" => Name::Unknown,
+            _ => Err(eyre!("Unknown dataset name: {name}"))
+                .suggestion("Please choose from:")?,
+        };
+
+        Ok(name)
+    }
+}
+
+// ----------------------------------------------------------------------------
+// Tag
+// ----------------------------------------------------------------------------
+
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
+pub enum Tag {
+    Latest,
+    Nightly,
+    Archive(String),
+    Unknown,
+}
+
+impl fmt::Display for Tag {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let tag = match self {
+            Tag::Latest => String::from("latest"),
+            Tag::Nightly => String::from("nightly"),
+            Tag::Archive(tag) => tag.to_owned(),
+            Tag::Unknown => String::from("unknown"),
+        };
+
+        write!(f, "{}", tag)
+    }
+}
+
+impl FromStr for Tag {
+    type Err = Report;
+
+    fn from_str(tag: &str) -> Result<Tag, Report> {
+        let tag = match tag {
+            "latest" => Tag::Latest,
+            "nightly" => Tag::Nightly,
+            "unknown" => Tag::Unknown,
+            _ => Tag::Archive(String::from(tag)),
+            // _ => Err(eyre!("Unknown dataset tag: {tag}")).suggestion("Please choose from:")?,
+        };
+
+        Ok(tag)
+    }
+}
+
+// ----------------------------------------------------------------------------
+// Summary
+// ----------------------------------------------------------------------------
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct Summary {
+    pub tag: String,
+    pub name: String,
+}
+
+impl ToYaml for Summary {}
+
+// ----------------------------------------------------------------------------
+// Dataset
+// ----------------------------------------------------------------------------
 
 #[derive(Debug, Deserialize, Serialize)]
 pub struct Dataset {
@@ -37,14 +134,22 @@ pub struct Dataset {
     pub phylogeny: Phylogeny,
 }
 
-impl std::fmt::Display for Dataset {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+impl fmt::Display for Dataset {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "name: {}, tag: {}", self.name, self.tag)
     }
 }
 
 impl Default for Dataset {
     fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl ToYaml for Dataset {}
+
+impl Dataset {
+    pub fn new() -> Self {
         Dataset {
             name: Name::Unknown,
             tag: Tag::Unknown,
@@ -53,168 +158,6 @@ impl Default for Dataset {
             mutations: BTreeMap::new(),
             phylogeny: Phylogeny::new(),
         }
-    }
-}
-
-impl ToYaml for Dataset {}
-
-impl Dataset {
-    /// Download a remote dataset
-    pub async fn download(
-        name: &String,
-        tag: &String,
-        output_dir: &Path,
-    ) -> Result<(), Report> {
-        let name = match name.as_str() {
-            "rsv-a" | "rsv-b" => Err(eyre!("Dataset is not implemented yet: {name}"))?,
-            "sars-cov-2" => Name::SarsCov2,
-            _ => Err(eyre!("Unknown dataset name: {name}"))
-                .suggestion("Please choose from:")?,
-        };
-
-        let tag = match tag.as_str() {
-            "latest" => Tag::Latest,
-            "nightly" => Tag::Nightly,
-            _ => Tag::Archive(tag.to_string()),
-        };
-
-        create_dir_all(output_dir)?;
-        info!("Creating output directory: {:?}", output_dir);
-
-        // --------------------------------------------------------------------
-        // Download Reference
-        // --------------------------------------------------------------------
-        let url = match name {
-            Name::SarsCov2 => SARSCOV2_REFERENCE_URL.to_string(),
-            _ => {
-                return Err(eyre!(
-                    "Downloading the {name} dataset is not implemented yet."
-                ))
-            }
-        };
-        let ext = Path::new(&url).extension().unwrap().to_str().unwrap();
-        let mut decompress = false;
-        if ext != "fasta" && ext != "fa" {
-            decompress = true;
-        }
-        let output_path = output_dir.join("reference.fasta");
-        info!("Downloading reference: {} to {:?}", url, output_path);
-        utils::download_file(&url, &output_path, decompress).await?;
-
-        // --------------------------------------------------------------------
-        // Download Populations
-        // --------------------------------------------------------------------
-
-        let url = match name {
-            Name::SarsCov2 => SARSCOV2_POPULATIONS_URL.to_string(),
-            _ => {
-                return Err(eyre!(
-                    "Downloading the {name} dataset is not implemented yet."
-                ))
-            }
-        };
-        let ext = Path::new(&url).extension().unwrap().to_str().unwrap();
-        let mut decompress = false;
-        if ext != "fasta" && ext != "fa" {
-            decompress = true;
-        }
-        let output_path = output_dir.join("populations.fasta");
-        info!("Downloading populations: {} to {:?}", url, output_path);
-        utils::download_file(&url, &output_path, decompress).await?;
-
-        // --------------------------------------------------------------------
-        // Phylogeny
-        // --------------------------------------------------------------------
-
-        let output_path = output_dir.join("phylogeny.dot");
-        info!("Creating phylogeny: {:?}", output_path);
-
-        let mut phylogeny = Phylogeny::new();
-        phylogeny.build_graph(&name, output_dir).await?;
-        // Export to several formats
-        phylogeny.export(output_dir, PhylogenyExportFormat::Dot)?;
-        phylogeny.export(output_dir, PhylogenyExportFormat::Json)?;
-
-        // --------------------------------------------------------------------
-        // Create Summary
-        // --------------------------------------------------------------------
-
-        let output_path = output_dir.join("summary.yaml");
-        info!("Creating info summary: {:?}", output_path);
-
-        let summary = Summary {
-            name: name.to_string(),
-            tag: tag.to_string(),
-        }
-        .to_yaml();
-
-        write(&output_path, summary)
-            .wrap_err(format!("Unable to write summary: {:?}", output_path))?;
-
-        Ok(())
-    }
-
-    /// Load a local dataset
-    pub fn load(dataset_dir: &Path, mask: usize) -> Result<Dataset, Report> {
-        // (required) load reference
-        let reference_path = dataset_dir.join("reference.fasta");
-        info!("Loading reference: {:?}", reference_path);
-        let reference_reader =
-            fasta::Reader::from_file(reference_path).expect("Unable to load reference");
-        let reference = reference_reader.records().next().unwrap().unwrap();
-        let reference = Sequence::from_record(reference, None, mask)?;
-
-        // (required) load populations and parse mutations
-        let populations_path = dataset_dir.join("populations.fasta");
-        info!("Loading populations: {:?}", populations_path);
-        let populations_reader = fasta::Reader::from_file(populations_path)
-            .expect("Unable to load populations");
-        let mut populations = BTreeMap::new();
-        let mut mutations: BTreeMap<Substitution, Vec<String>> = BTreeMap::new();
-        for result in populations_reader.records() {
-            let record = result?;
-            let sequence = Sequence::from_record(record, Some(&reference), mask)?;
-            populations.insert(sequence.id.clone(), sequence.clone());
-
-            for sub in sequence.substitutions {
-                mutations
-                    .entry(sub)
-                    .or_insert(Vec::new())
-                    .push(sequence.id.clone());
-            }
-        }
-
-        // (optional) load summary
-        let summary_path = dataset_dir.join("summary.yaml");
-        let mut tag = Tag::Unknown;
-        let mut name = Name::Unknown;
-        if summary_path.exists() {
-            info!("Loading summary: {:?}", summary_path);
-            let reader = File::open(summary_path)?;
-            let summary: Summary = serde_yaml::from_reader(&reader)?;
-            name = Name::from_str(&summary.name)?;
-            tag = Tag::from_str(&summary.tag)?;
-        }
-
-        // (optional) load phylogeny
-        let phylogeny_path = dataset_dir.join("phylogeny.json");
-        let mut phylogeny = Phylogeny::new();
-        if phylogeny_path.exists() {
-            info!("Loading phylogeny: {:?}", phylogeny_path);
-            phylogeny = Phylogeny::import(dataset_dir, PhylogenyImportFormat::Json)?;
-        }
-
-        // assembles pieces into full dataset
-        let dataset = Dataset {
-            name,
-            tag,
-            reference,
-            populations,
-            mutations,
-            phylogeny,
-        };
-
-        Ok(dataset)
     }
 
     pub fn find_best_match(
@@ -227,11 +170,13 @@ impl Dataset {
 
         // Check if we are excluding/including certain populations
         let exclude_binding = Vec::new();
-        let exclude_populations: &Vec<String> = exclude_populations.unwrap_or(&exclude_binding);
+        let exclude_populations: &Vec<String> =
+            exclude_populations.unwrap_or(&exclude_binding);
 
         let include_binding = Vec::new();
-        let include_populations: &Vec<String> = include_populations.unwrap_or(&include_binding);
-    
+        let include_populations: &Vec<String> =
+            include_populations.unwrap_or(&include_binding);
+
         // support: check which population have a matching sub
         for sub in &sequence.substitutions {
             if self.mutations.contains_key(sub) {
@@ -390,6 +335,7 @@ impl Dataset {
         Ok(match_summary)
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub fn find_parents(
         &self,
         sequence: Sequence,
@@ -400,7 +346,6 @@ impl Dataset {
         min_length: usize,
         min_subs: usize,
     ) -> Result<Vec<MatchSummary>, Report> {
-        
         let mut parents = Vec::new();
 
         if max_parents == 0 {
@@ -423,7 +368,11 @@ impl Dataset {
         let parent_1 = if let Some(recombinant) = recombinant {
             let mut descendants = self.phylogeny.get_descendants(&recombinant)?;
             exclude_populations.append(&mut descendants);
-            self.find_best_match(&sequence, Some(&exclude_populations), Some(&include_populations))?
+            self.find_best_match(
+                &sequence,
+                Some(&exclude_populations),
+                Some(&include_populations),
+            )?
         }
         // Option 2. Not a known recombinant, just use best_match/consensus as parent 1
         else {
@@ -431,7 +380,8 @@ impl Dataset {
         };
 
         // get conflict_ref and conflict_alt for subsequent searches
-        let parent_1_subs = &self.populations[&parent_1.consensus_population].substitutions;
+        let parent_1_subs =
+            &self.populations[&parent_1.consensus_population].substitutions;
 
         // conflict_ref: sub in pop that is not in query
         let conflict_ref = parent_1_subs
@@ -496,7 +446,10 @@ impl Dataset {
                 if self.mutations.contains_key(sub) {
                     let populations_to_add = self.mutations[sub]
                         .iter()
-                        .filter(|pop| !exclude_populations.contains(&pop) && !include_populations.contains(&pop))
+                        .filter(|pop| {
+                            !exclude_populations.contains(pop)
+                                && !include_populations.contains(pop)
+                        })
                         .map(|pop| pop.to_owned())
                         .collect::<Vec<_>>();
                     include_populations.extend(populations_to_add);
@@ -506,7 +459,6 @@ impl Dataset {
             // we want to exclude populations in our search that
             //    - have all the conflict_ref
 
-                
             // for sub in &conflict_ref {
             //     if self.mutations.contains_key(sub) {
             //         let populations = &self.mutations[sub];
@@ -516,8 +468,7 @@ impl Dataset {
             //     }
             // }
 
-
-            debug!("include_populations: {include_populations:?}");    
+            debug!("include_populations: {include_populations:?}");
 
             // // filter out conflict_ref populations
             // for (pop, count) in conflict_ref_count {
@@ -535,8 +486,19 @@ impl Dataset {
             debug!("exclude_populations: {exclude_populations:?}");
 
             debug!("parent_{}: iteration {num_iter}", num_parents + 1);
-            let match_summary = self.find_best_match(&sequence, Some(&exclude_populations), Some(&include_populations))?;
-            let recombination = detect_recombination(&sequence, &parents, &match_summary, min_consecutive, min_length, min_subs)?;
+            let match_summary = self.find_best_match(
+                &sequence,
+                Some(&exclude_populations),
+                Some(&include_populations),
+            )?;
+            let recombination = detect_recombination(
+                &sequence,
+                &parents,
+                &match_summary,
+                min_consecutive,
+                min_length,
+                min_subs,
+            )?;
 
             // if the recombination search failed, exclude match_summary descendants from next iteration
             if recombination.breakpoints.is_empty() {
@@ -549,8 +511,7 @@ impl Dataset {
                     .map(|pop| pop.to_owned())
                     .collect::<Vec<_>>();
                 exclude_populations.append(&mut descendants_to_add);
-            }
-            else {
+            } else {
                 num_parents += 1;
 
                 // TBD: Check if all conflict_ref are resolved
@@ -559,4 +520,164 @@ impl Dataset {
 
         Ok(parents)
     }
+}
+
+// ----------------------------------------------------------------------------
+// Functions
+// ----------------------------------------------------------------------------
+
+/// Download a remote dataset
+pub async fn download(name: &str, tag: &str, output_dir: &Path) -> Result<(), Report> {
+    let name = match name {
+        "rsv-a" | "rsv-b" => {
+            Err(eyre!("Dataset download of {name} is not implemented yet."))?
+        }
+        "sars-cov-2" => Name::SarsCov2,
+        _ => Err(eyre!("Unknown dataset name: {name}"))
+            .suggestion("Please choose from:")?,
+    };
+
+    let tag = match tag {
+        "latest" => Tag::Latest,
+        "nightly" => Tag::Nightly,
+        _ => Tag::Archive(tag.to_string()),
+    };
+
+    create_dir_all(output_dir)?;
+    info!("Creating output directory: {:?}", output_dir);
+
+    // --------------------------------------------------------------------
+    // Download Reference
+    // --------------------------------------------------------------------
+    let url = match name {
+        Name::SarsCov2 => SARSCOV2_REFERENCE_URL.to_string(),
+        _ => {
+            return Err(eyre!(
+                "Downloading the {name} dataset is not implemented yet."
+            ))
+        }
+    };
+    let ext = Path::new(&url).extension().unwrap().to_str().unwrap();
+    let mut decompress = false;
+    if ext != "fasta" && ext != "fa" {
+        decompress = true;
+    }
+    let output_path = output_dir.join("reference.fasta");
+    info!("Downloading reference: {} to {:?}", url, output_path);
+    utils::download_file(&url, &output_path, decompress).await?;
+
+    // --------------------------------------------------------------------
+    // Download Populations
+    // --------------------------------------------------------------------
+
+    let url = match name {
+        Name::SarsCov2 => SARSCOV2_POPULATIONS_URL.to_string(),
+        _ => {
+            return Err(eyre!(
+                "Downloading the {name} dataset is not implemented yet."
+            ))
+        }
+    };
+    let ext = Path::new(&url).extension().unwrap().to_str().unwrap();
+    let mut decompress = false;
+    if ext != "fasta" && ext != "fa" {
+        decompress = true;
+    }
+    let output_path = output_dir.join("populations.fasta");
+    info!("Downloading populations: {} to {:?}", url, output_path);
+    utils::download_file(&url, &output_path, decompress).await?;
+
+    // --------------------------------------------------------------------
+    // Phylogeny
+    // --------------------------------------------------------------------
+
+    let output_path = output_dir.join("phylogeny.dot");
+    info!("Creating phylogeny: {:?}", output_path);
+
+    let mut phylogeny = Phylogeny::new();
+    phylogeny.build_graph(&name, output_dir).await?;
+    // Export to several formats
+    phylogeny.export(output_dir, PhylogenyExportFormat::Dot)?;
+    phylogeny.export(output_dir, PhylogenyExportFormat::Json)?;
+
+    // --------------------------------------------------------------------
+    // Create Summary
+    // --------------------------------------------------------------------
+
+    let output_path = output_dir.join("summary.yaml");
+    info!("Creating info summary: {:?}", output_path);
+
+    let summary = Summary {
+        name: name.to_string(),
+        tag: tag.to_string(),
+    }
+    .to_yaml();
+
+    write(&output_path, summary)
+        .wrap_err(format!("Unable to write summary: {:?}", output_path))?;
+
+    Ok(())
+}
+
+/// Load a local dataset
+pub fn load(dataset_dir: &Path, mask: usize) -> Result<Dataset, Report> {
+    // (required) load reference
+    let reference_path = dataset_dir.join("reference.fasta");
+    info!("Loading reference: {:?}", reference_path);
+    let reference_reader =
+        fasta::Reader::from_file(reference_path).expect("Unable to load reference");
+    let reference = reference_reader.records().next().unwrap().unwrap();
+    let reference = Sequence::from_record(reference, None, mask)?;
+
+    // (required) load populations and parse mutations
+    let populations_path = dataset_dir.join("populations.fasta");
+    info!("Loading populations: {:?}", populations_path);
+    let populations_reader =
+        fasta::Reader::from_file(populations_path).expect("Unable to load populations");
+    let mut populations = BTreeMap::new();
+    let mut mutations: BTreeMap<Substitution, Vec<String>> = BTreeMap::new();
+    for result in populations_reader.records() {
+        let record = result?;
+        let sequence = Sequence::from_record(record, Some(&reference), mask)?;
+        populations.insert(sequence.id.clone(), sequence.clone());
+
+        for sub in sequence.substitutions {
+            mutations
+                .entry(sub)
+                .or_insert(Vec::new())
+                .push(sequence.id.clone());
+        }
+    }
+
+    // (optional) load summary
+    let summary_path = dataset_dir.join("summary.yaml");
+    let mut tag = Tag::Unknown;
+    let mut name = Name::Unknown;
+    if summary_path.exists() {
+        info!("Loading summary: {:?}", summary_path);
+        let reader = File::open(summary_path)?;
+        let summary: Summary = serde_yaml::from_reader(&reader)?;
+        name = Name::from_str(&summary.name)?;
+        tag = Tag::from_str(&summary.tag)?;
+    }
+
+    // (optional) load phylogeny
+    let phylogeny_path = dataset_dir.join("phylogeny.json");
+    let mut phylogeny = Phylogeny::new();
+    if phylogeny_path.exists() {
+        info!("Loading phylogeny: {:?}", phylogeny_path);
+        phylogeny = Phylogeny::import(dataset_dir, PhylogenyImportFormat::Json)?;
+    }
+
+    // assembles pieces into full dataset
+    let dataset = Dataset {
+        name,
+        tag,
+        reference,
+        populations,
+        mutations,
+        phylogeny,
+    };
+
+    Ok(dataset)
 }

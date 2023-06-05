@@ -1,4 +1,5 @@
-use crate::dataset::{constants, utils, Name};
+use crate::dataset;
+use crate::utils;
 use color_eyre::Report;
 use csv;
 use itertools::Itertools;
@@ -129,11 +130,11 @@ impl Phylogeny {
 
     pub async fn build_graph(
         &mut self,
-        dataset_name: &Name,
+        dataset_name: &dataset::Name,
         dataset_dir: &Path,
     ) -> Result<(), Report> {
         let (graph_data, order) = match dataset_name {
-            &Name::SarsCov2 => create_sarscov2_graph_data(dataset_dir).await?,
+            &dataset::Name::SarsCov2 => create_sarscov2_graph_data(dataset_dir).await?,
             _ => return Ok(()),
         };
 
@@ -377,7 +378,7 @@ impl Phylogeny {
 
 pub async fn download_lineage_notes(dataset_dir: &Path) -> Result<PathBuf, Report> {
     let decompress = false;
-    let url = constants::SARSCOV2_LINEAGE_NOTES_URL;
+    let url = dataset::SARSCOV2_LINEAGE_NOTES_URL;
     let output_path = dataset_dir.join("lineage_notes.txt");
     utils::download_file(url, &output_path, decompress).await?;
 
@@ -388,7 +389,7 @@ pub async fn download_alias_key(dataset_dir: &Path) -> Result<PathBuf, Report> {
     // https://raw.githubusercontent.com/cov-lineages/pango-designation/master/pango_designation/alias_key.json
 
     let decompress = false;
-    let url = constants::SARSCOV2_ALIAS_KEY_URL;
+    let url = dataset::SARSCOV2_ALIAS_KEY_URL;
     let output_path = dataset_dir.join("alias_key.json");
     utils::download_file(url, &output_path, decompress).await?;
 

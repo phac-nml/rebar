@@ -3,7 +3,7 @@ use color_eyre::eyre::{Report, Result};
 use log::{debug, info};
 use rebar::cli::verbosity::Verbosity;
 use rebar::cli::{Cli, Command};
-use rebar::dataset::Dataset;
+use rebar::dataset;
 use rebar::query::Query;
 use std::env;
 use std::str::FromStr;
@@ -41,7 +41,7 @@ async fn main() -> Result<()> {
             output_dir,
             ..
         } => {
-            Dataset::download(&name, &tag, &output_dir).await?;
+            dataset::download(&name, &tag, &output_dir).await?;
         }
         // Run on input alignment
         Command::Run {
@@ -55,8 +55,10 @@ async fn main() -> Result<()> {
             min_subs,
             ..
         } => {
-            // Load dataset
-            let dataset = Dataset::load(&dataset_dir, mask)?;
+            // Collect files in dataset_dir into a dataset object
+            // This mainly includes parent populations sequences
+            //   and optionally a phylogenetic representation.
+            let dataset = dataset::load(&dataset_dir, mask)?;
             // Load the query alignment
             let query = Query::load(alignment, &dataset, mask)?;
             info!("Identifying consensus and parent populations.");
@@ -70,10 +72,20 @@ async fn main() -> Result<()> {
                 let exclude_populations = None;
                 let include_populations = None;
                 debug!("sequence: {id}");
-                let best_match =
-                    dataset.find_best_match(&sequence, exclude_populations, include_populations)?;
-                let _parents =
-                    dataset.find_parents(sequence, &best_match, max_parents, max_iter, min_consecutive, min_length, min_subs)?;
+                let best_match = dataset.find_best_match(
+                    &sequence,
+                    exclude_populations,
+                    include_populations,
+                )?;
+                let _parents = dataset.find_parents(
+                    sequence,
+                    &best_match,
+                    max_parents,
+                    max_iter,
+                    min_consecutive,
+                    min_length,
+                    min_subs,
+                )?;
 
                 // for (i, match_summary) in parents.iter().enumerate() {
                 //     debug!("parent_{}: {}", i+1, match_summary.consensus_population);

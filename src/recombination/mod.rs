@@ -4,11 +4,11 @@ use crate::sequence::Substitution;
 use color_eyre::eyre::{Report, Result};
 use itertools::Itertools;
 use log::debug;
+use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 use std::default::Default;
 use tabled::builder::Builder;
 use tabled::settings::Style;
-use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct Breakpoint {
@@ -61,9 +61,7 @@ pub fn detect_recombination(
     min_consecutive: usize,
     min_length: usize,
     min_subs: usize,
-
 ) -> Result<Recombination, Report> {
-
     let mut recombination = Recombination::new();
 
     // Create a table where rows are coordinates and columns are
@@ -127,7 +125,7 @@ pub fn detect_recombination(
                 .unwrap_or(ref_base);
 
             if parent_base == sample_base {
-                origins.push(parent.consensus_population.clone());               
+                origins.push(parent.consensus_population.clone());
             }
 
             row.push(parent_base.to_string());
@@ -144,7 +142,7 @@ pub fn detect_recombination(
             .unwrap_or(ref_base);
 
         if match_base == sample_base {
-            origins.push(match_summary.consensus_population.clone());    
+            origins.push(match_summary.consensus_population.clone());
         }
         row.push(match_base.to_string());
         parent_bases.push(match_base);
@@ -163,11 +161,9 @@ pub fn detect_recombination(
 
         // If no origins were found, this is private
         if origins.is_empty() {
-            let private =
-                sequence.substitutions.iter().find(|sub| sub.coord == coord);
+            let private = sequence.substitutions.iter().find(|sub| sub.coord == coord);
             privates.push(private);
-        }
-        else if origins.len() == 1 {
+        } else if origins.len() == 1 {
             row.push(origins[0].clone());
             table_rows.push(row);
         }
@@ -198,7 +194,10 @@ pub fn detect_recombination(
     let mut table = table_builder.build();
 
     // pretty print table for debugging
-    debug!("Recombination table pre-filter:\n{}", table.with(Style::sharp()).to_string());
+    debug!(
+        "Recombination table pre-filter:\n{}",
+        table.with(Style::sharp()).to_string()
+    );
 
     // --------------------------------------------------------------------
     // Group Substitutions into Parental Regions
@@ -206,35 +205,59 @@ pub fn detect_recombination(
 
     // First: 5' -> 3', filter separately on min_consecutive then min_length
     let mut regions_5p = identify_regions(&table_rows)?;
-    regions_5p = filter_regions(&regions_5p, Direction::Forward, min_consecutive, 0 as usize)?;
-    regions_5p = filter_regions(&regions_5p, Direction::Forward, 0 as usize, min_length)?;
-    debug!("regions_5p: {}",  serde_json::to_string(&regions_5p).unwrap());
-        
+    regions_5p =
+        filter_regions(&regions_5p, Direction::Forward, min_consecutive, 0_usize)?;
+    regions_5p = filter_regions(&regions_5p, Direction::Forward, 0_usize, min_length)?;
+    debug!(
+        "regions_5p: {}",
+        serde_json::to_string(&regions_5p).unwrap()
+    );
+
     // Second: 3' -> 5', filter separately on min_consecutive then min_length
     let mut regions_3p = identify_regions(&table_rows)?;
-    regions_3p = filter_regions(&regions_3p, Direction::Reverse, min_consecutive, 0 as usize)?; 
-    regions_3p = filter_regions(&regions_3p, Direction::Reverse, 0 as usize, min_length)?;
-    debug!("regions_3p: {}",  serde_json::to_string(&regions_3p).unwrap());
+    regions_3p =
+        filter_regions(&regions_3p, Direction::Reverse, min_consecutive, 0_usize)?;
+    regions_3p = filter_regions(&regions_3p, Direction::Reverse, 0_usize, min_length)?;
+    debug!(
+        "regions_3p: {}",
+        serde_json::to_string(&regions_3p).unwrap()
+    );
 
     // Take the intersect of the 5' and 3' regions (ie. where they both agree)
     let mut regions_intersect = intersect_regions(&regions_5p, &regions_3p)?;
     // During intersection, it's possible that a region from 1 single parent
     // got broken up into multiple adjacent sections. Put it through the
     // filter again to collapse it. Direction doesn't matter now
-    regions_intersect =  filter_regions(&regions_intersect, Direction::Forward, min_consecutive, min_length)?;
-    debug!("regions_intersect: {}",  serde_json::to_string(&regions_intersect).unwrap());     
+    regions_intersect = filter_regions(
+        &regions_intersect,
+        Direction::Forward,
+        min_consecutive,
+        min_length,
+    )?;
+    debug!(
+        "regions_intersect: {}",
+        serde_json::to_string(&regions_intersect).unwrap()
+    );
 
     // Make sure all the prev_parents + match_summary have at least 1 region
-    let region_origins = regions_intersect.iter().map(|(_start, region)| region.origin.clone()).collect::<Vec<_>>();
+    let mut region_origins = regions_intersect
+        .values()
+        .map(|region| region.origin.clone());
     for parent in parents {
         if !region_origins.contains(&parent.consensus_population) {
-            debug!("No recombination detected for parent {}.", &parent.consensus_population);
-            return Ok(recombination)
-        }        
+            debug!(
+                "No recombination detected for parent {}.",
+                &parent.consensus_population
+            );
+            return Ok(recombination);
+        }
     }
     if !region_origins.contains(&match_summary.consensus_population) {
-        debug!("No recombination detected for parent {}.", &match_summary.consensus_population);
-        return Ok(recombination)
+        debug!(
+            "No recombination detected for parent {}.",
+            &match_summary.consensus_population
+        );
+        return Ok(recombination);
     }
 
     // --------------------------------------------------------------------
@@ -248,7 +271,9 @@ pub fn detect_recombination(
         let origin = &region.origin;
         uniq_subs_count.entry(origin.clone()).or_insert(0);
         for sub in &region.substitutions {
-            if sub.reference == sub.alt { continue } 
+            if sub.reference == sub.alt {
+                continue;
+            }
             *uniq_subs_count.entry(origin.clone()).or_default() += 1;
         }
     }
@@ -257,13 +282,16 @@ pub fn detect_recombination(
     let mut min_subs_fail = false;
     for (parent, count) in uniq_subs_count {
         if count < min_subs {
-            debug!("Parent {} subs ({count}) do not meet the min_subs filter ({min_subs}).", parent);
+            debug!(
+                "Parent {} subs ({count}) do not meet the min_subs filter ({min_subs}).",
+                parent
+            );
             min_subs_fail = true;
         }
     }
     if min_subs_fail {
         debug!("No recombination detected, min_subs filter was not satisfied by all parents.");
-        return Ok(recombination)
+        return Ok(recombination);
     }
 
     // --------------------------------------------------------------------
@@ -273,18 +301,22 @@ pub fn detect_recombination(
     // filter the table for the region subs
     let mut region_sub_coords = Vec::new();
     for region in regions_intersect.values() {
-        let sub_coords = region.substitutions.iter().map(|sub| sub.coord).collect::<Vec<_>>();
+        let sub_coords = region
+            .substitutions
+            .iter()
+            .map(|sub| sub.coord)
+            .collect::<Vec<_>>();
         region_sub_coords.extend(sub_coords);
     }
 
     let mut table_rows_filter = Vec::new();
     for row in table_rows {
         let coord = row[0].parse::<usize>().unwrap();
-        if region_sub_coords.contains(&coord){
+        if region_sub_coords.contains(&coord) {
             table_rows_filter.push(row);
         }
     }
-    
+
     let mut table_builder = Builder::default();
     table_builder.set_header(headers.clone());
 
@@ -296,21 +328,27 @@ pub fn detect_recombination(
     let mut table = table_builder.build();
 
     // pretty print table for debugging
-    debug!("Recombination table post-filter:\n{}", table.with(Style::sharp()).to_string());
+    debug!(
+        "Recombination table post-filter:\n{}",
+        table.with(Style::sharp()).to_string()
+    );
 
     // --------------------------------------------------------------------
     // Breakpoints
     // --------------------------------------------------------------------
 
     let breakpoints = identify_breakpoints(&regions_intersect)?;
-    debug!("breakpoints: {}",  serde_json::to_string(&breakpoints).unwrap());
+    debug!(
+        "breakpoints: {}",
+        serde_json::to_string(&breakpoints).unwrap()
+    );
 
     // --------------------------------------------------------------------
     // Update
     // --------------------------------------------------------------------
 
     // for the table_rows, combine header and data
-    let mut table = vec!(headers);
+    let mut table = vec![headers];
     table.extend(table_rows_filter);
 
     // update all the attributes
@@ -369,8 +407,7 @@ pub fn filter_regions(
     direction: Direction,
     min_consecutive: usize,
     min_length: usize,
-    ) -> Result<BTreeMap<usize, Region>, Report> {
-
+) -> Result<BTreeMap<usize, Region>, Report> {
     let mut regions_filter = BTreeMap::new();
     let mut origin_prev: Option<String> = None;
     let mut start_prev: Option<usize> = None;
@@ -381,7 +418,6 @@ pub fn filter_regions(
     };
 
     for start in start_coords {
-
         let region = regions.get(start).unwrap();
         let num_consecutive = region.substitutions.len();
         let region_length = (region.end - region.start) + 1;
@@ -402,15 +438,20 @@ pub fn filter_regions(
                 Direction::Forward => {
                     if let Some(start_prev) = start_prev {
                         let region_update = regions_filter.get_mut(&start_prev).unwrap();
-                        region_update.substitutions.extend(region.substitutions.clone());
+                        region_update
+                            .substitutions
+                            .extend(region.substitutions.clone());
                         region_update.end = region.end;
                     }
-                },
+                }
                 // when going backward, we remove and replace regions
                 Direction::Reverse => {
-                    if let Some(start_prev) = start_prev {                    
-                        let mut region_new = regions_filter.get(&start_prev).unwrap().to_owned();
-                        region_new.substitutions.extend(region.substitutions.clone());
+                    if let Some(start_prev) = start_prev {
+                        let mut region_new =
+                            regions_filter.get(&start_prev).unwrap().to_owned();
+                        region_new
+                            .substitutions
+                            .extend(region.substitutions.clone());
                         region_new.substitutions.sort();
                         region_new.start = region.start;
 
@@ -422,13 +463,12 @@ pub fn filter_regions(
 
                     // for reverse, update new start position
                     start_prev = Some(region.start);
-                },
+                }
             }
         }
     }
 
     Ok(regions_filter)
-
 }
 
 /// Find the intersect between two regions.
@@ -436,20 +476,18 @@ pub fn intersect_regions(
     regions_1: &BTreeMap<usize, Region>,
     regions_2: &BTreeMap<usize, Region>,
 ) -> Result<BTreeMap<usize, Region>, Report> {
-
     let mut regions_intersect = BTreeMap::new();
 
     for r1 in regions_1.values() {
-
         for r2 in regions_2.values() {
-
             // don't intersect regions of different origins
             if r1.origin != r2.origin {
-                continue
+                continue;
             }
 
             // find the shared substitutions
-            let subs_intersect = r1.substitutions
+            let subs_intersect = r1
+                .substitutions
                 .iter()
                 .filter(|sub| r2.substitutions.contains(sub))
                 .map(|sub| sub.to_owned())
@@ -457,7 +495,7 @@ pub fn intersect_regions(
 
             // if no shared subs, an intersection is not possible
             if subs_intersect.is_empty() {
-                continue
+                continue;
             }
 
             // start coordinate is the min sub, end is the max sub
@@ -477,21 +515,17 @@ pub fn intersect_regions(
     // Do we need to go back the other way at all?
 
     Ok(regions_intersect)
-
 }
 
 pub fn identify_breakpoints(
-    regions: &BTreeMap<usize, Region>
+    regions: &BTreeMap<usize, Region>,
 ) -> Result<Vec<Breakpoint>, Report> {
-
     let mut breakpoints: Vec<Breakpoint> = Vec::new();
     let mut end_prev: Option<usize> = None;
 
     for region in regions.values() {
-
         // a breakpoint is only possible if we already found a prev region
         if let Some(end_prev) = end_prev {
-
             // breakpoint intervals are non-inclusive of regions
             let breakpoint = Breakpoint {
                 start: end_prev + 1,
@@ -501,7 +535,6 @@ pub fn identify_breakpoints(
         }
 
         end_prev = Some(region.end);
-
     }
 
     Ok(breakpoints)
