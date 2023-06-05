@@ -1,10 +1,10 @@
+use bio::io::fasta;
 use clap::Parser;
-use color_eyre::eyre::{Report, Result};
+use color_eyre::eyre::{Report, Result, WrapErr};
 use log::{debug, info};
-use rebar::cli::verbosity::Verbosity;
-use rebar::cli::{Cli, Command};
+use rebar::cli::{Cli, Command, Verbosity};
 use rebar::dataset;
-use rebar::query::Query;
+use rebar::sequence::Sequence;
 use std::env;
 use std::str::FromStr;
 
@@ -59,25 +59,35 @@ async fn main() -> Result<()> {
             // This mainly includes parent populations sequences
             //   and optionally a phylogenetic representation.
             let dataset = dataset::load(&dataset_dir, mask)?;
-            // Load the query alignment
-            let query = Query::load(alignment, &dataset, mask)?;
-            info!("Identifying consensus and parent populations.");
-            for (id, sequence) in query.sequences {
-                //if id != "XBB.1.16" && id != "BM.1.1.1" {
-                if id != "XBB.1.16" {
+
+            info!("Loading alignment: {:?}", alignment);
+            let alignment_reader =
+                fasta::Reader::from_file(&alignment).expect("Unable to read alignment");
+
+            for result in alignment_reader.records() {
+                let record = result.wrap_err(format!(
+                    "Unable to parse alignment: {:?}",
+                    alignment.to_str().unwrap()
+                ))?;
+                let sequence =
+                    Sequence::from_record(record, Some(&dataset.reference), mask)?;
+
+                if sequence.id != "XBB.1.16" {
                     continue;
                 }
 
                 // best match ie. consensus population
                 let exclude_populations = None;
                 let include_populations = None;
-                debug!("sequence: {id}");
-                let best_match = dataset.find_best_match(
+                debug!("sequence: {}", sequence.id);
+                let best_match = dataset::find_best_match(
+                    &dataset,
                     &sequence,
                     exclude_populations,
                     include_populations,
                 )?;
-                let _parents = dataset.find_parents(
+                let _parents = dataset::find_parents(
+                    &dataset,
                     sequence,
                     &best_match,
                     max_parents,
@@ -86,11 +96,6 @@ async fn main() -> Result<()> {
                     min_length,
                     min_subs,
                 )?;
-
-                // for (i, match_summary) in parents.iter().enumerate() {
-                //     debug!("parent_{}: {}", i+1, match_summary.consensus_population);
-                //     debug!("{}", match_summary.to_yaml().replace('\n', format!("\n{}", " ".repeat(31)).as_str()));
-                // }
             }
         }
     }
