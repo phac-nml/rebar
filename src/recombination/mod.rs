@@ -1,4 +1,4 @@
-use crate::query::match_summary::MatchSummary;
+use crate::dataset;
 use crate::sequence::Sequence;
 use crate::sequence::Substitution;
 use color_eyre::eyre::{Report, Result};
@@ -56,8 +56,8 @@ impl Recombination {
 
 pub fn detect_recombination(
     sequence: &Sequence,
-    parents: &Vec<MatchSummary>,
-    match_summary: &MatchSummary,
+    parents: &Vec<dataset::SearchResult>,
+    match_summary: &dataset::SearchResult,
     min_consecutive: usize,
     min_length: usize,
     min_subs: usize,
