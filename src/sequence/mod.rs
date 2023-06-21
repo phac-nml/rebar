@@ -1,9 +1,10 @@
 use crate::traits::ToYaml;
-use color_eyre::eyre::Report;
+use color_eyre::eyre::{Result, Report};
 use itertools::Itertools;
 use serde::{Deserialize, Serialize};
 use std::cmp::Ordering;
 use std::default::Default;
+use std::str::FromStr;
 
 #[derive(Copy, Clone, Debug, Serialize, Deserialize)]
 pub enum Mutation {
@@ -54,7 +55,7 @@ impl PartialOrd for Deletion {
 // Substitution
 // ----------------------------------------------------------------------------
 
-#[derive(Copy, Clone, Debug, Serialize, Deserialize)]
+#[derive(Copy, Clone, Debug, Hash, Serialize, Deserialize)]
 pub struct Substitution {
     pub coord: usize,
     pub reference: char,
@@ -64,6 +65,22 @@ pub struct Substitution {
 impl std::fmt::Display for Substitution {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         write!(f, "{}{}{}", self.reference, self.coord, self.alt)
+    }
+}
+
+
+impl FromStr for Substitution {
+    type Err = Report;
+
+    fn from_str(text: &str) -> Result<Self, Report> {
+        let reference = text.chars().nth(0).unwrap();
+        let alt = text.chars().nth(text.len()-1).unwrap();
+        let coord = text[1..text.len()-1].parse().unwrap();
+        let substitution = Substitution {
+            reference, alt, coord
+        };
+
+        Ok(substitution)
     }
 }
 

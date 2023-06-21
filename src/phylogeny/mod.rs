@@ -237,7 +237,7 @@ impl Phylogeny {
         Ok(())
     }
 
-    pub fn get_descendants(&self, name: &String) -> Result<Vec<String>, Report> {
+    pub fn get_descendants(&self, name: &String) -> Result<Vec<String>, Report> { 
         let mut descendants = Vec::new();
 
         // Find the node that matches the name
@@ -258,7 +258,7 @@ impl Phylogeny {
         Ok(descendants)
     }
 
-    pub fn get_ancestors(&self, name: &String) -> Option<Vec<Vec<String>>> {
+    pub fn get_ancestors(&self, name: &String) -> Result<Vec<Vec<String>>, Report> {
         let mut ancestors = Vec::new();
 
         // Copy graph so we can mutate it here with reverse
@@ -310,9 +310,8 @@ impl Phylogeny {
         }
 
         // Restore original graph order
-
         graph.reverse();
-        Some(ancestors)
+        Ok(ancestors)
     }
 
     pub fn get_common_ancestor(&self, names: &Vec<String>) -> Result<String, Report> {

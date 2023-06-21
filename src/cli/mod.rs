@@ -1,88 +1,178 @@
-use clap::{Parser, Subcommand};
-use color_eyre::eyre::{eyre, Report, Result};
+use clap::{Args, Parser, Subcommand, ValueEnum};
+use crate::dataset;
 use serde::Serialize;
 use std::path::PathBuf;
-use std::str::FromStr;
 
-#[derive(Debug, Parser, Serialize)]
-#[command(author, version, about, long_about = None)]
-#[command(propagate_version = true)]
+// -----------------------------------------------------------------------------
+// Entry Point
+// -----------------------------------------------------------------------------
+
+/// Rebar command-line interface (CLI)
+#[derive(Parser, Debug)]
+#[clap(name = "rebar", trailing_var_arg = true)]
+#[clap(author, version)]
 #[clap(verbatim_doc_comment)]
-/// Recombination barcode detector.
-pub struct Cli {
-    #[command(subcommand)]
-    pub command: Command,
+pub struct RebarCli {
+
+    #[clap(subcommand)]
+    // rebar command (dataset, run, help)
+    pub command: RebarCommand,
+
+    /// Control output verbosity level.
+    #[clap(short = 'v', long)]
+    #[clap(value_enum, default_value_t = Verbosity::default())]
+    #[clap(hide_possible_values=false)]
+    #[clap(global = true)]
+    pub verbosity: Verbosity,
 }
 
-#[derive(Debug, Subcommand, Serialize)]
-pub enum Command {
-    /// Download and list available datasets.
-    Dataset {
-        /// Dataset name
-        #[arg(short, long, required = true)]
-        name: String,
-
-        /// Dataset tag
-        #[arg(short, long, required = true)]
-        tag: String,
-
-        // /// Dataset reference accession
-        // #[arg(short, long, required = true)]
-        // reference: String,
-        /// Dataset output directory
-        #[arg(short, long, required = true)]
-        output_dir: PathBuf,
-
-        /// Make output more quiet or more verbose
-        #[arg(short, long, default_value_t=String::from("info"))]
-        verbosity: String,
-    },
-
-    /// Run rebar on input alignment.
-    Run {
-        /// Dataset directory
-        #[arg(short = 'd', long, required = true)]
-        dataset_dir: PathBuf,
-
-        /// Input fasta alignment
-        #[arg(short = 'a', long, required = true)]
-        alignment: PathBuf,
-
-        /// Mask 5' and 3' ends of alignment
-        #[arg(short = 'm', long, default_value_t = 200)]
-        mask: usize,
-
-        /// Minimum length in bases of a parental region
-        #[arg(short = 'p', long, default_value_t = 2)]
-        max_parents: usize,
-
-        /// Maximum number of iterations to find parents
-        #[arg(short = 'i', long, default_value_t = 3)]
-        max_iter: usize,
-
-        /// Minimum number of consecutive bases in a parental region
-        #[arg(short = 'c', long, default_value_t = 3)]
-        min_consecutive: usize,
-
-        /// Minimum number of consecutive bases in a parental region
-        #[arg(short = 'l', long, default_value_t = 500)]
-        min_length: usize,
-
-        /// Minimum number of substitutions in a parental region
-        #[arg(short = 's', long, default_value_t = 1)]
-        min_subs: usize,
-
-        /// Make output more quiet or more verbose
-        #[arg(short, long, default_value_t=String::from("info"))]
-        verbosity: String,
-    },
+/// Rebar CLI commands (dataset, run).
+#[derive(Subcommand, Debug)]
+#[clap(verbatim_doc_comment)]
+pub enum RebarCommand {
+    Dataset(Box<RebarDatasetArgs>),
+    Run(Box<RebarRunArgs>),
 }
 
-#[derive(Debug)]
+// -----------------------------------------------------------------------------
+// Dataset
+// -----------------------------------------------------------------------------
+
+/// Rebar CLI dataset arguments
+#[derive(Parser, Debug)]
+pub struct RebarDatasetArgs {
+    #[clap(subcommand)]
+    pub command: RebarDatasetCommand,
+}
+
+/// Rebar CLI dataset command (download, list)
+#[derive(Subcommand, Debug)]
+#[clap(verbatim_doc_comment)]
+pub enum RebarDatasetCommand {
+
+    /// List available Rebar datasets.
+    List(RebarDatasetListArgs),
+
+    /// Download available Rebar datasets.
+    Download(RebarDatasetDownloadArgs),
+}
+
+// -----------------------------------------------------------------------------
+// Dataset Get
+
+/// Download available Rebar datasets.
+#[derive(Parser, Debug)]
+#[clap(verbatim_doc_comment)]
+pub struct RebarDatasetDownloadArgs {
+
+    /// Dataset name.
+    #[clap(short = 'r', long, required = true)]
+    pub name: dataset::Name,
+
+    /// Dataset tag.
+    #[clap(short = 't', long)]
+    #[clap(default_value_t=dataset::Tag::default())]
+    pub tag: dataset::Tag,
+
+    /// Output directory.
+    /// 
+    /// If the directory does not exist, it will be created.
+    #[clap(short = 'o', long, required = true)]
+    pub output_dir: PathBuf,
+
+}
+
+// -----------------------------------------------------------------------------
+// Dataset List
+
+#[derive(Parser, Debug)]
+#[clap(verbatim_doc_comment)]
+#[group(id = "outputs", required = true, multiple = false)]
+/// Download available Rebar dataset.
+pub struct RebarDatasetListArgs {
+    /// List Rebar datasets with this name.
+    #[clap(short = 'n', long)]
+    pub name: Option<String>,
+
+    /// List Rebar datasets with this tag.
+    #[clap(short = 't', long)]
+    #[clap(default_value = "latest")]
+    pub tag: String, 
+}
+
+// -----------------------------------------------------------------------------
+// Run
+// -----------------------------------------------------------------------------
+
+/// Run Rebar on input alignment or dataset population.
+#[derive(Parser, Debug)]
+#[clap(verbatim_doc_comment)]
+pub struct RebarRunArgs {
+
+    #[command(flatten)]
+    pub input: RebarRunInput,
+
+    /// Dataset directory.
+    #[clap(short = 'd', long, required = true)]
+    pub dataset_dir: PathBuf,
+
+    /// Number of bases to mask at the 5' and 3' ends.
+    #[arg(short = 'm', long, default_value_t = 200)]
+    pub mask: usize,
+
+    /// Maximum number of parents.
+    #[arg(short = 'p', long, default_value_t = 2)]
+    pub max_parents: usize,
+
+    /// Maximum number of search iterations to find parents.
+    #[arg(short = 'i', long, default_value_t = 3)]
+    pub max_iter: usize,
+
+    /// Minimum number of consecutive bases in a parental region.
+    #[arg(short = 'c', long, default_value_t = 3)]
+    pub min_consecutive: usize,
+
+    /// Minimum length of a parental region.
+    #[arg(short = 'l', long, default_value_t = 500)]
+    pub min_length: usize,
+
+    /// Minimum number of substitutions in a parental region.
+    #[arg(short = 's', long, default_value_t = 1)]
+    pub min_subs: usize,
+
+    /// Output directory.
+    /// 
+    /// If the directory does not exist, it will be created.
+    #[clap(short = 'o', long, required = true)]
+    pub output_dir: PathBuf,
+
+}
+
+#[derive(Args, Debug)]
+#[group(required = true, multiple = false)]
+pub struct RebarRunInput {
+
+    /// Input fasta alignment
+    #[arg(long)]
+    pub populations: Option<String>,
+
+    /// Input dataset population
+    #[arg(long)]
+    pub alignment: Option<PathBuf>,
+
+}
+
+// -----------------------------------------------------------------------------
+// Verbosity
+// -----------------------------------------------------------------------------
+
+#[derive(Clone, Debug, Default, Serialize, ValueEnum)]
 pub enum Verbosity {
+    #[default]
     Info,
     Warn,
     Debug,
+    Error,
 }
 
 impl std::fmt::Display for Verbosity {
@@ -90,18 +180,5 @@ impl std::fmt::Display for Verbosity {
         // Convert to lowercase for RUST_LOG env var compatibility
         let lowercase = format!("{:?}", self).to_lowercase();
         write!(f, "{lowercase}")
-    }
-}
-
-impl FromStr for Verbosity {
-    type Err = Report;
-
-    fn from_str(input: &str) -> Result<Self, Self::Err> {
-        match input {
-            "debug" => Ok(Verbosity::Debug),
-            "info" => Ok(Verbosity::Info),
-            "warn" => Ok(Verbosity::Warn),
-            _ => Err(eyre!("Unknown verbosity level {input}.")),
-        }
     }
 }
