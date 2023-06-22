@@ -1,12 +1,11 @@
 use crate::phylogeny::{Phylogeny, PhylogenyExportFormat, PhylogenyImportFormat};
-use crate::recombination::detect_recombination;
 use crate::sequence::{Sequence, Substitution};
-use crate::traits::ToYaml;
+use crate::ToYaml;
 use crate::utils;
-use csv;
 use bio::io::fasta;
-use color_eyre::eyre::{eyre, Result, Report, WrapErr};
+use color_eyre::eyre::{eyre, Report, Result, WrapErr};
 use color_eyre::section::Section;
+use csv;
 use itertools::Itertools;
 use log::{debug, info};
 use serde::{Deserialize, Serialize};
@@ -27,8 +26,11 @@ pub const SARSCOV2_ALIAS_KEY_URL: &str = "https://raw.githubusercontent.com/cov-
 pub const SARSCOV2_LINEAGE_NOTES_URL: &str = "https://raw.githubusercontent.com/cov-lineages/pango-designation/master/lineage_notes.txt";
 
 // ----------------------------------------------------------------------------
-// Name
+// Structs
 // ----------------------------------------------------------------------------
+
+// ----------------------------------------------------------------------------
+// Dataset Name
 
 #[derive(Copy, Clone, Debug, Default, Serialize, Deserialize, PartialEq)]
 pub enum Name {
@@ -70,8 +72,7 @@ impl FromStr for Name {
 }
 
 // ----------------------------------------------------------------------------
-// Tag
-// ----------------------------------------------------------------------------
+// Dataset Tag
 
 #[derive(Clone, Debug, Default, Deserialize, Serialize, PartialEq)]
 pub enum Tag {
@@ -95,7 +96,6 @@ impl fmt::Display for Tag {
     }
 }
 
-// Override the FromStr trait from std
 impl FromStr for Tag {
     type Err = Report;
 
@@ -112,8 +112,7 @@ impl FromStr for Tag {
 }
 
 // ----------------------------------------------------------------------------
-// Summary
-// ----------------------------------------------------------------------------
+// Dataset Summary
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct Summary {
@@ -124,13 +123,13 @@ pub struct Summary {
 impl ToYaml for Summary {}
 
 // ----------------------------------------------------------------------------
-// Search Result
-// ----------------------------------------------------------------------------
+// Dataset Search Result
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct SearchResult {
     pub consensus_population: String,
     pub top_populations: Vec<String>,
+    pub diagnostic: Vec<String>,
     pub substitutions: Vec<Substitution>,
     pub support: BTreeMap<String, Vec<Substitution>>,
     pub private: Vec<Substitution>,
@@ -203,6 +202,7 @@ impl ToYaml for SearchResult {
         format!(
             "consensus_population: {}
 top_populations:\n  - {}
+diagnostic:\n  - {}
 recombinant: {}
 substitutions: {}
 total:\n  {}
@@ -212,6 +212,7 @@ conflict_alt:\n  {}
 private:\n  {}",
             self.consensus_population,
             self.top_populations.join("\n  - "),
+            self.diagnostic.join("\n  - "),
             self.recombinant.clone().unwrap_or("None".to_string()),
             self.substitutions.iter().join(", "),
             total_order.join("\n  "),
@@ -228,6 +229,7 @@ impl SearchResult {
         SearchResult {
             consensus_population: String::new(),
             top_populations: Vec::new(),
+            diagnostic: Vec::new(),
             support: BTreeMap::new(),
             private: Vec::new(),
             conflict_ref: BTreeMap::new(),
@@ -247,7 +249,6 @@ impl Default for SearchResult {
 
 // ----------------------------------------------------------------------------
 // Serializers
-// ----------------------------------------------------------------------------
 
 #[derive(serde::Deserialize, Debug)]
 struct DiagnosticMutationsRow<'a> {
@@ -258,7 +259,6 @@ struct DiagnosticMutationsRow<'a> {
 
 // ----------------------------------------------------------------------------
 // Dataset
-// ----------------------------------------------------------------------------
 
 #[derive(Debug, Deserialize, Serialize)]
 pub struct Dataset {
@@ -305,10 +305,12 @@ impl Dataset {
         populations: Option<&Vec<String>>,
         substitutions: Option<&Vec<Substitution>>,
     ) -> Result<SearchResult, Report> {
-
         // initialize an empty result, this will be the final product of this function
         let mut search_result = SearchResult::new();
-    
+
+        // --------------------------------------------------------------------
+        // Input Filters
+
         // check if we are restricting the population search
         //   otherwise use all populations in the dataset
         let populations_default = self.populations.keys().cloned().collect_vec();
@@ -316,24 +318,26 @@ impl Dataset {
             Some(pops) => pops,
             None => &populations_default,
         };
-    
+
         // Check if we are restricting the substitution search
         // otherwise use all subs in query sequence
         let substitutions = match substitutions {
             Some(subs) => subs,
             None => &sequence.substitutions,
-        };    
-    
-        // support: check which population have a sub matching the query sequence
-        for sub in substitutions {
-            if self.mutations.contains_key(sub){
+        };
 
+        // --------------------------------------------------------------------
+        // Support
+
+        // check which population have a sub matching the query sequence
+        for sub in substitutions {
+            if self.mutations.contains_key(sub) {
                 // get all populations that have sub
                 let mut matches = self.mutations[sub]
                     .iter()
                     .filter(|pop| populations.contains(pop))
                     .collect_vec();
-    
+
                 // store the matching subs by population
                 for population in matches {
                     search_result
@@ -346,13 +350,16 @@ impl Dataset {
                 search_result.private.push(sub.to_owned());
             }
         }
-    
+
         if search_result.support.is_empty() {
             debug!("No mutations matched a population in the dataset.");
             return Ok(search_result);
         }
-    
-        // conflict: check which populations have extra subs/lacking subs
+
+        // --------------------------------------------------------------------
+        // Conflict
+
+        // check which populations have extra subs/lacking subs
         for population in search_result.support.keys() {
             // all the subs in the populations barcode
             let pop_subs = self.populations[population]
@@ -364,49 +371,58 @@ impl Dataset {
                 })
                 .cloned()
                 .collect_vec();
-    
+
             // conflict_ref: sub in pop that is not in query
             let pop_conflict_ref = pop_subs
                 .iter()
                 .filter(|sub| !substitutions.contains(sub))
                 .cloned()
                 .collect_vec();
-    
+
             // conflict_alt: sub in query that is not in pop
             let pop_conflict_alt = substitutions
                 .iter()
                 .filter(|sub| !pop_subs.contains(sub))
                 .cloned()
                 .collect_vec();
-    
+
+            // total: support - conflict_ref
             let pop_total = search_result.support[population].len() as isize
                 - pop_conflict_ref.len() as isize;
-    
+
+            // update search results with conflicts found
             search_result
                 .conflict_ref
                 .insert(population.to_owned(), pop_conflict_ref);
             search_result
                 .conflict_alt
                 .insert(population.to_owned(), pop_conflict_alt);
-            search_result.total.insert(population.to_owned(), pop_total.to_owned());
+            search_result
+                .total
+                .insert(population.to_owned(), pop_total.to_owned());
         }
-    
+
+        // --------------------------------------------------------------------
+        // Consensus Population
+
         // which population(s) has the highest total?
-        let max_total = search_result.total
+        let max_total = search_result
+            .total
             .iter()
             .max_by(|a, b| a.1.cmp(b.1))
             .map(|(_pop, count)| *count)
             .unwrap_or_else(|| {
                 panic!("No populations in the summary total for: {}", sequence.id)
             });
-    
-        search_result.top_populations = search_result.total
+
+        search_result.top_populations = search_result
+            .total
             .iter()
             .filter(|(_pop, count)| *count >= &max_total)
             .map(|(pop, _count)| pop)
             .cloned()
             .collect::<Vec<_>>();
-    
+
         // Undecided if this filter is a good idea
         // But it helps cut down on verbosity and data stored
         search_result.total = search_result
@@ -414,62 +430,74 @@ impl Dataset {
             .into_iter()
             .filter(|(pop, _count)| search_result.top_populations.contains(pop))
             .collect::<BTreeMap<_, _>>();
-    
+
         search_result.support = search_result
             .support
             .into_iter()
             .filter(|(pop, _count)| search_result.top_populations.contains(pop))
             .collect::<BTreeMap<_, _>>();
-    
+
         search_result.conflict_ref = search_result
             .conflict_ref
             .into_iter()
             .filter(|(pop, _subs)| search_result.top_populations.contains(pop))
             .collect::<BTreeMap<_, _>>();
-    
+
         search_result.conflict_alt = search_result
             .conflict_alt
             .into_iter()
             .filter(|(pop, _count)| search_result.top_populations.contains(pop))
             .collect::<BTreeMap<_, _>>();
-    
-        // check if any diagnostic mutations are present, and whether these populations
-        //   are in the top_populations list
-        let populations_with_diagnostic_mutations = self.mutations
+
+        // --------------------------------------------------------------------
+        // Outlier Removal
+
+        // check if any diagnostic mutations are present
+        // and whether these populations are in the top_populations (?)
+        // TBD whether there are cases where the true population
+        // does not appear in the top_populations
+
+        search_result.diagnostic = self
+            .diagnostic
             .iter()
-            .filter(|(sub, _pops)| {
+            .filter(|(sub, pop)| {
                 sequence.substitutions.contains(&sub)
+                    && search_result.top_populations.contains(pop)
             })
-            .map(|(_sub, pops)| pops)
-            .flatten()
+            .map(|(_sub, pop)| pop.to_owned())
             .unique()
-            .filter(|pop| search_result.top_populations.contains(pop))
             .collect::<Vec<_>>();
-    
-        // for sub in sequence.substitutions {
-        //     if self.mutations.contains_key(&sub) {
-        //         let mut populations = self.mutations[&sub];
-        //         *populations_with_diagnostic_mutations.extend(&mut populations);
-        //     }
-        // }
-        debug!("diagnostic: {populations_with_diagnostic_mutations:?}");
-    
-        
-    
-        // TBD: Remove outliers from top graph
-        // Based on diagnostic mutations, phylo distance
-    
-        // Without a phylogeny, just use first
+
+        // --------------------------------------------------------------------
+        // Consensus Population
+
+        // Without a phylogeny, just use first pop in list
         if self.phylogeny.is_empty() {
-            search_result.consensus_population = search_result.top_populations[0].clone();
+            // if we found populations with diagnostic mutations, prioritize those
+            if !search_result.diagnostic.is_empty() {
+                search_result.consensus_population = search_result.diagnostic[0].clone();
+            } 
+            // otherwise use top_populations list
+            else {
+                search_result.consensus_population = search_result.top_populations[0].clone();
+            }
         }
         // Otherwise, summarize top populations by common ancestor
         else {
-            search_result.consensus_population = self
+            // if we found populations with diagnostic mutations, prioritize those
+            if !search_result.diagnostic.is_empty() {
+                search_result.consensus_population = self
+                    .phylogeny
+                    .get_common_ancestor(&search_result.diagnostic)?;
+            } 
+            // otherwise use top_populations list
+            else {
+                search_result.consensus_population = self
                 .phylogeny
                 .get_common_ancestor(&search_result.top_populations)?;
+            }
         }
-    
+
         // Check if the consensus population is a known recombinant or descendant of one
         for recombinant in self.phylogeny.recombinants.iter() {
             let recombinant_descendants = self.phylogeny.get_descendants(recombinant)?;
@@ -477,7 +505,7 @@ impl Dataset {
                 search_result.recombinant = Some(recombinant.to_owned());
             }
         }
-    
+
         // set consensus population subs
         search_result.substitutions = self.populations
             [&search_result.consensus_population]
@@ -489,7 +517,7 @@ impl Dataset {
             })
             .map(|sub| sub.to_owned())
             .collect::<Vec<_>>();
-    
+
         debug!(
             "{}",
             search_result
@@ -497,18 +525,18 @@ impl Dataset {
                 .replace('\n', format!("\n{}", " ".repeat(40)).as_str())
         );
         Ok(search_result)
-    }    
+    }
 }
 
 // ----------------------------------------------------------------------------
 // Functions
 // ----------------------------------------------------------------------------
 
-
+// ----------------------------------------------------------------------------
+// Dataset Download
 
 /// Download a remote dataset
 pub async fn download(name: &Name, tag: &Tag, output_dir: &Path) -> Result<(), Report> {
-
     if !output_dir.exists() {
         create_dir_all(output_dir)?;
         info!("Creating output directory: {:?}", output_dir);
@@ -584,9 +612,11 @@ pub async fn download(name: &Name, tag: &Tag, output_dir: &Path) -> Result<(), R
     Ok(())
 }
 
+// ----------------------------------------------------------------------------
+// Dataset Load
+
 /// Load a local dataset
 pub fn load(dataset_dir: &Path, mask: usize) -> Result<Dataset, Report> {
-
     // ------------------------------------------------------------------------
     // Load Reference (Required)
 
@@ -648,12 +678,12 @@ pub fn load(dataset_dir: &Path, mask: usize) -> Result<Dataset, Report> {
     }
 
     // --------------------------------------------------------------------
-    // Diagnostic Mutations
+    // Load/Create Diagnostic Mutations
 
     let diagnostic_path = dataset_dir.join("diagnostic_mutations.tsv");
     let mut diagnostic: BTreeMap<Substitution, String> = BTreeMap::new();
 
-    if diagnostic_path.exists(){
+    if diagnostic_path.exists() {
         info!("Loading diagnostic mutations.");
         let mut reader = csv::ReaderBuilder::new()
             .delimiter(b'\t')
@@ -663,25 +693,21 @@ pub fn load(dataset_dir: &Path, mask: usize) -> Result<Dataset, Report> {
             let record = result?;
             let row: DiagnosticMutationsRow = record.deserialize(None)?;
             let mutation = Substitution::from_str(row.mutation)?;
-            let population =  row.population.to_string();
+            let population = row.population.to_string();
             diagnostic.insert(mutation.to_owned(), population.clone());
         }
-    }
-    else {
-
+    } else {
         info!("Calculating diagnostic mutations.");
         let mut writer = csv::WriterBuilder::new()
             .delimiter(b'\t')
-            .from_path(diagnostic_path)?; 
-        let headers = vec!("mutation", "population", "include_descendants");
-        writer.write_record(&headers)?;     
-    
-        for (mutation, populations) in &mutations {
+            .from_path(diagnostic_path)?;
+        let headers = vec!["mutation", "population", "include_descendants"];
+        writer.write_record(&headers)?;
 
+        for (mutation, populations) in &mutations {
             let parent = populations[0].to_owned();
             let mut is_diagnostic = false;
             let mut include_descendants = false;
-
 
             // If we don't have a phylogeny, a diagnostic mutation is found in only 1 population
             if phylogeny.is_empty() {
@@ -695,7 +721,7 @@ pub fn load(dataset_dir: &Path, mask: usize) -> Result<Dataset, Report> {
                 if common_ancestor == parent {
                     is_diagnostic = true;
 
-                    if populations.len()  > 1 {
+                    if populations.len() > 1 {
                         include_descendants = true;
                     }
                 }
@@ -705,14 +731,16 @@ pub fn load(dataset_dir: &Path, mask: usize) -> Result<Dataset, Report> {
                 // save to the hashmap
                 diagnostic.insert(mutation.to_owned(), parent.clone());
                 // write to file as cache
-                let row = vec!(mutation.to_string(), parent, include_descendants.to_string());
-                writer.write_record(&row)?; 
+                let row = vec![
+                    mutation.to_string(),
+                    parent,
+                    include_descendants.to_string(),
+                ];
+                writer.write_record(&row)?;
             }
-            
         }
 
         writer.flush()?;
-
     }
 
     // assembles pieces into full dataset
@@ -727,288 +755,4 @@ pub fn load(dataset_dir: &Path, mask: usize) -> Result<Dataset, Report> {
     };
 
     Ok(dataset)
-}
-
-#[allow(clippy::too_many_arguments)]
-pub fn find_parents(
-    dataset: &Dataset,
-    sequence: Sequence,
-    best_match: &SearchResult,
-    max_parents: usize,
-    max_iter: usize,
-    min_consecutive: usize,
-    min_length: usize,
-    min_subs: usize,
-) -> Result<Vec<SearchResult>, Report> {
-    let mut parents = Vec::new();
-
-    if max_parents == 0 {
-        return Ok(parents);
-    }
-
-    let mut num_parents = 0;
-    // by default, include all dataset populations
-    let mut include_populations = dataset.populations.keys().map(|pop| pop.to_owned()).collect::<Vec<_>>();
-    // by default, include all sequence substitutions
-    let mut include_substitutions = sequence.substitutions.clone();
-    // by default, don't exclude any subs or populations
-    let mut exclude_populations = Vec::new();
-    let mut exclude_substitutions: Vec<Substitution> = Vec::new();
-
-    // --------------------------------------------------------------------
-    // Parent 1
-    // --------------------------------------------------------------------
-
-    // Option 1. If this is a known recombinant, exclude the recombinant's
-    //   descendants from parent 1 search.
-
-    debug!("parent_1");
-    let recombinant = best_match.recombinant.clone();
-    let parent_search_result = if let Some(recombinant) = recombinant {
-        let descendants = dataset.phylogeny.get_descendants(&recombinant)?;
-        exclude_populations.extend(descendants);
-        include_populations = include_populations
-            .iter()
-            .filter(|pop| !exclude_populations.contains(&pop))
-            .map(|pop| pop.to_owned())
-            .collect::<Vec<_>>();
-        dataset.search(&sequence, Some(&include_populations), Some(&include_substitutions))?
-    }
-    // Option 2. Not a known recombinant, just use best_match/consensus as parent 1
-    else {
-        best_match.to_owned()
-    };
-
-    parents.push(parent_search_result);
-    num_parents += 1;
-
-   // --------------------------------------------------------------------
-    // Parents 2-MAX
-    // --------------------------------------------------------------------
-
-    let mut num_iter = 0;
-
-    loop {
-
-        // --------------------------------------------------------------------
-        // Loop Break Checks
-
-        if num_parents >= max_parents {
-            debug!("Maximum number of parents reached ({max_parents}), stopping parent search.");
-            break;
-        }
-        if num_iter >= max_iter {
-            debug!("Maximum number of iterations reached ({num_iter}), stopping parent search.");
-            break;
-        }
-
-        num_iter += 1;
-
-        // --------------------------------------------------------------------
-        // Current Mutation Conflicts
-
-        // first identify all substitutions in all parents
-        let mut parent_substitutions = parents
-            .iter()
-            .map(|p| p.substitutions.clone())
-            .flatten()
-            .collect_vec();
-        parent_substitutions = parent_substitutions
-            .iter()
-            .unique()
-            .cloned()
-            .collect_vec();
-
-        // identify conflict_alt that are not resolved by another other parent
-        let mut conflict_alt = parents
-            .iter()
-            .map(|p| p.conflict_alt[&p.consensus_population].clone())
-            .flatten()
-            .filter(|sub| !parent_substitutions.contains(&sub))
-            .collect_vec();
-        conflict_alt = conflict_alt
-            .iter()
-            .unique()
-            .cloned()
-            .collect_vec();
-
-        // conflict_ref is strange, if any parent DOESN'T HAVE the sub, that means it's resolved
-        // not entirely ideal, what about missing and deletions?
-        let mut conflict_ref = parents
-            .iter()
-            .map(|p| p.conflict_ref[&p.consensus_population].clone())
-            .flatten()
-            .collect_vec();
-        conflict_ref = conflict_ref
-            .iter()
-            .unique()
-            .cloned()
-            .collect_vec();
-
-        let mut conflict_ref_resolved = Vec::new();
-        for sub in &conflict_ref {
-            let is_resolved = false;
-            for parent in &parents {
-                if !parent.substitutions.contains(sub)
-                {
-                    conflict_ref_resolved.push(sub.to_owned());
-                }
-            }
-        }
-
-        conflict_ref = conflict_ref.into_iter().filter(|sub| !conflict_ref_resolved.contains(sub)).collect_vec();     
-
-        // --------------------------------------------------------------------
-        // Loop Break Checks
-
-        if conflict_ref.is_empty() {
-            debug!("Sufficient conflict_ref resolution reached, stopping parent search.");
-            break;
-        }
-        if conflict_alt.len() < min_subs {
-            debug!("Sufficient conflict_alt resolution reached, stopping parent search.");
-            break;
-        }                
-
-        debug!("parent_{}: iteration {num_iter}", num_parents + 1);
-        debug!("conflict_ref: {}", conflict_ref.iter().join(", ")); 
-        debug!("conflict_alt: {}", conflict_alt.iter().join(", "));
-
-        // --------------------------------------------------------------------
-        // Current Mutation Support
-
-        let mut parent_support = parents
-            .iter()
-            .map(|p| p.support[&p.consensus_population].clone())
-            .flatten()
-            .collect_vec();
-        parent_support = parent_support
-            .iter()
-            .unique()
-            .cloned()
-            .collect_vec();
-        debug!("sequence_resolved: {}", parent_support.iter().join(", "));
-
-        let resolved = sequence.substitutions.iter().filter(|sub| !parent_support.contains(&sub)).cloned().collect_vec();
-        debug!("sequence_unresolved: {}", resolved.iter().join(", "));
-
-        // --------------------------------------------------------------------
-        // Filters (include/exclude)
-
-        // exclude descendants and ancestors(?) of all previous parents
-        for parent in &parents {
-
-            // descendants to exclude
-            let descendants = dataset
-                .phylogeny
-                .get_descendants(&parent.consensus_population)?;
-            let descendants_to_exclude = descendants
-                .into_iter()
-                .filter(|pop| !exclude_populations.contains(pop))
-                .collect::<Vec<_>>();
-            exclude_populations.extend(descendants_to_exclude);
-
-            // ancestors to exclude
-            let ancestors = dataset
-                .phylogeny
-                .get_ancestors(&parent.consensus_population)?;
-            // because of possible recombination, ancestors is a vector of vectors
-            // to reflect multiple parents and paths to the root.
-            // just flatten them for all our purposes here
-            let ancestors_to_add = ancestors
-                .into_iter()
-                .flatten()
-                .filter(|pop| !exclude_populations.contains(pop))
-                .collect::<Vec<_>>();
-            exclude_populations.extend(ancestors_to_add);            
-        }
-
-        // we want to EXCLUDE populations in our search that
-        //   - have ALL of the conflict_ref
-        let mut conflict_ref_count = BTreeMap::new();
-        for sub in &conflict_ref {
-            if dataset.mutations.contains_key(sub) {
-                let populations = &dataset.mutations[sub];
-                for pop in populations {
-                    *conflict_ref_count.entry(pop).or_insert(0) += 1
-                }
-            }            
-        }
-        let populations_to_exclude = conflict_ref_count
-            .into_iter()
-            .filter(|(pop, count)| {
-                *count == conflict_ref.len() 
-                && !exclude_populations.contains(pop)
-                && !include_populations.contains(pop) 
-            })
-            .map(|(pop, _count)| pop.to_owned())
-            .collect::<Vec<_>>();        
-        exclude_populations.extend(populations_to_exclude);
-
-        // we want to INCLUDE populations in our search that:
-        //   - have AT LEAST min_subs conflict_alt
-
-        // count up the number of conflict_alt by population
-        let mut conflict_alt_count = BTreeMap::new();
-        for sub in &conflict_alt {
-            if dataset.mutations.contains_key(sub) {
-                let populations = &dataset.mutations[sub];
-                for pop in populations {
-                    *conflict_alt_count.entry(pop).or_insert(0) += 1
-                }
-            }            
-        }
-
-        // reset the include list to just these populations
-        include_populations = conflict_alt_count
-            .into_iter()
-            .filter(|(pop, count)| {
-                *count >= min_subs
-                && !exclude_populations.contains(pop)
-            })
-            .map(|(pop, _count)| pop.to_owned())
-            .collect::<Vec<_>>();
-
-        // exclude substitutions that we've already found support for?
-        //include_substitutions = include_substitutions.iter().filter(|sub| )
-
-        // // reset the include substitutions list
-        // debug!("conflict_ref: {conflict_ref:?}");
-        // include_substitutions = conflict_ref.iter().cloned().cloned().collect::<Vec<_>>();
-        // include_substitutions.extend(conflict_alt);
-        // // include_substitutions = conflict_ref.extend(conflict_alt);
-
-        // DEBUG
-        //include_populations = vec!(String::from("BA.2.75"));
-
-        let search_result = dataset.search(
-            &sequence,
-            Some(&include_populations),
-            Some(&include_substitutions),
-        )?;
-        let recombination = detect_recombination(
-            &sequence,
-            &parents,
-            &search_result,
-            min_consecutive,
-            min_length,
-            min_subs,
-        )?;
-
-        // if the recombination search failed, exclude search_result top_populations from next iteration
-        if recombination.breakpoints.is_empty() {
-            let mut populations_to_exclude = search_result
-                .top_populations
-                .iter()
-                .filter(|pop| !exclude_populations.contains(pop))
-                .map(|pop| pop.to_owned())
-                .collect::<Vec<_>>();
-            exclude_populations.append(&mut populations_to_exclude);
-        } else {
-            num_parents += 1;
-            parents.push(search_result);
-        }
-    }
-
-    Ok(parents)
 }

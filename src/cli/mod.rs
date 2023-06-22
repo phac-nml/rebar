@@ -1,10 +1,10 @@
-use clap::{Args, Parser, Subcommand, ValueEnum};
 use crate::dataset;
+use clap::{Args, Parser, Subcommand, ValueEnum};
 use serde::Serialize;
 use std::path::PathBuf;
 
 // -----------------------------------------------------------------------------
-// Entry Point
+// CLI Entry Point
 // -----------------------------------------------------------------------------
 
 /// Rebar command-line interface (CLI)
@@ -12,16 +12,15 @@ use std::path::PathBuf;
 #[clap(name = "rebar", trailing_var_arg = true)]
 #[clap(author, version)]
 #[clap(verbatim_doc_comment)]
-pub struct RebarCli {
-
+pub struct Cli {
     #[clap(subcommand)]
     // rebar command (dataset, run, help)
-    pub command: RebarCommand,
+    pub command: Command,
 
     /// Control output verbosity level.
     #[clap(short = 'v', long)]
     #[clap(value_enum, default_value_t = Verbosity::default())]
-    #[clap(hide_possible_values=false)]
+    #[clap(hide_possible_values = false)]
     #[clap(global = true)]
     pub verbosity: Verbosity,
 }
@@ -29,9 +28,9 @@ pub struct RebarCli {
 /// Rebar CLI commands (dataset, run).
 #[derive(Subcommand, Debug)]
 #[clap(verbatim_doc_comment)]
-pub enum RebarCommand {
-    Dataset(Box<RebarDatasetArgs>),
-    Run(Box<RebarRunArgs>),
+pub enum Command {
+    Dataset(Box<DatasetArgs>),
+    Run(Box<RunArgs>),
 }
 
 // -----------------------------------------------------------------------------
@@ -40,21 +39,20 @@ pub enum RebarCommand {
 
 /// Rebar CLI dataset arguments
 #[derive(Parser, Debug)]
-pub struct RebarDatasetArgs {
+pub struct DatasetArgs {
     #[clap(subcommand)]
-    pub command: RebarDatasetCommand,
+    pub command: DatasetCommand,
 }
 
 /// Rebar CLI dataset command (download, list)
 #[derive(Subcommand, Debug)]
 #[clap(verbatim_doc_comment)]
-pub enum RebarDatasetCommand {
-
+pub enum DatasetCommand {
     /// List available Rebar datasets.
-    List(RebarDatasetListArgs),
+    List(DatasetListArgs),
 
     /// Download available Rebar datasets.
-    Download(RebarDatasetDownloadArgs),
+    Download(DatasetDownloadArgs),
 }
 
 // -----------------------------------------------------------------------------
@@ -63,8 +61,7 @@ pub enum RebarDatasetCommand {
 /// Download available Rebar datasets.
 #[derive(Parser, Debug)]
 #[clap(verbatim_doc_comment)]
-pub struct RebarDatasetDownloadArgs {
-
+pub struct DatasetDownloadArgs {
     /// Dataset name.
     #[clap(short = 'r', long, required = true)]
     pub name: dataset::Name,
@@ -75,11 +72,10 @@ pub struct RebarDatasetDownloadArgs {
     pub tag: dataset::Tag,
 
     /// Output directory.
-    /// 
+    ///
     /// If the directory does not exist, it will be created.
     #[clap(short = 'o', long, required = true)]
     pub output_dir: PathBuf,
-
 }
 
 // -----------------------------------------------------------------------------
@@ -89,7 +85,7 @@ pub struct RebarDatasetDownloadArgs {
 #[clap(verbatim_doc_comment)]
 #[group(id = "outputs", required = true, multiple = false)]
 /// Download available Rebar dataset.
-pub struct RebarDatasetListArgs {
+pub struct DatasetListArgs {
     /// List Rebar datasets with this name.
     #[clap(short = 'n', long)]
     pub name: Option<String>,
@@ -97,7 +93,7 @@ pub struct RebarDatasetListArgs {
     /// List Rebar datasets with this tag.
     #[clap(short = 't', long)]
     #[clap(default_value = "latest")]
-    pub tag: String, 
+    pub tag: String,
 }
 
 // -----------------------------------------------------------------------------
@@ -107,10 +103,9 @@ pub struct RebarDatasetListArgs {
 /// Run Rebar on input alignment or dataset population.
 #[derive(Parser, Debug)]
 #[clap(verbatim_doc_comment)]
-pub struct RebarRunArgs {
-
+pub struct RunArgs {
     #[command(flatten)]
-    pub input: RebarRunInput,
+    pub input: RunInput,
 
     /// Dataset directory.
     #[clap(short = 'd', long, required = true)]
@@ -141,17 +136,15 @@ pub struct RebarRunArgs {
     pub min_subs: usize,
 
     /// Output directory.
-    /// 
+    ///
     /// If the directory does not exist, it will be created.
     #[clap(short = 'o', long, required = true)]
     pub output_dir: PathBuf,
-
 }
 
 #[derive(Args, Debug)]
 #[group(required = true, multiple = false)]
-pub struct RebarRunInput {
-
+pub struct RunInput {
     /// Input fasta alignment
     #[arg(long)]
     pub populations: Option<String>,
@@ -159,7 +152,6 @@ pub struct RebarRunInput {
     /// Input dataset population
     #[arg(long)]
     pub alignment: Option<PathBuf>,
-
 }
 
 // -----------------------------------------------------------------------------
