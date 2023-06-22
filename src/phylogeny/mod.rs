@@ -237,7 +237,7 @@ impl Phylogeny {
         Ok(())
     }
 
-    pub fn get_descendants(&self, name: &String) -> Result<Vec<String>, Report> { 
+    pub fn get_descendants(&self, name: &String) -> Result<Vec<String>, Report> {
         let mut descendants = Vec::new();
 
         // Find the node that matches the name
@@ -314,7 +314,14 @@ impl Phylogeny {
         Ok(ancestors)
     }
 
+    /// Identify the most recent common ancestor shared between all node names.
     pub fn get_common_ancestor(&self, names: &Vec<String>) -> Result<String, Report> {
+        // if only one node name was provided, just return it
+        if names.len() == 1 {
+            let common_ancestor = names[0].clone();
+            return Ok(common_ancestor);
+        }
+
         // Phase 1: Count up the ancestors shared between all named populations
         let mut ancestor_counts: HashMap<String, Vec<String>> = HashMap::new();
         let mut ancestor_depths: HashMap<String, isize> = HashMap::new();

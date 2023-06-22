@@ -67,6 +67,7 @@ pub fn decompress_file(
 
 pub fn identify_diagnostic_mutations(alignment: &Path) -> Result<(), Report> {
     debug!("Loading alignment: {:?}", alignment);
-    let alignment_reader = fasta::Reader::from_file(&alignment).expect("Unable to read alignment");
+    let alignment_reader =
+        fasta::Reader::from_file(&alignment).expect("Unable to read alignment");
     Ok(())
 }

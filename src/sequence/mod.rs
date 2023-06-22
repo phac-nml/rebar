@@ -1,5 +1,5 @@
-use crate::traits::ToYaml;
-use color_eyre::eyre::{Result, Report};
+use crate::ToYaml;
+use color_eyre::eyre::{Report, Result};
 use itertools::Itertools;
 use serde::{Deserialize, Serialize};
 use std::cmp::Ordering;
@@ -68,16 +68,17 @@ impl std::fmt::Display for Substitution {
     }
 }
 
-
 impl FromStr for Substitution {
     type Err = Report;
 
     fn from_str(text: &str) -> Result<Self, Report> {
         let reference = text.chars().nth(0).unwrap();
-        let alt = text.chars().nth(text.len()-1).unwrap();
-        let coord = text[1..text.len()-1].parse().unwrap();
+        let alt = text.chars().nth(text.len() - 1).unwrap();
+        let coord = text[1..text.len() - 1].parse().unwrap();
         let substitution = Substitution {
-            reference, alt, coord
+            reference,
+            alt,
+            coord,
         };
 
         Ok(substitution)
