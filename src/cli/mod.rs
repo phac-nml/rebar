@@ -143,7 +143,7 @@ pub struct RunArgs {
 }
 
 #[derive(Args, Clone, Debug)]
-#[group(required = true, multiple = false)]
+#[group(required = true, multiple = true)]
 pub struct RunInput {
     /// Input fasta alignment
     #[arg(long)]
