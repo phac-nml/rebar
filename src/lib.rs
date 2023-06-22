@@ -6,14 +6,12 @@ pub mod sequence;
 pub mod utils;
 
 use bio::io::fasta;                              // object for fasta sequence
-use cli::RunArgs;                                // object for run function params
 use color_eyre::eyre::{Report, Result, WrapErr}; // colorized logging and error handling
-use crate::sequence::Sequence;                   // object for sequence with mutations
 use log::{debug, info, warn};                    // logging verbosity levels
 use serde::Serialize;                            // serialize structs (ex. json, yaml)
 
 /// Run rebar on input alignment or dataset population
-pub fn run(args: RunArgs) -> Result<(), Report> {
+pub fn run(args: cli::RunArgs) -> Result<(), Report> {
     // Collect files in dataset_dir into a dataset object
     // This mainly includes parent populations sequences
     //   and optionally a phylogenetic representation.
@@ -26,7 +24,7 @@ pub fn run(args: RunArgs) -> Result<(), Report> {
     // ------------------------------------------------------------------------
     // input population was specified
 
-    let populations = args.input.populations;
+    let populations = &args.input.populations;
     if let Some(populations) = populations {
         // split population into csv (,) parts
         let populations = populations.split(",").collect::<Vec<_>>();
@@ -65,11 +63,11 @@ pub fn run(args: RunArgs) -> Result<(), Report> {
     // ------------------------------------------------------------------------
     // input alignment was specified
 
-    let alignment = args.input.alignment;
+    let alignment = &args.input.alignment;
     if let Some(alignment) = alignment {
         info!("Loading alignment: {:?}", alignment);
         let alignment_reader =
-            fasta::Reader::from_file(&alignment).expect("Unable to read alignment");
+            fasta::Reader::from_file(alignment).expect("Unable to read alignment");
 
         for result in alignment_reader.records() {
             let record = result.wrap_err(format!(
@@ -77,33 +75,18 @@ pub fn run(args: RunArgs) -> Result<(), Report> {
                 alignment.to_str().unwrap()
             ))?;
             let sequence =
-                Sequence::from_record(record, Some(&dataset.reference), args.mask)?;
+                sequence::Sequence::from_record(record, Some(&dataset.reference), args.mask)?;
             sequences.push(sequence);
         }
     }
 
-    debug!(
-        "Query sequences: {:?}",
-        sequences
-            .iter()
-            .map(|seq| seq.id.clone())
-            .collect::<Vec<_>>()
-    );
-
     for sequence in sequences {
-        debug!("sequence: {}", sequence.id);
+        // find the best match in the dataset to the full sequence
         let best_match = dataset.search(&sequence, None, None)?;
-
-        //     let _parents = dataset::find_parents(
-        //         &dataset,
-        //         sequence,
-        //         &best_match,
-        //         max_parents,
-        //         max_iter,
-        //         min_consecutive,
-        //         min_length,
-        //         min_subs,
-        //     )?;
+        // organize parameters for find_parents function
+        let parent_search_args = recombination::ParentSearchArgs::new(&dataset, &sequence, &best_match, &args);
+        // search for recombination parents
+        let (_parents, _recombination) = recombination::parent_search(parent_search_args)?;
     }
 
     Ok(())
