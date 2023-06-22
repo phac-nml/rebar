@@ -5,13 +5,20 @@ pub mod recombination;
 pub mod sequence;
 pub mod utils;
 
-use bio::io::fasta; // object for fasta sequence
-use color_eyre::eyre::{Report, Result, WrapErr}; // colorized logging and error handling
-use log::{debug, info, warn}; // logging verbosity levels
-use serde::Serialize; // serialize structs (ex. json, yaml)
+use bio::io::fasta;
+use color_eyre::eyre::{Report, Result, WrapErr};
+use log::{debug, info, warn};
+use serde::Serialize;
+use std::fs::create_dir_all;
 
 /// Run rebar on input alignment or dataset population
 pub fn run(args: cli::RunArgs) -> Result<(), Report> {
+    // create output directory
+    if !args.output_dir.exists() {
+        info!("Creating output directory: {:?}", args.output_dir);
+        create_dir_all(&args.output_dir)?;
+    }
+
     // Collect files in dataset_dir into a dataset object
     // This mainly includes parent populations sequences
     //   and optionally a phylogenetic representation.
@@ -90,9 +97,26 @@ pub fn run(args: cli::RunArgs) -> Result<(), Report> {
         let parent_search_args =
             recombination::ParentSearchArgs::new(&dataset, &sequence, &best_match, &args);
         // search for recombination parents
-        let (_parents, _recombination) =
-            recombination::parent_search(parent_search_args)?;
+        let (parents, recombination) = recombination::parent_search(parent_search_args)?;
+
+        // Export
+        let mut output_prefix = best_match.consensus_population.to_string();
+        // Add parents to output prefix
+        for parent in &parents {
+            output_prefix.push_str(format!("_{}", parent.consensus_population).as_str());
+        }
+        // Add breakpoints to output prefix
+        for breakpoint in &recombination.breakpoints {
+            output_prefix
+                .push_str(format!("_{}-{}", breakpoint.start, breakpoint.end).as_str());
+        }
+
+        // export recombination table to tsv
+        let recombination_table = args.output_dir.join(format!("{output_prefix}.tsv"));
+        recombination.write_tsv(&recombination_table)?;
     }
+
+    // TBD Exporting needs to be done after all samples have run, to amalgamate
 
     Ok(())
 }

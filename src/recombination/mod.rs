@@ -2,11 +2,13 @@ use crate::cli::RunArgs; // object for run function params
 use crate::dataset::{Dataset, SearchResult};
 use crate::sequence::{Sequence, Substitution};
 use color_eyre::eyre::{Report, Result};
+use csv;
 use itertools::Itertools;
 use log::debug;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 use std::default::Default;
+use std::path::Path;
 use tabled::builder::Builder;
 use tabled::settings::Style;
 
@@ -54,6 +56,12 @@ pub struct Recombination {
     pub table: Vec<Vec<String>>,
 }
 
+impl Default for Recombination {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl Recombination {
     pub fn new() -> Self {
         Recombination {
@@ -62,11 +70,17 @@ impl Recombination {
             table: Vec::new(),
         }
     }
-}
 
-impl Default for Recombination {
-    fn default() -> Self {
-        Self::new()
+    pub fn write_tsv(&self, output_path: &Path) -> Result<(), Report> {
+        let mut writer = csv::WriterBuilder::new()
+            .delimiter(b'\t')
+            .from_path(output_path)?;
+
+        for row in &self.table {
+            writer.write_record(row)?;
+        }
+
+        Ok(())
     }
 }
 
