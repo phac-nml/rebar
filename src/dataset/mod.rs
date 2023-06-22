@@ -123,10 +123,40 @@ pub struct Summary {
 impl ToYaml for Summary {}
 
 // ----------------------------------------------------------------------------
+// Population Conflict Summary
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct ConflictSummary {
+    pub support: Vec<Substitution>,
+    pub conflict_ref: Vec<Substitution>,
+    pub conflict_alt: Vec<Substitution>,
+    pub total: isize,
+}
+
+
+impl ConflictSummary {
+    pub fn new() -> Self {
+        ConflictSummary {
+            support: Vec::new(),
+            conflict_ref: Vec::new(),
+            conflict_alt: Vec::new(),
+            total: 0,
+        }
+    }
+}
+
+impl Default for ConflictSummary {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+// ----------------------------------------------------------------------------
 // Dataset Search Result
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct SearchResult {
+    pub sequence_id: String,
     pub consensus_population: String,
     pub top_populations: Vec<String>,
     pub diagnostic: Vec<String>,
@@ -200,7 +230,8 @@ impl ToYaml for SearchResult {
         );
 
         format!(
-            "consensus_population: {}
+            "sequence_id: {}
+consensus_population: {}
 top_populations:\n  - {}
 diagnostic:\n  - {}
 recombinant: {}
@@ -210,6 +241,7 @@ support:\n  {}
 conflict_ref:\n  {}
 conflict_alt:\n  {}
 private:\n  {}",
+            self.sequence_id,
             self.consensus_population,
             self.top_populations.join("\n  - "),
             self.diagnostic.join("\n  - "),
@@ -227,6 +259,7 @@ private:\n  {}",
 impl SearchResult {
     pub fn new() -> Self {
         SearchResult {
+            sequence_id: String::new(),
             consensus_population: String::new(),
             top_populations: Vec::new(),
             diagnostic: Vec::new(),
@@ -298,18 +331,66 @@ impl Dataset {
         }
     }
 
+    /// Summarize population conflicts relative to the query sequence.
+    pub fn conflict_summary(
+        &self, 
+        population: &String, 
+        sequence: &Sequence, 
+        coordinates: &Vec<usize>
+    ) -> Result<ConflictSummary, Report> {
+    
+        let mut conflict_summary = ConflictSummary::new();
+
+        // get all the substitutions found in this population
+        let pop_subs = self.populations[population].substitutions
+            .iter()
+            .filter(|sub| {
+                coordinates.contains(&sub.coord)
+                && !sequence.missing.contains(&sub.coord)
+                && !sequence.deletions.contains(&sub.to_deletion())
+                    
+            })
+            .collect_vec();
+
+        // support: sub in query that is also in pop
+        conflict_summary.support = sequence.substitutions
+            .iter()
+            .filter(|sub| coordinates.contains(&sub.coord) && pop_subs.contains(sub))
+            .cloned()
+            .collect_vec();
+
+        // conflict_alt: sub in query that is not in pop
+        conflict_summary.conflict_alt = sequence.substitutions
+            .iter()
+            .filter(|sub| coordinates.contains(&sub.coord) && !pop_subs.contains(sub))
+            .cloned()
+            .collect_vec();
+
+        // conflict_ref: sub in pop that is not in query sample
+        conflict_summary.conflict_ref = pop_subs
+            .into_iter()
+            .filter(|sub| coordinates.contains(&sub.coord) && !sequence.substitutions.contains(sub))
+            .cloned()
+            .collect_vec();
+
+        // total: support - conflict_ref
+        conflict_summary.total = conflict_summary.support.len() as isize - 
+            conflict_summary.conflict_ref.len() as isize;
+
+        Ok(conflict_summary)
+    } 
+
     /// Search dataset for a population parsimony match to the sequence.
     pub fn search(
         &self,
         sequence: &Sequence,
         populations: Option<&Vec<String>>,
-        substitutions: Option<&Vec<Substitution>>,
+        coordinates: Option<&Vec<usize>>,
     ) -> Result<SearchResult, Report> {
+
         // initialize an empty result, this will be the final product of this function
         let mut search_result = SearchResult::new();
-
-        // --------------------------------------------------------------------
-        // Input Filters
+        search_result.sequence_id = sequence.id.clone();
 
         // check if we are restricting the population search
         //   otherwise use all populations in the dataset
@@ -319,39 +400,43 @@ impl Dataset {
             None => &populations_default,
         };
 
-        // Check if we are restricting the substitution search
-        // otherwise use all subs in query sequence
-        let substitutions = match substitutions {
-            Some(subs) => subs,
-            None => &sequence.substitutions,
+        // Check if we are restricting the coordinate search
+        // otherwise use all coordinates in genome_length
+        let coordinates_default = (1..sequence.genome_length).collect_vec();
+        let coordinates = match coordinates {
+            Some(coords) => coords,
+            None => &coordinates_default,
         };
-
+        
         // --------------------------------------------------------------------
         // Support
 
         // check which population have a sub matching the query sequence
-        for sub in substitutions {
-            if self.mutations.contains_key(sub) {
+        let mut population_matches = Vec::new();
+    
+        for sub in &sequence.substitutions {
+
+            // Check if this sub is part of the fn param coordinates
+            if !coordinates.contains(&sub.coord) {
+                continue
+            }
+
+            // Check if this is a known sub in the database
+            if self.mutations.contains_key(&sub) {
                 // get all populations that have sub
-                let mut matches = self.mutations[sub]
+                let matches = self.mutations[&sub]
                     .iter()
-                    .filter(|pop| populations.contains(pop))
+                    .filter(|pop| populations.contains(pop) && !population_matches.contains(pop))
                     .collect_vec();
 
                 // store the matching subs by population
-                for population in matches {
-                    search_result
-                        .support
-                        .entry(population.to_owned())
-                        .or_insert(Vec::new())
-                        .push(*sub);
-                }
+                population_matches.extend(matches);
             } else {
                 search_result.private.push(sub.to_owned());
             }
         }
 
-        if search_result.support.is_empty() {
+        if population_matches.is_empty() {
             debug!("No mutations matched a population in the dataset.");
             return Ok(search_result);
         }
@@ -360,46 +445,23 @@ impl Dataset {
         // Conflict
 
         // check which populations have extra subs/lacking subs
-        for population in search_result.support.keys() {
-            // all the subs in the populations barcode
-            let pop_subs = self.populations[population]
-                .substitutions
-                .iter()
-                .filter(|sub| {
-                    !sequence.missing.contains(&sub.coord)
-                        && !sequence.deletions.contains(&sub.to_deletion())
-                })
-                .cloned()
-                .collect_vec();
+        for population in population_matches {
 
-            // conflict_ref: sub in pop that is not in query
-            let pop_conflict_ref = pop_subs
-                .iter()
-                .filter(|sub| !substitutions.contains(sub))
-                .cloned()
-                .collect_vec();
+            let conflict_summary = self.conflict_summary(population, sequence, coordinates)?;
 
-            // conflict_alt: sub in query that is not in pop
-            let pop_conflict_alt = substitutions
-                .iter()
-                .filter(|sub| !pop_subs.contains(sub))
-                .cloned()
-                .collect_vec();
-
-            // total: support - conflict_ref
-            let pop_total = search_result.support[population].len() as isize
-                - pop_conflict_ref.len() as isize;
-
-            // update search results with conflicts found
+            // update search results with support and conflicts found
+            search_result
+                .support
+                .insert(population.to_owned(), conflict_summary.support);            
             search_result
                 .conflict_ref
-                .insert(population.to_owned(), pop_conflict_ref);
+                .insert(population.to_owned(), conflict_summary.conflict_ref);
             search_result
                 .conflict_alt
-                .insert(population.to_owned(), pop_conflict_alt);
+                .insert(population.to_owned(), conflict_summary.conflict_alt);
             search_result
                 .total
-                .insert(population.to_owned(), pop_total.to_owned());
+                .insert(population.to_owned(), conflict_summary.total);
         }
 
         // --------------------------------------------------------------------
@@ -496,6 +558,29 @@ impl Dataset {
                 .phylogeny
                 .get_common_ancestor(&search_result.top_populations)?;
             }
+        }
+
+        // if the common_ancestor was not in the populations list, add it
+        // this is repeated code from before, maybe make it a function
+        if !search_result.top_populations.contains(&search_result.consensus_population) {
+
+            let population = &search_result.consensus_population;
+            let conflict_summary = self.conflict_summary(population, sequence, coordinates)?;
+
+            // update search results with support and conflicts found
+            search_result
+                .support
+                .insert(population.to_owned(), conflict_summary.support);         
+            search_result
+                .conflict_ref
+                .insert(population.to_owned(), conflict_summary.conflict_ref);
+            search_result
+                .conflict_alt
+                .insert(population.to_owned(), conflict_summary.conflict_alt);
+            search_result
+                .total
+                .insert(population.to_owned(), conflict_summary.total);
+
         }
 
         // Check if the consensus population is a known recombinant or descendant of one

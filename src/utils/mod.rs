@@ -1,6 +1,4 @@
-use bio::io::fasta;
 use color_eyre::eyre::{eyre, Report, Result, WrapErr};
-use log::debug;
 use std::fs::{remove_file, write, File};
 use std::io::Read;
 use std::path::{Path, PathBuf};
@@ -62,12 +60,5 @@ pub fn decompress_file(
         _ => return Err(eyre!("Decompression for .{ext:?} is not implemented yet.")),
     };
 
-    Ok(())
-}
-
-pub fn identify_diagnostic_mutations(alignment: &Path) -> Result<(), Report> {
-    debug!("Loading alignment: {:?}", alignment);
-    let alignment_reader =
-        fasta::Reader::from_file(&alignment).expect("Unable to read alignment");
     Ok(())
 }

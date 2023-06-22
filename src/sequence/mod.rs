@@ -126,6 +126,7 @@ pub struct Sequence {
     pub id: String,
     pub seq: Vec<char>,
     alphabet: Vec<char>,
+    pub genome_length: usize,
     pub substitutions: Vec<Substitution>,
     pub deletions: Vec<Deletion>,
     pub missing: Vec<usize>,
@@ -156,6 +157,7 @@ impl Sequence {
             id: String::new(),
             seq: Vec::new(),
             alphabet: vec!['A', 'C', 'G', 'T'],
+            genome_length: 0,
             substitutions: Vec::new(),
             deletions: Vec::new(),
             missing: Vec::new(),
@@ -172,7 +174,7 @@ impl Sequence {
         sample.seq = record.seq().iter().map(|b| *b as char).collect();
 
         if let Some(reference) = reference {
-            let genome_length = reference.seq.len();
+            sample.genome_length = reference.seq.len();
             // Construct iterator to traverse sample and reference bases together
             let it = sample.seq.iter().zip(reference.seq.iter());
             for (i, (s, r)) in it.enumerate() {
@@ -181,7 +183,7 @@ impl Sequence {
                 let mut s = *s;
                 let r = *r;
                 // Mask 5' and 3' ends
-                if coord <= mask || coord > genome_length - mask {
+                if coord <= mask || coord > sample.genome_length - mask {
                     s = 'N';
                 }
 
