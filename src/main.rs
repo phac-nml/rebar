@@ -1,4 +1,4 @@
-use clap::Parser;             // CLI argument parsing
+use clap::Parser; // CLI argument parsing
 use color_eyre::eyre::Result; // colorized logging and error handling
 
 #[tokio::main]

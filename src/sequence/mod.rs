@@ -55,7 +55,7 @@ impl PartialOrd for Deletion {
 // Substitution
 // ----------------------------------------------------------------------------
 
-#[derive(Copy, Clone, Debug, Hash, Serialize, Deserialize)]
+#[derive(Copy, Clone, Debug, Hash, Serialize, Deserialize, PartialEq)]
 pub struct Substitution {
     pub coord: usize,
     pub reference: char,
@@ -72,7 +72,7 @@ impl FromStr for Substitution {
     type Err = Report;
 
     fn from_str(text: &str) -> Result<Self, Report> {
-        let reference = text.chars().nth(0).unwrap();
+        let reference = text.chars().next().unwrap();
         let alt = text.chars().nth(text.len() - 1).unwrap();
         let coord = text[1..text.len() - 1].parse().unwrap();
         let substitution = Substitution {
@@ -82,14 +82,6 @@ impl FromStr for Substitution {
         };
 
         Ok(substitution)
-    }
-}
-
-impl PartialEq for Substitution {
-    fn eq(&self, other: &Self) -> bool {
-        self.coord == other.coord
-            && self.reference == other.reference
-            && self.alt == other.alt
     }
 }
 

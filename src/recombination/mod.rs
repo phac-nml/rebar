@@ -1,5 +1,5 @@
+use crate::cli::RunArgs; // object for run function params
 use crate::dataset::{Dataset, SearchResult};
-use crate::cli::RunArgs;                         // object for run function params
 use crate::sequence::{Sequence, Substitution};
 use color_eyre::eyre::{Report, Result};
 use itertools::Itertools;
@@ -85,16 +85,21 @@ pub struct ParentSearchArgs<'d, 's, 'b> {
 }
 
 impl<'d, 's, 'b, 'r> ParentSearchArgs<'d, 's, 'b> {
-    pub fn new(dataset: &'d Dataset, sequence: &'s Sequence, best_match: &'b SearchResult, args: &'r RunArgs) -> Self {
+    pub fn new(
+        dataset: &'d Dataset,
+        sequence: &'s Sequence,
+        best_match: &'b SearchResult,
+        args: &'r RunArgs,
+    ) -> Self {
         ParentSearchArgs {
             dataset,
             sequence,
             best_match,
-            max_parents : args.max_parents,
-            max_iter : args.max_iter,
-            min_consecutive : args.min_consecutive,
-            min_length : args.min_length,
-            min_subs : args.min_subs,
+            max_parents: args.max_parents,
+            max_iter: args.max_iter,
+            min_consecutive: args.min_consecutive,
+            min_length: args.min_length,
+            min_subs: args.min_subs,
         }
     }
 }
@@ -105,11 +110,10 @@ impl<'d, 's, 'b, 'r> ParentSearchArgs<'d, 's, 'b> {
 
 // Search function specific to the secondary parent(s).
 pub fn parent_search_secondary(
-    sequence: &Sequence, 
-    mut parents: Vec<SearchResult>, 
-    args: &ParentSearchArgs
+    sequence: &Sequence,
+    mut parents: Vec<SearchResult>,
+    args: &ParentSearchArgs,
 ) -> Result<(Vec<SearchResult>, Recombination), Report> {
-
     let mut recombination = Recombination::new();
 
     let mut num_iter = 0;
@@ -117,7 +121,6 @@ pub fn parent_search_secondary(
     let mut exclude_populations = Vec::new();
 
     loop {
-
         // --------------------------------------------------------------------
         // Loop Break Check: Simple
         //
@@ -125,7 +128,10 @@ pub fn parent_search_secondary(
         // max number of iterations max number of parents achieved.
 
         if num_parents >= args.max_parents {
-            debug!("Maximum number of parents reached ({}), stopping parent search.", args.max_parents);
+            debug!(
+                "Maximum number of parents reached ({}), stopping parent search.",
+                args.max_parents
+            );
             break;
         }
         if num_iter >= args.max_iter {
@@ -134,7 +140,7 @@ pub fn parent_search_secondary(
         }
         num_iter += 1;
 
-        debug!("parent_{}: iteration {num_iter}", num_parents + 1);        
+        debug!("parent_{}: iteration {num_iter}", num_parents + 1);
 
         // --------------------------------------------------------------------
         // Conflict Checks
@@ -145,15 +151,15 @@ pub fn parent_search_secondary(
         // identify all substitutions found in all parents so far
         let parent_substitutions = parents
             .iter()
-            .map(|parent| &parent.substitutions)
-            .flatten()
+            .flat_map(|parent| &parent.substitutions)
             .unique()
             .collect_vec();
 
         // identify conflict_alt (alt base) in sequence not resolved by any parent
-        let conflict_alt = sequence.substitutions
+        let conflict_alt = sequence
+            .substitutions
             .iter()
-            .filter(|sub| !parent_substitutions.contains(&sub))
+            .filter(|sub| !parent_substitutions.contains(sub))
             .collect_vec();
 
         debug!("conflict_alt: {}", conflict_alt.iter().join(", "));
@@ -162,8 +168,7 @@ pub fn parent_search_secondary(
         // first collect all the conflict_ref in all parents
         let mut conflict_ref = parents
             .iter()
-            .map(|p| &p.conflict_ref[&p.consensus_population])
-            .flatten()
+            .flat_map(|p| &p.conflict_ref[&p.consensus_population])
             .unique()
             .collect_vec();
 
@@ -200,8 +205,16 @@ pub fn parent_search_secondary(
         }
 
         // Collect the conflict/unresolved coordinates
-        let conflict_ref_coord = conflict_ref.iter().map(|sub| &sub.coord).cloned().collect_vec();
-        let conflict_alt_coord = conflict_alt.iter().map(|sub| &sub.coord).cloned().collect_vec();
+        let conflict_ref_coord = conflict_ref
+            .iter()
+            .map(|sub| &sub.coord)
+            .cloned()
+            .collect_vec();
+        let conflict_alt_coord = conflict_alt
+            .iter()
+            .map(|sub| &sub.coord)
+            .cloned()
+            .collect_vec();
         let mut coordinates = conflict_ref_coord;
         coordinates.extend(conflict_alt_coord);
         coordinates.sort();
@@ -211,19 +224,20 @@ pub fn parent_search_secondary(
         // EXCLUDE descendants/ancestors(?) of known parents
 
         for parent in &parents {
-
             // exclude descendants
-            let descendants = args.dataset
+            let descendants = args
+                .dataset
                 .phylogeny
                 .get_descendants(&parent.consensus_population)?;
             let descendants_to_exclude = descendants
                 .into_iter()
                 .filter(|pop| !exclude_populations.contains(pop))
                 .collect::<Vec<_>>();
-            exclude_populations.extend(descendants_to_exclude); 
+            exclude_populations.extend(descendants_to_exclude);
 
             // exclude ancestors
-            let ancestors = args.dataset
+            let ancestors = args
+                .dataset
                 .phylogeny
                 .get_ancestors(&parent.consensus_population)?;
             // because of possible recombination, ancestors is a vector of vectors
@@ -235,7 +249,6 @@ pub fn parent_search_secondary(
                 .filter(|pop| !exclude_populations.contains(pop))
                 .collect::<Vec<_>>();
             exclude_populations.extend(ancestors_to_exclude);
-
         }
 
         // --------------------------------------------------------------------
@@ -284,32 +297,43 @@ pub fn parent_search_secondary(
             .map(|(pop, _count)| pop)
             .cloned()
             .collect::<Vec<_>>();
-        
+
         // --------------------------------------------------------------------
         // Search Dataset #1 (Full Coordinate Range)
-    
+
         // find the next parent candidate based on the full coordinate range
         let coordinates_min = coordinates.iter().min().unwrap();
         let coordinates_max = coordinates.iter().max().unwrap();
-        let coordinates_range = (coordinates_min.to_owned()..coordinates_max.to_owned()).collect_vec();
+        let coordinates_range =
+            (coordinates_min.to_owned()..coordinates_max.to_owned()).collect_vec();
 
-        let search_result = args.dataset.search(sequence, Some(&include_populations), Some(&coordinates_range))?;        
-        recombination = detect_recombination(&sequence, &parents, Some(&search_result), &args)?;
+        let search_result = args.dataset.search(
+            sequence,
+            Some(&include_populations),
+            Some(&coordinates_range),
+        )?;
+        recombination =
+            detect_recombination(sequence, &parents, Some(&search_result), args)?;
 
-        // if the recombination search succeeded, 
+        // if the recombination search succeeded,
         if !recombination.breakpoints.is_empty() {
             num_parents += 1;
             parents.push(search_result);
             continue;
-        } 
+        }
 
         // --------------------------------------------------------------------
         // Search Dataset #2 (Specific Listed Coordinates)
 
-        let search_result = args.dataset.search(sequence, Some(&include_populations), Some(&coordinates))?;        
-        recombination = detect_recombination(&sequence, &parents, Some(&search_result), &args)?;        
-    
-        // if the recombination search succeeded, 
+        let search_result = args.dataset.search(
+            sequence,
+            Some(&include_populations),
+            Some(&coordinates),
+        )?;
+        recombination =
+            detect_recombination(sequence, &parents, Some(&search_result), args)?;
+
+        // if the recombination search succeeded,
         if !recombination.breakpoints.is_empty() {
             num_parents += 1;
             parents.push(search_result);
@@ -319,15 +343,15 @@ pub fn parent_search_secondary(
         // do we also want to exclude failed search #1 top_populations?
         else {
             exclude_populations.extend(search_result.top_populations);
-        }         
+        }
     }
 
     Ok((parents, recombination))
-
 }
 
-pub fn parent_search(args: ParentSearchArgs) -> Result<(Vec<SearchResult>, Recombination), Report> {
-
+pub fn parent_search(
+    args: ParentSearchArgs,
+) -> Result<(Vec<SearchResult>, Recombination), Report> {
     // initialize the two return values
     let mut parents = Vec::new();
     let mut recombination = Recombination::new();
@@ -337,7 +361,8 @@ pub fn parent_search(args: ParentSearchArgs) -> Result<(Vec<SearchResult>, Recom
     }
 
     // by default, include all dataset populations
-    let mut include_populations = args.dataset
+    let mut include_populations = args
+        .dataset
         .populations
         .keys()
         .map(|pop| pop.to_owned())
@@ -347,12 +372,13 @@ pub fn parent_search(args: ParentSearchArgs) -> Result<(Vec<SearchResult>, Recom
     let mut exclude_populations = Vec::new();
 
     // Primary parent
-    let parent_primary = parent_search_primary(&args, &mut include_populations, &mut exclude_populations)?;
+    let parent_primary =
+        parent_search_primary(&args, &mut include_populations, &mut exclude_populations)?;
     parents.push(parent_primary);
 
     // Secondary parents ( 2 : max_parents)
     // this function consumes `parents`, modifies it, then returns it
-    (parents, recombination) = parent_search_secondary(&args.sequence, parents, &args)?;
+    (parents, recombination) = parent_search_secondary(args.sequence, parents, &args)?;
 
     Ok((parents, recombination))
 }
@@ -483,9 +509,14 @@ pub fn detect_recombination(
 
     // First: 5' -> 3', filter separately on min_consecutive then min_length
     let mut regions_5p = identify_regions(&table_rows)?;
+    regions_5p = filter_regions(
+        &regions_5p,
+        Direction::Forward,
+        args.min_consecutive,
+        0_usize,
+    )?;
     regions_5p =
-        filter_regions(&regions_5p, Direction::Forward, args.min_consecutive, 0_usize)?;
-    regions_5p = filter_regions(&regions_5p, Direction::Forward, 0_usize, args.min_length)?;
+        filter_regions(&regions_5p, Direction::Forward, 0_usize, args.min_length)?;
     debug!(
         "regions_5p: {}",
         serde_json::to_string(&regions_5p).unwrap()
@@ -493,9 +524,14 @@ pub fn detect_recombination(
 
     // Second: 3' -> 5', filter separately on min_consecutive then min_length
     let mut regions_3p = identify_regions(&table_rows)?;
+    regions_3p = filter_regions(
+        &regions_3p,
+        Direction::Reverse,
+        args.min_consecutive,
+        0_usize,
+    )?;
     regions_3p =
-        filter_regions(&regions_3p, Direction::Reverse, args.min_consecutive, 0_usize)?;
-    regions_3p = filter_regions(&regions_3p, Direction::Reverse, 0_usize, args.min_length)?;
+        filter_regions(&regions_3p, Direction::Reverse, 0_usize, args.min_length)?;
     debug!(
         "regions_3p: {}",
         serde_json::to_string(&regions_3p).unwrap()
@@ -564,8 +600,7 @@ pub fn detect_recombination(
         if count < args.min_subs {
             debug!(
                 "Parent {} subs ({count}) do not meet the min_subs filter ({}).",
-                parent,
-                args.min_subs,
+                parent, args.min_subs,
             );
             min_subs_fail = true;
         }
@@ -651,11 +686,10 @@ pub fn detect_recombination(
 
 // Search function specific to the primary parent.
 pub fn parent_search_primary(
-    args: &ParentSearchArgs, 
+    args: &ParentSearchArgs,
     include_populations: &mut Vec<String>,
     exclude_populations: &mut Vec<String>,
 ) -> Result<SearchResult, Report> {
-
     debug!("Searching for Parent 1");
 
     // If this is a known recombinant, exclude self the recombinant's descendants from parent search.
@@ -668,10 +702,11 @@ pub fn parent_search_primary(
         exclude_populations.extend(descendants);
         *include_populations = include_populations
             .iter()
-            .filter(|pop| !exclude_populations.contains(&pop))
+            .filter(|pop| !exclude_populations.contains(pop))
             .map(|pop| pop.to_owned())
             .collect::<Vec<_>>();
-        args.dataset.search(args.sequence, Some(include_populations), None)?
+        args.dataset
+            .search(args.sequence, Some(include_populations), None)?
     }
     // Not a known recombinant, just use best_match/consensus as parent 1
     else {
