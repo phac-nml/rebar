@@ -5,10 +5,10 @@ pub mod recombination;
 pub mod sequence;
 pub mod utils;
 
-use bio::io::fasta;                              // object for fasta sequence
+use bio::io::fasta; // object for fasta sequence
 use color_eyre::eyre::{Report, Result, WrapErr}; // colorized logging and error handling
-use log::{debug, info, warn};                    // logging verbosity levels
-use serde::Serialize;                            // serialize structs (ex. json, yaml)
+use log::{debug, info, warn}; // logging verbosity levels
+use serde::Serialize; // serialize structs (ex. json, yaml)
 
 /// Run rebar on input alignment or dataset population
 pub fn run(args: cli::RunArgs) -> Result<(), Report> {
@@ -27,14 +27,14 @@ pub fn run(args: cli::RunArgs) -> Result<(), Report> {
     let populations = &args.input.populations;
     if let Some(populations) = populations {
         // split population into csv (,) parts
-        let populations = populations.split(",").collect::<Vec<_>>();
+        let populations = populations.split(',').collect::<Vec<_>>();
         // container to hold additional populations (like descendants)
         let mut search_populations = Vec::new();
 
         // if population ends in '*', use phylogenetically aware mode
         // to search for it and all descendants
         for population in populations {
-            if population.ends_with("*") {
+            if population.ends_with('*') {
                 // remove last char (wildcard) with pop
                 let parent = population[0..population.len() - 1].to_string();
                 // get descendants of all parents
@@ -74,8 +74,11 @@ pub fn run(args: cli::RunArgs) -> Result<(), Report> {
                 "Unable to parse alignment: {:?}",
                 alignment.to_str().unwrap()
             ))?;
-            let sequence =
-                sequence::Sequence::from_record(record, Some(&dataset.reference), args.mask)?;
+            let sequence = sequence::Sequence::from_record(
+                record,
+                Some(&dataset.reference),
+                args.mask,
+            )?;
             sequences.push(sequence);
         }
     }
@@ -84,14 +87,15 @@ pub fn run(args: cli::RunArgs) -> Result<(), Report> {
         // find the best match in the dataset to the full sequence
         let best_match = dataset.search(&sequence, None, None)?;
         // organize parameters for find_parents function
-        let parent_search_args = recombination::ParentSearchArgs::new(&dataset, &sequence, &best_match, &args);
+        let parent_search_args =
+            recombination::ParentSearchArgs::new(&dataset, &sequence, &best_match, &args);
         // search for recombination parents
-        let (_parents, _recombination) = recombination::parent_search(parent_search_args)?;
+        let (_parents, _recombination) =
+            recombination::parent_search(parent_search_args)?;
     }
 
     Ok(())
 }
-
 
 // ----------------------------------------------------------------------------
 // Traits

@@ -101,7 +101,7 @@ pub struct DatasetListArgs {
 // -----------------------------------------------------------------------------
 
 /// Run Rebar on input alignment or dataset population.
-#[derive(Clone, Debug, Parser,)]
+#[derive(Clone, Debug, Parser)]
 #[clap(verbatim_doc_comment)]
 pub struct RunArgs {
     #[command(flatten)]
@@ -152,7 +152,6 @@ pub struct RunInput {
     /// Input dataset population
     #[arg(long)]
     pub alignment: Option<PathBuf>,
-
 }
 
 // -----------------------------------------------------------------------------
