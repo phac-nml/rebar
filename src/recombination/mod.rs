@@ -960,12 +960,11 @@ pub fn identify_breakpoints(
 }
 
 pub fn combine_barcode_tables(recombinations: &[Recombination]) -> Result<(), Report> {
-    // identify sequences to combine
+    // identify sequence IDs to combine
     let sequence_ids = recombinations
         .iter()
         .map(|rec| &rec.sequence.id)
         .collect_vec();
-    //let num_sequences = sequence_ids.len();
 
     // identify parents to combine
     let parents = recombinations
@@ -973,12 +972,13 @@ pub fn combine_barcode_tables(recombinations: &[Recombination]) -> Result<(), Re
         .map(|rec| &rec.parents)
         .next()
         .unwrap();
-    //let num_parents = parents.len();
 
-    // init new table data, needs to be intermediate hashmap before
-    // going back to vec of vec rows
-    let mut table_data = HashMap::new();
-    table_data.insert("coord", Vec::new());
+    // init table data, needs to be intermediate hashmap before
+    // going back to vec of vec rows. Reminder needs to be all String
+    let mut table_data: HashMap<String, Vec<String>> = HashMap::new();
+    // mandatory columns
+    table_data.insert("coord".to_string(), Vec::new());
+    table_data.insert("Reference".to_string(), Vec::new());
 
     // ------------------------------------------------------------------------
     // First pass, identify all ref and parent bases
@@ -989,24 +989,33 @@ pub fn combine_barcode_tables(recombinations: &[Recombination]) -> Result<(), Re
         let table = &recombination.table;
 
         for row in table.iter().skip(1) {
+            // add coord to table
             let coord = &row[0];
-            table_data.entry("coord").or_insert(Vec::new()).push(coord);
-            // Check if we already added this coord from another parent
-            if !table_data["coord"].contains(&coord) {
-                let ref_base = &row[1];
-                table_data
-                    .entry("Reference")
-                    .or_insert(Vec::new())
-                    .push(ref_base);
 
-                for (i, parent) in parents.iter().enumerate() {
-                    // parent col starts after coord (0) and reference (1)
-                    let parent_base = &row[i + 2];
-                    table_data
-                        .entry(parent)
-                        .or_insert(Vec::new())
-                        .push(parent_base);
-                }
+            // Check if we already added this coord from another parent
+            if table_data["coord"].contains(coord) {
+                continue;
+            }
+            table_data
+                .entry("coord".to_string())
+                .or_insert(Vec::new())
+                .push(coord.to_string());
+
+            // add reference base to table
+            let ref_base = &row[1];
+            table_data
+                .entry("Reference".to_string())
+                .or_insert(Vec::new())
+                .push(ref_base.to_string());
+
+            // add parent bases to table
+            for (i, parent) in parents.iter().enumerate() {
+                // parent col starts after coord (0) and reference (1)
+                let parent_base = &row[i + 2];
+                table_data
+                    .entry(parent.to_string())
+                    .or_insert(Vec::new())
+                    .push(parent_base.to_string());
             }
         }
     }
@@ -1017,8 +1026,6 @@ pub fn combine_barcode_tables(recombinations: &[Recombination]) -> Result<(), Re
     let table_data_coords = table_data["coord"].clone();
 
     for recombination in recombinations {
-        let _sequence_id = &recombination.sequence.id;
-
         let table = &recombination.table;
         let deletion_coords = recombination
             .sequence
@@ -1029,17 +1036,16 @@ pub fn combine_barcode_tables(recombinations: &[Recombination]) -> Result<(), Re
         // first col is coord (0)
         let sequence_coords = table.iter().map(|row| &row[0]).collect_vec();
         // second last col is seq bases (len - 1)
-        let sequence_bases = table.iter().map(|row| &row[row.len() - 1]).collect_vec();
-        // by default, use reference bases?
-        //let mut sequence_bases = table_data["Reference"].clone();
+        let sequence_bases = table.iter().map(|row| &row[row.len() - 2]).collect_vec();
 
         for (i, coord) in table_data_coords.iter().enumerate() {
-            let coord_search = sequence_coords.iter().position(|c| c == coord);
+            // is this coord found in this particular sample?
+            let coord_search = sequence_coords.iter().position(|c| *c == coord);
 
-            // shadow coord with numeric format, for searching in seq
+            // shadow coord with numeric format, for searching in seq object
             let coord: usize = coord.parse().unwrap();
 
-            let _sequence_base = match coord_search {
+            let sequence_base = match coord_search {
                 // coord is in sequence table
                 Some(seq_i) => sequence_bases[seq_i],
                 None => {
@@ -1053,19 +1059,25 @@ pub fn combine_barcode_tables(recombinations: &[Recombination]) -> Result<(), Re
                     }
                     // otherwise use ref base
                     else {
-                        table_data["Reference"][i]
+                        &table_data["Reference"][i]
                     }
                 }
-            };
+            }
+            .to_string();
+            debug!("{coord}: {sequence_base}");
 
             // add base to table data
-            //table_data.entry(sequence_id).or_insert(Vec::new()).push("test");
+            let sequence_id = &recombination.sequence.id;
+            table_data
+                .entry(sequence_id.to_string())
+                .or_insert(Vec::new())
+                .push(sequence_base);
         }
     }
 
     // ------------------------------------------------------------------------
     // Export
-    //debug!("{table_data:?}");
+    debug!("{table_data:?}");
 
     // Construct table headers
     let mut headers = vec!["coord", "Reference"];
