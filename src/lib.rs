@@ -1,5 +1,6 @@
 pub mod cli;
 pub mod dataset;
+pub mod export;
 pub mod phylogeny;
 pub mod recombination;
 pub mod sequence;
@@ -9,6 +10,7 @@ use bio::io::fasta;
 use color_eyre::eyre::{Report, Result, WrapErr};
 use log::{debug, info, warn};
 use serde::Serialize;
+use std::collections::BTreeMap;
 use std::fs::create_dir_all;
 
 /// Run rebar on input alignment or dataset population
@@ -33,6 +35,7 @@ pub fn run(args: cli::RunArgs) -> Result<(), Report> {
 
     let populations = &args.input.populations;
     if let Some(populations) = populations {
+        info!("Loading query populations: {populations}");
         // split population into csv (,) parts
         let populations = populations.split(',').collect::<Vec<_>>();
         // container to hold additional populations (like descendants)
@@ -72,7 +75,7 @@ pub fn run(args: cli::RunArgs) -> Result<(), Report> {
 
     let alignment = &args.input.alignment;
     if let Some(alignment) = alignment {
-        info!("Loading alignment: {:?}", alignment);
+        info!("Loading query alignment: {:?}", alignment);
         let alignment_reader =
             fasta::Reader::from_file(alignment).expect("Unable to read alignment");
 
@@ -90,36 +93,50 @@ pub fn run(args: cli::RunArgs) -> Result<(), Report> {
         }
     }
 
-    for sequence in sequences {
+    // ------------------------------------------------------------------------
+    // recombination search
+
+    info!("Running recombination search.");
+    let mut best_matches = BTreeMap::new();
+    let mut recombination_results = BTreeMap::new();
+
+    for sequence in &sequences {
         // find the best match in the dataset to the full sequence
-        let best_match = dataset.search(&sequence, None, None)?;
+        let best_match = dataset.search(sequence, None, None)?;
+
         // organize parameters for find_parents function
         let parent_search_args =
-            recombination::ParentSearchArgs::new(&dataset, &sequence, &best_match, &args);
+            recombination::ParentSearchArgs::new(&dataset, sequence, &best_match, &args);
         // search for recombination parents
-        let (parents, recombination) = recombination::parent_search(parent_search_args)?;
+        let (_parents, recombination) = recombination::parent_search(parent_search_args)?;
 
-        // Export
-        let mut output_prefix = best_match.consensus_population.to_string();
-        // Add parents to output prefix
-        for parent in &parents {
-            output_prefix.push_str(format!("_{}", parent.consensus_population).as_str());
-        }
-        // Add breakpoints to output prefix
-        for breakpoint in &recombination.breakpoints {
-            output_prefix
-                .push_str(format!("_{}-{}", breakpoint.start, breakpoint.end).as_str());
-        }
-
-        // export recombination table to tsv
-        let recombination_table = args.output_dir.join(format!("{output_prefix}.tsv"));
-        recombination.write_tsv(&recombination_table)?;
+        best_matches.insert(sequence.id.to_owned(), best_match);
+        recombination_results.insert(sequence.id.to_owned(), recombination);
     }
 
-    // TBD Exporting needs to be done after all samples have run, to amalgamate
+    // ------------------------------------------------------------------------
+    // Export
+
+    // write linelist table as tsv
+    let outpath_linelist = args.output_dir.join("linelist.tsv");
+    let linelist = export::write_linelist(
+        &outpath_linelist,
+        &sequences,
+        &best_matches,
+        &recombination_results,
+        &dataset,
+    )?;
+
+    // write barcodes (recombination table), collated by recombinant
+    let _outdir_barcodes = args.output_dir.join("barcodes");
+    export::collect_recombinants(&linelist)?;
 
     Ok(())
 }
+
+// // export recombination table to tsv
+// let recombination_table = args.output_dir.join(format!("{output_prefix}.tsv"));
+// recombination.write_tsv(&recombination_table)?;
 
 // ----------------------------------------------------------------------------
 // Traits

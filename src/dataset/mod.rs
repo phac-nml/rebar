@@ -335,26 +335,31 @@ impl Dataset {
         &self,
         population: &String,
         sequence: &Sequence,
-        coordinates: &[usize],
+        coordinates: Option<&Vec<usize>>,
     ) -> Result<ConflictSummary, Report> {
         let mut conflict_summary = ConflictSummary::new();
 
         // get all the substitutions found in this population
-        let pop_subs = self.populations[population]
+        let mut pop_subs = self.populations[population]
             .substitutions
             .iter()
             .filter(|sub| {
-                coordinates.contains(&sub.coord)
-                    && !sequence.missing.contains(&sub.coord)
+                !sequence.missing.contains(&sub.coord)
                     && !sequence.deletions.contains(&sub.to_deletion())
             })
             .collect_vec();
+        if let Some(coordinates) = coordinates {
+            pop_subs = pop_subs
+                .into_iter()
+                .filter(|sub| coordinates.contains(&sub.coord))
+                .collect_vec();
+        }
 
         // support: sub in query that is also in pop
         conflict_summary.support = sequence
             .substitutions
             .iter()
-            .filter(|sub| coordinates.contains(&sub.coord) && pop_subs.contains(sub))
+            .filter(|sub| pop_subs.contains(sub))
             .cloned()
             .collect_vec();
 
@@ -362,16 +367,14 @@ impl Dataset {
         conflict_summary.conflict_alt = sequence
             .substitutions
             .iter()
-            .filter(|sub| coordinates.contains(&sub.coord) && !pop_subs.contains(sub))
+            .filter(|sub| !pop_subs.contains(sub))
             .cloned()
             .collect_vec();
 
         // conflict_ref: sub in pop that is not in query sample
         conflict_summary.conflict_ref = pop_subs
             .into_iter()
-            .filter(|sub| {
-                coordinates.contains(&sub.coord) && !sequence.substitutions.contains(sub)
-            })
+            .filter(|sub| !sequence.substitutions.contains(sub))
             .cloned()
             .collect_vec();
 
@@ -401,14 +404,6 @@ impl Dataset {
             None => &populations_default,
         };
 
-        // Check if we are restricting the coordinate search
-        // otherwise use all coordinates in genome_length
-        let coordinates_default = (1..sequence.genome_length).collect_vec();
-        let coordinates = match coordinates {
-            Some(coords) => coords,
-            None => &coordinates_default,
-        };
-
         // --------------------------------------------------------------------
         // Support
 
@@ -417,8 +412,10 @@ impl Dataset {
 
         for sub in &sequence.substitutions {
             // Check if this sub is part of the fn param coordinates
-            if !coordinates.contains(&sub.coord) {
-                continue;
+            if let Some(coordinates) = coordinates {
+                if !coordinates.contains(&sub.coord) {
+                    continue;
+                }
             }
 
             // Check if this is a known sub in the database
