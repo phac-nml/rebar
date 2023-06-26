@@ -25,6 +25,12 @@ pub struct Breakpoint {
     pub end: usize,
 }
 
+impl std::fmt::Display for Breakpoint {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        write!(f, "{}-{}", self.start, self.end)
+    }
+}
+
 // ----------------------------------------------------------------------------
 // Direction
 
@@ -46,13 +52,21 @@ pub struct Region {
     pub substitutions: Vec<Substitution>,
 }
 
+impl std::fmt::Display for Region {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        write!(f, "{}-{}|{}", self.start, self.end, self.origin)
+    }
+}
+
 // ----------------------------------------------------------------------------
 // Recombination
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct Recombination {
+    pub parents: Vec<String>,
     pub breakpoints: Vec<Breakpoint>,
     pub regions: BTreeMap<usize, Region>,
+    #[serde(skip_serializing)]
     pub table: Vec<Vec<String>>,
 }
 
@@ -65,6 +79,7 @@ impl Default for Recombination {
 impl Recombination {
     pub fn new() -> Self {
         Recombination {
+            parents: Vec::new(),
             breakpoints: Vec::new(),
             regions: BTreeMap::new(),
             table: Vec::new(),
@@ -571,6 +586,7 @@ pub fn detect_recombination(
     let region_origins = regions_intersect
         .values()
         .map(|region| region.origin.to_owned())
+        .unique()
         .collect_vec();
 
     for parent in parents {
@@ -691,6 +707,7 @@ pub fn detect_recombination(
     table.extend(table_rows_filter);
 
     // update all the attributes
+    recombination.parents = region_origins;
     recombination.regions = regions_intersect;
     recombination.breakpoints = breakpoints;
     recombination.table = table;

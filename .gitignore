@@ -1,3 +1,6 @@
-target/
-./dataset/
 .gitpod.yml
+
+/data/
+/dataset/
+/output/
+/target/
