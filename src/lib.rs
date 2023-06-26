@@ -10,7 +10,6 @@ use bio::io::fasta;
 use color_eyre::eyre::{Report, Result, WrapErr};
 use log::{debug, info, warn};
 use serde::Serialize;
-use std::collections::BTreeMap;
 use std::fs::create_dir_all;
 
 /// Run rebar on input alignment or dataset population
@@ -97,8 +96,8 @@ pub fn run(args: cli::RunArgs) -> Result<(), Report> {
     // recombination search
 
     info!("Running recombination search.");
-    let mut best_matches = BTreeMap::new();
-    let mut recombination_results = BTreeMap::new();
+    let mut best_matches = Vec::new();
+    let mut recombinations = Vec::new();
 
     for sequence in &sequences {
         // find the best match in the dataset to the full sequence
@@ -110,8 +109,8 @@ pub fn run(args: cli::RunArgs) -> Result<(), Report> {
         // search for recombination parents
         let (_parents, recombination) = recombination::parent_search(parent_search_args)?;
 
-        best_matches.insert(sequence.id.to_owned(), best_match);
-        recombination_results.insert(sequence.id.to_owned(), recombination);
+        best_matches.push(best_match);
+        recombinations.push(recombination);
     }
 
     // ------------------------------------------------------------------------
@@ -119,17 +118,14 @@ pub fn run(args: cli::RunArgs) -> Result<(), Report> {
 
     // write linelist table as tsv
     let outpath_linelist = args.output_dir.join("linelist.tsv");
-    let linelist = export::write_linelist(
-        &outpath_linelist,
-        &sequences,
-        &best_matches,
-        &recombination_results,
-        &dataset,
-    )?;
+    let linelist =
+        export::LineList::from_recombinations(&recombinations, &best_matches, &dataset)?;
+    linelist.collect_recombinants()?;
+    linelist.write_tsv(&outpath_linelist)?;
 
     // write barcodes (recombination table), collated by recombinant
-    let _outdir_barcodes = args.output_dir.join("barcodes");
-    export::collect_recombinants(&linelist)?;
+    //let _outdir_barcodes = args.output_dir.join("barcodes");
+    //export::collect_recombinants(&linelist)?;
 
     Ok(())
 }

@@ -63,11 +63,13 @@ impl std::fmt::Display for Region {
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct Recombination {
+    pub sequence_id: String,
     pub parents: Vec<String>,
     pub breakpoints: Vec<Breakpoint>,
     pub regions: BTreeMap<usize, Region>,
     #[serde(skip_serializing)]
     pub table: Vec<Vec<String>>,
+    pub genome_length: usize,
 }
 
 impl Default for Recombination {
@@ -79,10 +81,12 @@ impl Default for Recombination {
 impl Recombination {
     pub fn new() -> Self {
         Recombination {
+            sequence_id: String::new(),
             parents: Vec::new(),
             breakpoints: Vec::new(),
             regions: BTreeMap::new(),
             table: Vec::new(),
+            genome_length: 0,
         }
     }
 
@@ -419,6 +423,9 @@ pub fn detect_recombination(
     args: &ParentSearchArgs,
 ) -> Result<Recombination, Report> {
     let mut recombination = Recombination::new();
+
+    recombination.sequence_id = sequence.id.to_string();
+    recombination.genome_length = sequence.genome_length;
 
     // if no search_result was provided, just use first parent
     let search_result_default = &parents[0];
