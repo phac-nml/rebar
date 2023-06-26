@@ -6,7 +6,7 @@ use csv;
 use itertools::Itertools;
 use log::debug;
 use serde::{Deserialize, Serialize};
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashMap};
 use std::default::Default;
 use std::path::Path;
 use tabled::builder::Builder;
@@ -19,6 +19,7 @@ use tabled::settings::Style;
 // ----------------------------------------------------------------------------
 // Breakpoint
 
+/// Recombination breakpoint intervals (left and right inclusive)
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct Breakpoint {
     pub start: usize,
@@ -34,6 +35,7 @@ impl std::fmt::Display for Breakpoint {
 // ----------------------------------------------------------------------------
 // Direction
 
+/// Genomic reading direction as forward (5' -> 3') or reverse (3' -> 5')
 pub enum Direction {
     Forward,
     Reverse,
@@ -61,27 +63,26 @@ impl std::fmt::Display for Region {
 // ----------------------------------------------------------------------------
 // Recombination
 
-#[derive(Clone, Debug, Deserialize, Serialize)]
-pub struct Recombination {
-    pub sequence_id: String,
+#[derive(Clone, Debug, Serialize)]
+pub struct Recombination<'seq> {
+    //pub sequence_id: String,
+    pub sequence: &'seq Sequence,
+    pub unique_key: String,
+    pub recombinant: Option<String>,
     pub parents: Vec<String>,
     pub breakpoints: Vec<Breakpoint>,
     pub regions: BTreeMap<usize, Region>,
+    pub genome_length: usize,
     #[serde(skip_serializing)]
     pub table: Vec<Vec<String>>,
-    pub genome_length: usize,
 }
 
-impl Default for Recombination {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-impl Recombination {
-    pub fn new() -> Self {
+impl<'seq> Recombination<'seq> {
+    pub fn new(sequence: &'seq Sequence) -> Self {
         Recombination {
-            sequence_id: String::new(),
+            sequence,
+            unique_key: String::new(),
+            recombinant: None,
             parents: Vec::new(),
             breakpoints: Vec::new(),
             regions: BTreeMap::new(),
@@ -106,10 +107,10 @@ impl Recombination {
 // ----------------------------------------------------------------------------
 // Find Parents
 
-pub struct ParentSearchArgs<'d, 's, 'b> {
-    pub dataset: &'d Dataset,
-    pub sequence: &'s Sequence,
-    pub best_match: &'b SearchResult,
+pub struct ParentSearchArgs<'data, 'seq, 'best> {
+    pub dataset: &'data Dataset,
+    pub sequence: &'seq Sequence,
+    pub best_match: &'best SearchResult,
     pub max_parents: usize,
     pub max_iter: usize,
     pub min_consecutive: usize,
@@ -117,12 +118,12 @@ pub struct ParentSearchArgs<'d, 's, 'b> {
     pub min_subs: usize,
 }
 
-impl<'d, 's, 'b, 'r> ParentSearchArgs<'d, 's, 'b> {
+impl<'data, 'seq, 'best, 'args> ParentSearchArgs<'data, 'seq, 'best> {
     pub fn new(
-        dataset: &'d Dataset,
-        sequence: &'s Sequence,
-        best_match: &'b SearchResult,
-        args: &'r RunArgs,
+        dataset: &'data Dataset,
+        sequence: &'seq Sequence,
+        best_match: &'best SearchResult,
+        args: &'args RunArgs,
     ) -> Self {
         ParentSearchArgs {
             dataset,
@@ -142,12 +143,12 @@ impl<'d, 's, 'b, 'r> ParentSearchArgs<'d, 's, 'b> {
 // ----------------------------------------------------------------------------
 
 // Search function specific to the secondary parent(s).
-pub fn parent_search_secondary(
-    sequence: &Sequence,
+pub fn parent_search_secondary<'seq>(
+    sequence: &'seq Sequence,
     mut parents: Vec<SearchResult>,
-    args: &ParentSearchArgs,
-) -> Result<(Vec<SearchResult>, Recombination), Report> {
-    let mut recombination = Recombination::new();
+    args: &ParentSearchArgs<'_, 'seq, '_>,
+) -> Result<(Vec<SearchResult>, Recombination<'seq>), Report> {
+    let mut recombination = Recombination::new(sequence);
 
     let mut num_iter = 0;
     let mut num_parents = 1;
@@ -345,8 +346,7 @@ pub fn parent_search_secondary(
             Some(&include_populations),
             Some(&coordinates_range),
         )?;
-        recombination =
-            detect_recombination(sequence, &parents, Some(&search_result), args)?;
+        recombination = detect_recombination(&parents, Some(&search_result), args)?;
 
         // if the recombination search succeeded,
         if !recombination.breakpoints.is_empty() {
@@ -363,8 +363,7 @@ pub fn parent_search_secondary(
             Some(&include_populations),
             Some(&coordinates),
         )?;
-        recombination =
-            detect_recombination(sequence, &parents, Some(&search_result), args)?;
+        recombination = detect_recombination(&parents, Some(&search_result), args)?;
 
         // if the recombination search succeeded,
         if !recombination.breakpoints.is_empty() {
@@ -382,12 +381,12 @@ pub fn parent_search_secondary(
     Ok((parents, recombination))
 }
 
-pub fn parent_search(
-    args: ParentSearchArgs,
-) -> Result<(Vec<SearchResult>, Recombination), Report> {
+pub fn parent_search<'seq>(
+    args: ParentSearchArgs<'_, 'seq, '_>,
+) -> Result<(Vec<SearchResult>, Recombination<'seq>), Report> {
     // initialize the two return values
     let mut parents = Vec::new();
-    let mut recombination = Recombination::new();
+    let mut recombination = Recombination::new(args.sequence);
 
     if args.max_parents == 0 {
         return Ok((parents, recombination));
@@ -416,16 +415,16 @@ pub fn parent_search(
     Ok((parents, recombination))
 }
 
-pub fn detect_recombination(
-    sequence: &Sequence,
+pub fn detect_recombination<'seq>(
     parents: &Vec<SearchResult>,
     search_result: Option<&SearchResult>,
-    args: &ParentSearchArgs,
-) -> Result<Recombination, Report> {
-    let mut recombination = Recombination::new();
+    args: &ParentSearchArgs<'_, 'seq, '_>,
+) -> Result<Recombination<'seq>, Report> {
+    let mut recombination = Recombination::new(args.sequence);
 
-    recombination.sequence_id = sequence.id.to_string();
-    recombination.genome_length = sequence.genome_length;
+    //recombination.sequence_id = sequence.id.to_string();
+    recombination.sequence = args.sequence;
+    recombination.genome_length = args.sequence.genome_length;
 
     // if no search_result was provided, just use first parent
     let search_result_default = &parents[0];
@@ -474,7 +473,8 @@ pub fn detect_recombination(
         row.push(ref_base.to_string());
 
         // Base in Sample
-        let sample_base = sequence
+        let sample_base = args
+            .sequence
             .substitutions
             .iter()
             .filter(|sub| sub.coord == coord)
@@ -531,7 +531,11 @@ pub fn detect_recombination(
 
         // If no origins were found, this is private
         if origins.is_empty() {
-            let private = sequence.substitutions.iter().find(|sub| sub.coord == coord);
+            let private = args
+                .sequence
+                .substitutions
+                .iter()
+                .find(|sub| sub.coord == coord);
             privates.push(private);
         } else if origins.len() == 1 {
             row.push(origins[0].clone());
@@ -657,7 +661,7 @@ pub fn detect_recombination(
         headers.push(parent.consensus_population.to_owned());
     }
     headers.push(search_result.consensus_population.to_owned());
-    headers.push(sequence.id.to_owned());
+    headers.push(args.sequence.id.to_owned());
     headers.push("origin".to_string());
 
     // filter the table for the region subs
@@ -706,6 +710,10 @@ pub fn detect_recombination(
     );
 
     // --------------------------------------------------------------------
+    // Misc
+    // --------------------------------------------------------------------
+
+    // --------------------------------------------------------------------
     // Update
     // --------------------------------------------------------------------
 
@@ -718,6 +726,22 @@ pub fn detect_recombination(
     recombination.regions = regions_intersect;
     recombination.breakpoints = breakpoints;
     recombination.table = table;
+
+    recombination.recombinant = args.best_match.recombinant.clone();
+
+    // Grab name of recombinant for unique key
+    let best_match_recombinant = &args.best_match.recombinant;
+    let rec_key = match best_match_recombinant {
+        Some(recombinant) => recombinant,
+        None => "novel",
+    };
+
+    recombination.unique_key = format!(
+        "{}_{}_{}",
+        rec_key,
+        &recombination.parents.iter().join(","),
+        &recombination.breakpoints.iter().join(","),
+    );
 
     Ok(recombination)
 }
@@ -933,4 +957,127 @@ pub fn identify_breakpoints(
     }
 
     Ok(breakpoints)
+}
+
+pub fn combine_barcode_tables(recombinations: &[Recombination]) -> Result<(), Report> {
+    // identify sequences to combine
+    let sequence_ids = recombinations
+        .iter()
+        .map(|rec| &rec.sequence.id)
+        .collect_vec();
+    //let num_sequences = sequence_ids.len();
+
+    // identify parents to combine
+    let parents = recombinations
+        .iter()
+        .map(|rec| &rec.parents)
+        .next()
+        .unwrap();
+    //let num_parents = parents.len();
+
+    // init new table data, needs to be intermediate hashmap before
+    // going back to vec of vec rows
+    let mut table_data = HashMap::new();
+    table_data.insert("coord", Vec::new());
+
+    // ------------------------------------------------------------------------
+    // First pass, identify all ref and parent bases
+    // because some coords may not be present in all samples
+    // ex. due to missing data
+
+    for recombination in recombinations {
+        let table = &recombination.table;
+
+        for row in table.iter().skip(1) {
+            let coord = &row[0];
+            table_data.entry("coord").or_insert(Vec::new()).push(coord);
+            // Check if we already added this coord from another parent
+            if !table_data["coord"].contains(&coord) {
+                let ref_base = &row[1];
+                table_data
+                    .entry("Reference")
+                    .or_insert(Vec::new())
+                    .push(ref_base);
+
+                for (i, parent) in parents.iter().enumerate() {
+                    // parent col starts after coord (0) and reference (1)
+                    let parent_base = &row[i + 2];
+                    table_data
+                        .entry(parent)
+                        .or_insert(Vec::new())
+                        .push(parent_base);
+                }
+            }
+        }
+    }
+
+    // ------------------------------------------------------------------------
+    // Second pass, identify sample subs
+
+    let table_data_coords = table_data["coord"].clone();
+
+    for recombination in recombinations {
+        let _sequence_id = &recombination.sequence.id;
+
+        let table = &recombination.table;
+        let deletion_coords = recombination
+            .sequence
+            .deletions
+            .iter()
+            .map(|del| del.coord)
+            .collect_vec();
+        // first col is coord (0)
+        let sequence_coords = table.iter().map(|row| &row[0]).collect_vec();
+        // second last col is seq bases (len - 1)
+        let sequence_bases = table.iter().map(|row| &row[row.len() - 1]).collect_vec();
+        // by default, use reference bases?
+        //let mut sequence_bases = table_data["Reference"].clone();
+
+        for (i, coord) in table_data_coords.iter().enumerate() {
+            let coord_search = sequence_coords.iter().position(|c| c == coord);
+
+            // shadow coord with numeric format, for searching in seq
+            let coord: usize = coord.parse().unwrap();
+
+            let _sequence_base = match coord_search {
+                // coord is in sequence table
+                Some(seq_i) => sequence_bases[seq_i],
+                None => {
+                    // coord is missing
+                    if recombination.sequence.missing.contains(&coord) {
+                        "N"
+                    }
+                    // coord is deletion
+                    else if deletion_coords.contains(&coord) {
+                        "-"
+                    }
+                    // otherwise use ref base
+                    else {
+                        table_data["Reference"][i]
+                    }
+                }
+            };
+
+            // add base to table data
+            //table_data.entry(sequence_id).or_insert(Vec::new()).push("test");
+        }
+    }
+
+    // ------------------------------------------------------------------------
+    // Export
+    //debug!("{table_data:?}");
+
+    // Construct table headers
+    let mut headers = vec!["coord", "Reference"];
+    // add parents to header
+    for parent in parents {
+        headers.push(parent)
+    }
+    // add strains to headers
+    for sequence_id in sequence_ids {
+        headers.push(sequence_id)
+    }
+    debug!("headers: {headers:?}");
+
+    Ok(())
 }

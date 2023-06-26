@@ -118,14 +118,12 @@ pub fn run(args: cli::RunArgs) -> Result<(), Report> {
 
     // write linelist table as tsv
     let outpath_linelist = args.output_dir.join("linelist.tsv");
-    let linelist =
-        export::LineList::from_recombinations(&recombinations, &best_matches, &dataset)?;
-    linelist.collect_recombinants()?;
+    let linelist = export::LineList::create(&recombinations, &best_matches, &dataset)?;
     linelist.write_tsv(&outpath_linelist)?;
 
     // write barcodes (recombination table), collated by recombinant
-    //let _outdir_barcodes = args.output_dir.join("barcodes");
-    //export::collect_recombinants(&linelist)?;
+    let outdir_barcodes = args.output_dir.join("barcodes");
+    export::write_barcodes(&outdir_barcodes, &linelist, &recombinations)?;
 
     Ok(())
 }
