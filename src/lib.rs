@@ -8,13 +8,14 @@ pub mod utils;
 
 use bio::io::fasta;
 use color_eyre::eyre::{Report, Result, WrapErr};
+use itertools::Itertools;
 use log::{debug, info, warn};
 use serde::Serialize;
 use std::fs::create_dir_all;
 
 /// Run rebar on input alignment or dataset population
 pub fn run(args: cli::RunArgs) -> Result<(), Report> {
-    // create output directory
+    // create output directory if it doesn't exist
     if !args.output_dir.exists() {
         info!("Creating output directory: {:?}", args.output_dir);
         create_dir_all(&args.output_dir)?;
@@ -30,14 +31,14 @@ pub fn run(args: cli::RunArgs) -> Result<(), Report> {
     let mut sequences = Vec::new();
 
     // ------------------------------------------------------------------------
-    // input population was specified
+    // Parse Input Populations
 
     let populations = &args.input.populations;
     if let Some(populations) = populations {
         info!("Loading query populations: {populations}");
         // split population into csv (,) parts
         let populations = populations.split(',').collect::<Vec<_>>();
-        // container to hold additional populations (like descendants)
+        // intermediate container to hold additional populations (like descendants)
         let mut search_populations = Vec::new();
 
         // if population ends in '*', use phylogenetically aware mode
@@ -70,7 +71,7 @@ pub fn run(args: cli::RunArgs) -> Result<(), Report> {
     }
 
     // ------------------------------------------------------------------------
-    // input alignment was specified
+    // Parse Input alignment
 
     let alignment = &args.input.alignment;
     if let Some(alignment) = alignment {
@@ -93,7 +94,7 @@ pub fn run(args: cli::RunArgs) -> Result<(), Report> {
     }
 
     // ------------------------------------------------------------------------
-    // recombination search
+    // Recombination Search
 
     info!("Running recombination search.");
     let mut best_matches = Vec::new();
@@ -104,33 +105,56 @@ pub fn run(args: cli::RunArgs) -> Result<(), Report> {
         let best_match = dataset.search(sequence, None, None)?;
 
         // organize parameters for find_parents function
-        let parent_search_args =
-            recombination::ParentSearchArgs::new(&dataset, sequence, &best_match, &args);
-        // search for recombination parents
-        let (_parents, recombination) = recombination::parent_search(parent_search_args)?;
+        let parent_search_args = recombination::parent_search::Args::new(
+            &dataset,
+            sequence,
+            &best_match,
+            &args,
+        );
+        // search for all recombination parents
+        let (_parents, recombination) =
+            recombination::parent_search::search_all(parent_search_args)?;
 
         best_matches.push(best_match);
         recombinations.push(recombination);
     }
 
     // ------------------------------------------------------------------------
-    // Export
+    // Export Linelist (single)
 
-    // write linelist table as tsv
     let outpath_linelist = args.output_dir.join("linelist.tsv");
     let linelist = export::LineList::create(&recombinations, &best_matches, &dataset)?;
-    linelist.write_tsv(&outpath_linelist)?;
+    let linelist_table = linelist.to_table()?;
+    utils::write_table(&linelist_table, &outpath_linelist, Some('\t'))?;
 
-    // write barcodes (recombination table), collated by recombinant
+    // ------------------------------------------------------------------------
+    // Export Barcodes (multiple, collected by recombinant)
+
     let outdir_barcodes = args.output_dir.join("barcodes");
-    export::write_barcodes(&outdir_barcodes, &linelist, &recombinations)?;
+    create_dir_all(&outdir_barcodes)?;
+
+    // get unique keys of recombinants identified
+    let unique_keys = recombinations
+        .iter()
+        .map(|rec| &rec.unique_key)
+        .unique()
+        .collect_vec();
+
+    for unique_key in unique_keys {
+        // filter recombinations down to just this recombinant unique_key
+        let unique_rec = recombinations
+            .iter()
+            .filter(|rec| rec.unique_key == *unique_key)
+            .cloned()
+            .collect_vec();
+        // combine all the sample barcode tables
+        let barcode_table = recombination::combine_tables(&unique_rec)?;
+        let output_barcode_table = outdir_barcodes.join(format!("{unique_key}.tsv"));
+        utils::write_table(&barcode_table, &output_barcode_table, Some('\t'))?;
+    }
 
     Ok(())
 }
-
-// // export recombination table to tsv
-// let recombination_table = args.output_dir.join(format!("{output_prefix}.tsv"));
-// recombination.write_tsv(&recombination_table)?;
 
 // ----------------------------------------------------------------------------
 // Traits

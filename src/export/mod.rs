@@ -1,12 +1,7 @@
 use crate::dataset::{Dataset, SearchResult};
-use crate::recombination::{combine_barcode_tables, Recombination};
+use crate::recombination;
 use color_eyre::eyre::{eyre, Report, Result};
-use csv;
 use itertools::Itertools;
-use log::debug;
-//use log::debug, info};
-//use std::collections::BTreeMap;
-use std::path::Path;
 
 // ----------------------------------------------------------------------------
 // LineList
@@ -88,37 +83,34 @@ impl LineList {
         .collect_vec()
     }
 
-    pub fn write_tsv(&self, output_path: &Path) -> Result<(), Report> {
-        // initialize writer
-        let mut writer = csv::WriterBuilder::new()
-            .delimiter(b'\t')
-            .from_path(output_path)?;
+    pub fn to_table(&self) -> Result<Vec<Vec<String>>, Report> {
+        let mut table = Vec::new();
 
-        // write headers
+        // add headers
         let headers = LineList::headers();
-        writer.write_record(&headers)?;
+        table.push(headers.clone());
 
         let num_rows = self.strain.len();
 
-        // if the linelist was empty, just write headers
+        // if the linelist was empty, just output headers
         if num_rows == 0 {
-            return Ok(());
+            return Ok(table);
         }
 
         for row_i in 0..num_rows {
-            let mut row = vec![""; headers.len()];
+            let mut row = vec![String::new(); headers.len()];
             for (col_i, header) in headers.iter().enumerate() {
                 let vals = self.get(header)?;
-                row[col_i] = &vals[row_i];
+                row[col_i] = vals[row_i].to_string();
             }
-            writer.write_record(row)?;
+            table.push(row);
         }
 
-        Ok(())
+        Ok(table)
     }
 
     pub fn create(
-        recombinations: &Vec<Recombination>,
+        recombinations: &Vec<recombination::Recombination>,
         best_matches: &Vec<SearchResult>,
         dataset: &Dataset,
     ) -> Result<LineList, Report> {
@@ -193,36 +185,4 @@ impl LineList {
 
         Ok(linelist)
     }
-}
-
-pub fn write_barcodes(
-    _output_dir: &Path,
-    linelist: &LineList,
-    recombinations: &[Recombination],
-) -> Result<(), Report> {
-    let num_rows = linelist.strain.len();
-    let unique_keys = linelist.unique_key.iter().unique().collect_vec();
-    debug!("{unique_keys:?}");
-
-    for unique_key in unique_keys {
-        let mut strains = Vec::new();
-        // identify strains part belong to this key
-        for i in 0..num_rows {
-            if &linelist.unique_key[i] == unique_key {
-                strains.push(&linelist.strain[i]);
-            }
-        }
-
-        // identify recombinations part of this key
-        let unique_rec = recombinations
-            .iter()
-            .filter(|rec| strains.contains(&&rec.sequence.id))
-            .cloned()
-            .collect_vec();
-
-        // combine recombination barcode tables
-        combine_barcode_tables(&unique_rec)?;
-    }
-
-    Ok(())
 }

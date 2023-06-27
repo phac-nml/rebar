@@ -1,12 +1,13 @@
-use crate::cli::RunArgs; // object for run function params
-use crate::dataset::{Dataset, SearchResult};
+pub mod parent_search;
+
+use crate::dataset::SearchResult;
 use crate::sequence::{Sequence, Substitution};
-use color_eyre::eyre::{Report, Result};
+use color_eyre::eyre::{eyre, Report, Result};
 use csv;
 use itertools::Itertools;
 use log::debug;
 use serde::{Deserialize, Serialize};
-use std::collections::{BTreeMap, HashMap};
+use std::collections::BTreeMap;
 use std::default::Default;
 use std::path::Path;
 use tabled::builder::Builder;
@@ -105,320 +106,13 @@ impl<'seq> Recombination<'seq> {
 }
 
 // ----------------------------------------------------------------------------
-// Find Parents
-
-pub struct ParentSearchArgs<'data, 'seq, 'best> {
-    pub dataset: &'data Dataset,
-    pub sequence: &'seq Sequence,
-    pub best_match: &'best SearchResult,
-    pub max_parents: usize,
-    pub max_iter: usize,
-    pub min_consecutive: usize,
-    pub min_length: usize,
-    pub min_subs: usize,
-}
-
-impl<'data, 'seq, 'best, 'args> ParentSearchArgs<'data, 'seq, 'best> {
-    pub fn new(
-        dataset: &'data Dataset,
-        sequence: &'seq Sequence,
-        best_match: &'best SearchResult,
-        args: &'args RunArgs,
-    ) -> Self {
-        ParentSearchArgs {
-            dataset,
-            sequence,
-            best_match,
-            max_parents: args.max_parents,
-            max_iter: args.max_iter,
-            min_consecutive: args.min_consecutive,
-            min_length: args.min_length,
-            min_subs: args.min_subs,
-        }
-    }
-}
-
-// ----------------------------------------------------------------------------
 // Functions
 // ----------------------------------------------------------------------------
-
-// Search function specific to the secondary parent(s).
-pub fn parent_search_secondary<'seq>(
-    sequence: &'seq Sequence,
-    mut parents: Vec<SearchResult>,
-    args: &ParentSearchArgs<'_, 'seq, '_>,
-) -> Result<(Vec<SearchResult>, Recombination<'seq>), Report> {
-    let mut recombination = Recombination::new(sequence);
-
-    let mut num_iter = 0;
-    let mut num_parents = 1;
-    let mut exclude_populations = Vec::new();
-
-    loop {
-        // --------------------------------------------------------------------
-        // Loop Break Check: Simple
-        //
-        // Check if we can break out of the loop based on simple checks like the
-        // max number of iterations max number of parents achieved.
-
-        if num_parents >= args.max_parents {
-            debug!(
-                "Maximum number of parents reached ({}), stopping parent search.",
-                args.max_parents
-            );
-            break;
-        }
-        if num_iter >= args.max_iter {
-            debug!("Maximum number of iterations reached ({num_iter}), stopping parent search.");
-            break;
-        }
-        num_iter += 1;
-
-        debug!("parent_{}: iteration {num_iter}", num_parents + 1);
-
-        // --------------------------------------------------------------------
-        // Conflict Checks
-        //
-        // Check if we have resolved all mutation conflicts between the query
-        // sequence and recombination parents found so far.
-
-        // identify all substitutions found in all parents so far
-        let parent_substitutions = parents
-            .iter()
-            .flat_map(|parent| &parent.substitutions)
-            .unique()
-            .collect_vec();
-
-        // identify conflict_alt (alt base) in sequence not resolved by any parent
-        let conflict_alt = sequence
-            .substitutions
-            .iter()
-            .filter(|sub| !parent_substitutions.contains(sub))
-            .collect_vec();
-
-        debug!("conflict_alt: {}", conflict_alt.iter().join(", "));
-
-        // identify conflict_ref (ref base) in sequence not resolved by any parent
-        // first collect all the conflict_ref in all parents
-        let mut conflict_ref = parents
-            .iter()
-            .flat_map(|p| &p.conflict_ref[&p.consensus_population])
-            .unique()
-            .collect_vec();
-
-        // next, check for any conflict_ref that is NOT resolved by another parent
-        // a conflict_ref is resolved if one parent DOES NOT have it in subs
-        // this is not ideal, because it does not account for missing and deletions
-        let mut conflict_ref_unresolved = Vec::new();
-        for sub in conflict_ref {
-            let mut is_resolved = false;
-            for parent in &parents {
-                if !parent.substitutions.contains(sub) {
-                    is_resolved = true;
-                }
-            }
-            if !is_resolved {
-                conflict_ref_unresolved.push(sub);
-            }
-        }
-
-        // filter the conflict_ref down to just unresolved
-        conflict_ref = conflict_ref_unresolved;
-        debug!("conflict_ref: {}", conflict_ref.iter().join(", "));
-
-        // --------------------------------------------------------------------
-        // Loop Break Check: Conflict
-
-        // if conflict_ref.is_empty() {
-        //     debug!("Sufficient conflict_ref resolution reached, stopping parent search.");
-        //     break;
-        // }
-        if conflict_alt.len() < args.min_subs {
-            debug!("Sufficient conflict_alt resolution reached, stopping parent search.");
-            break;
-        }
-
-        // Collect the conflict/unresolved coordinates
-        let conflict_ref_coord = conflict_ref
-            .iter()
-            .map(|sub| &sub.coord)
-            .cloned()
-            .collect_vec();
-        let conflict_alt_coord = conflict_alt
-            .iter()
-            .map(|sub| &sub.coord)
-            .cloned()
-            .collect_vec();
-        let mut coordinates = conflict_ref_coord;
-        coordinates.extend(conflict_alt_coord);
-        coordinates.sort();
-        debug!("coordinates: {coordinates:?}");
-
-        // --------------------------------------------------------------------
-        // EXCLUDE descendants/ancestors(?) of known parents
-
-        for parent in &parents {
-            // exclude descendants
-            let descendants = args
-                .dataset
-                .phylogeny
-                .get_descendants(&parent.consensus_population)?;
-            let descendants_to_exclude = descendants
-                .into_iter()
-                .filter(|pop| !exclude_populations.contains(pop))
-                .collect::<Vec<_>>();
-            exclude_populations.extend(descendants_to_exclude);
-
-            // exclude ancestors
-            let ancestors = args
-                .dataset
-                .phylogeny
-                .get_ancestors(&parent.consensus_population)?;
-            // because of possible recombination, ancestors is a vector of vectors
-            // to reflect multiple parents and paths to the root.
-            // just flatten them for all our purposes here
-            let ancestors_to_exclude = ancestors
-                .into_iter()
-                .flatten()
-                .filter(|pop| !exclude_populations.contains(pop))
-                .collect::<Vec<_>>();
-            exclude_populations.extend(ancestors_to_exclude);
-        }
-
-        // --------------------------------------------------------------------
-        // Exclude populations that have substitutions at ALL of the conflict_ref
-
-        let mut conflict_ref_count = BTreeMap::new();
-        for sub in conflict_ref.iter() {
-            if args.dataset.mutations.contains_key(sub) {
-                let populations = args.dataset.mutations[sub]
-                    .iter()
-                    .filter(|pop| !exclude_populations.contains(pop))
-                    .collect_vec();
-                for pop in populations {
-                    *conflict_ref_count.entry(pop).or_insert(0) += 1
-                }
-            }
-        }
-        let populations_to_exclude = conflict_ref_count
-            .into_iter()
-            .filter(|(_pop, count)| *count == conflict_ref.len())
-            .map(|(pop, _count)| pop.to_owned())
-            .collect::<Vec<_>>();
-        exclude_populations.extend(populations_to_exclude);
-
-        // --------------------------------------------------------------------
-        // Include populations that help resolve the conflict_alt
-
-        // count up the number of conflict_alt by population
-        let mut conflict_alt_count = BTreeMap::new();
-        for sub in conflict_alt {
-            if args.dataset.mutations.contains_key(sub) {
-                let populations = args.dataset.mutations[sub]
-                    .iter()
-                    .filter(|pop| !exclude_populations.contains(pop))
-                    .collect_vec();
-                for pop in populations {
-                    *conflict_alt_count.entry(pop).or_insert(0) += 1
-                }
-            }
-        }
-
-        // keep any populations that have min_subs conflict_alt
-        let include_populations = conflict_alt_count
-            .into_iter()
-            .filter(|(_pop, count)| *count >= args.min_subs)
-            .map(|(pop, _count)| pop)
-            .cloned()
-            .collect::<Vec<_>>();
-
-        // --------------------------------------------------------------------
-        // Search Dataset #1 (Full Coordinate Range)
-
-        // find the next parent candidate based on the full coordinate range
-        let coordinates_min = coordinates.iter().min().unwrap();
-        let coordinates_max = coordinates.iter().max().unwrap();
-        let coordinates_range =
-            (coordinates_min.to_owned()..coordinates_max.to_owned()).collect_vec();
-
-        let search_result = args.dataset.search(
-            sequence,
-            Some(&include_populations),
-            Some(&coordinates_range),
-        )?;
-        recombination = detect_recombination(&parents, Some(&search_result), args)?;
-
-        // if the recombination search succeeded,
-        if !recombination.breakpoints.is_empty() {
-            num_parents += 1;
-            parents.push(search_result);
-            continue;
-        }
-
-        // --------------------------------------------------------------------
-        // Search Dataset #2 (Specific Listed Coordinates)
-
-        let search_result = args.dataset.search(
-            sequence,
-            Some(&include_populations),
-            Some(&coordinates),
-        )?;
-        recombination = detect_recombination(&parents, Some(&search_result), args)?;
-
-        // if the recombination search succeeded,
-        if !recombination.breakpoints.is_empty() {
-            num_parents += 1;
-            parents.push(search_result);
-            continue;
-        }
-        // if failed, exclude search_result top_populations from next iteration?
-        // do we also want to exclude failed search #1 top_populations?
-        else {
-            exclude_populations.extend(search_result.top_populations);
-        }
-    }
-
-    Ok((parents, recombination))
-}
-
-pub fn parent_search<'seq>(
-    args: ParentSearchArgs<'_, 'seq, '_>,
-) -> Result<(Vec<SearchResult>, Recombination<'seq>), Report> {
-    // initialize the two return values
-    let mut parents = Vec::new();
-    let mut recombination = Recombination::new(args.sequence);
-
-    if args.max_parents == 0 {
-        return Ok((parents, recombination));
-    }
-
-    // by default, include all dataset populations
-    let mut include_populations = args
-        .dataset
-        .populations
-        .keys()
-        .map(|pop| pop.to_owned())
-        .collect::<Vec<_>>();
-
-    // by default, don't exclude any populations
-    let mut exclude_populations = Vec::new();
-
-    // Primary parent
-    let parent_primary =
-        parent_search_primary(&args, &mut include_populations, &mut exclude_populations)?;
-    parents.push(parent_primary);
-
-    // Secondary parents ( 2 : max_parents)
-    // this function consumes `parents`, modifies it, then returns it
-    (parents, recombination) = parent_search_secondary(args.sequence, parents, &args)?;
-
-    Ok((parents, recombination))
-}
 
 pub fn detect_recombination<'seq>(
     parents: &Vec<SearchResult>,
     search_result: Option<&SearchResult>,
-    args: &ParentSearchArgs<'_, 'seq, '_>,
+    args: &parent_search::Args<'_, 'seq, '_>,
 ) -> Result<Recombination<'seq>, Report> {
     let mut recombination = Recombination::new(args.sequence);
 
@@ -710,10 +404,6 @@ pub fn detect_recombination<'seq>(
     );
 
     // --------------------------------------------------------------------
-    // Misc
-    // --------------------------------------------------------------------
-
-    // --------------------------------------------------------------------
     // Update
     // --------------------------------------------------------------------
 
@@ -739,43 +429,11 @@ pub fn detect_recombination<'seq>(
     recombination.unique_key = format!(
         "{}_{}_{}",
         rec_key,
-        &recombination.parents.iter().join(","),
-        &recombination.breakpoints.iter().join(","),
+        &recombination.parents.iter().join("_"),
+        &recombination.breakpoints.iter().join("_"),
     );
 
     Ok(recombination)
-}
-
-// Search function specific to the primary parent.
-pub fn parent_search_primary(
-    args: &ParentSearchArgs,
-    include_populations: &mut Vec<String>,
-    exclude_populations: &mut Vec<String>,
-) -> Result<SearchResult, Report> {
-    debug!("Searching for Parent 1");
-
-    // If this is a known recombinant, exclude self the recombinant's descendants from parent search.
-    let recombinant = args.best_match.recombinant.clone();
-    let search_result = if let Some(recombinant) = recombinant {
-        // exclude self
-        exclude_populations.push(args.best_match.consensus_population.clone());
-        // exclude descendants
-        let descendants = args.dataset.phylogeny.get_descendants(&recombinant)?;
-        exclude_populations.extend(descendants);
-        *include_populations = include_populations
-            .iter()
-            .filter(|pop| !exclude_populations.contains(pop))
-            .map(|pop| pop.to_owned())
-            .collect::<Vec<_>>();
-        args.dataset
-            .search(args.sequence, Some(include_populations), None)?
-    }
-    // Not a known recombinant, just use best_match/consensus as parent 1
-    else {
-        args.best_match.to_owned()
-    };
-
-    Ok(search_result)
 }
 
 pub fn identify_regions(
@@ -936,6 +594,7 @@ pub fn intersect_regions(
     Ok(regions_intersect)
 }
 
+/// Identify breakpoint intervals in recombination regions.
 pub fn identify_breakpoints(
     regions: &BTreeMap<usize, Region>,
 ) -> Result<Vec<Breakpoint>, Report> {
@@ -959,137 +618,149 @@ pub fn identify_breakpoints(
     Ok(breakpoints)
 }
 
-pub fn combine_barcode_tables(recombinations: &[Recombination]) -> Result<(), Report> {
+/// Combine recombination tables.
+pub fn combine_tables(
+    recombinations: &[Recombination],
+) -> Result<Vec<Vec<String>>, Report> {
+    // ------------------------------------------------------------------------
+    // Input Checking
+
+    // was recombination detected?
+    let parents = recombinations.iter().map(|rec| &rec.parents).collect_vec();
+    if parents.is_empty() {
+        return Err(eyre!("Cannot combine tables, no recombination detected."));
+    }
+
+    // are all parents the same?
+    for parent in &parents {
+        if parent != &parents[0] {
+            return Err(eyre!(
+                "Cannot combine tables, not all parents are the same."
+            ));
+        }
+    }
+
     // identify sequence IDs to combine
     let sequence_ids = recombinations
         .iter()
         .map(|rec| &rec.sequence.id)
         .collect_vec();
 
-    // identify parents to combine
+    // identify parents to combine, just use first, since we verified all same
     let parents = recombinations
         .iter()
         .map(|rec| &rec.parents)
         .next()
         .unwrap();
 
-    // init table data, needs to be intermediate hashmap before
-    // going back to vec of vec rows. Reminder needs to be all String
-    let mut table_data: HashMap<String, Vec<String>> = HashMap::new();
-    // mandatory columns
-    table_data.insert("coord".to_string(), Vec::new());
-    table_data.insert("Reference".to_string(), Vec::new());
-
     // ------------------------------------------------------------------------
-    // First pass, identify all ref and parent bases
-    // because some coords may not be present in all samples
-    // ex. due to missing data
+    // Construct Table Headers
 
-    for recombination in recombinations {
-        let table = &recombination.table;
+    // final result to mutate and return
+    let mut combine_table: Vec<Vec<String>> = Vec::new();
 
-        for row in table.iter().skip(1) {
-            // add coord to table
-            let coord = &row[0];
-
-            // Check if we already added this coord from another parent
-            if table_data["coord"].contains(coord) {
-                continue;
-            }
-            table_data
-                .entry("coord".to_string())
-                .or_insert(Vec::new())
-                .push(coord.to_string());
-
-            // add reference base to table
-            let ref_base = &row[1];
-            table_data
-                .entry("Reference".to_string())
-                .or_insert(Vec::new())
-                .push(ref_base.to_string());
-
-            // add parent bases to table
-            for (i, parent) in parents.iter().enumerate() {
-                // parent col starts after coord (0) and reference (1)
-                let parent_base = &row[i + 2];
-                table_data
-                    .entry(parent.to_string())
-                    .or_insert(Vec::new())
-                    .push(parent_base.to_string());
-            }
-        }
-    }
-
-    // ------------------------------------------------------------------------
-    // Second pass, identify sample subs
-
-    let table_data_coords = table_data["coord"].clone();
-
-    for recombination in recombinations {
-        let table = &recombination.table;
-        let deletion_coords = recombination
-            .sequence
-            .deletions
-            .iter()
-            .map(|del| del.coord)
-            .collect_vec();
-        // first col is coord (0)
-        let sequence_coords = table.iter().map(|row| &row[0]).collect_vec();
-        // second last col is seq bases (len - 1)
-        let sequence_bases = table.iter().map(|row| &row[row.len() - 2]).collect_vec();
-
-        for (i, coord) in table_data_coords.iter().enumerate() {
-            // is this coord found in this particular sample?
-            let coord_search = sequence_coords.iter().position(|c| *c == coord);
-
-            // shadow coord with numeric format, for searching in seq object
-            let coord: usize = coord.parse().unwrap();
-
-            let sequence_base = match coord_search {
-                // coord is in sequence table
-                Some(seq_i) => sequence_bases[seq_i],
-                None => {
-                    // coord is missing
-                    if recombination.sequence.missing.contains(&coord) {
-                        "N"
-                    }
-                    // coord is deletion
-                    else if deletion_coords.contains(&coord) {
-                        "-"
-                    }
-                    // otherwise use ref base
-                    else {
-                        &table_data["Reference"][i]
-                    }
-                }
-            }
-            .to_string();
-            debug!("{coord}: {sequence_base}");
-
-            // add base to table data
-            let sequence_id = &recombination.sequence.id;
-            table_data
-                .entry(sequence_id.to_string())
-                .or_insert(Vec::new())
-                .push(sequence_base);
-        }
-    }
-
-    // ------------------------------------------------------------------------
-    // Export
-    debug!("{table_data:?}");
-
-    // Construct table headers
+    // Mandatory headers (coord and Reference)
     let mut headers = vec!["coord", "Reference"];
-    // add parents to header
-    for parent in parents {
+    // Dynamic headers (parents and sequence IDs)
+    for parent in parents.iter() {
         headers.push(parent)
     }
-    // add strains to headers
-    for sequence_id in sequence_ids {
+    for sequence_id in sequence_ids.iter() {
         headers.push(sequence_id)
     }
-    debug!("headers: {headers:?}");
+    // add an extra col num_parents (so its standalone for plotting)
+    headers.push("num_parents");
+    // add an extra col genome_length (so its standalone for plotting)
+    headers.push("genome_length");
+    // convert to String, &str won't work here, since we're going to create
+    // table row values within a for loop scope later
+    let headers = headers.into_iter().map(String::from).collect_vec();
+    combine_table.push(headers.clone());
 
-    Ok(())
+    // identify all coords in all samples, convert from string to numeric
+    // so they can be sorted nicely
+    let mut coords = recombinations
+        .iter()
+        .flat_map(|rec| rec.table.iter().map(|row| &row[0]).collect_vec())
+        .unique()
+        .filter(|c| c.as_str() != "coord")
+        .map(|c| c.parse::<usize>().unwrap())
+        .collect_vec();
+    coords.sort();
+
+    // combine tables, row by row (coord by coord)
+    for coord in &coords {
+        // init row with empty strings for all columns
+        let mut row = vec![String::new(); headers.len()];
+        // second last column is number of parents
+        row[headers.len() - 2] = parents.len().to_string();
+
+        // iterate through each recombinant sample
+        for (rec_i, recombination) in recombinations.iter().enumerate() {
+            // last column is genome length
+            row[headers.len() - 1] = recombination.sequence.genome_length.to_string();
+            // store the recombinant barcode table
+            // skip the first row (header)
+            let rec_table = &recombination.table.iter().skip(1).collect_vec();
+
+            // check which coords appeared in this sample
+            let rec_coords = rec_table
+                .iter()
+                .map(|row| row[0].parse::<usize>().unwrap())
+                .collect_vec();
+
+            // get table index of coord, otherwise skip sample
+            let coord_search = rec_coords.iter().position(|c| c == coord);
+            let row_i = match coord_search {
+                Some(i) => i,
+                None => continue,
+            };
+
+            // check if this is the first sample that has this coord,
+            // need to add: coord, Reference, and parents
+            if row[0] == String::new() {
+                // Add the coord to the table row, coord is always first col (i=0)
+                row[0] = coord.to_string();
+                // Reference is always the second col (i=1)
+                let ref_base = &rec_table[row_i][1];
+                row[1] = ref_base.to_string();
+
+                // Add parents (i + 2, after coord (0) and Reference (1))
+                for (i, _parent) in parents.iter().enumerate() {
+                    let parent_base = &rec_table[row_i][i + 2];
+                    row[i + 2] = parent_base.to_string();
+                }
+            }
+
+            // Add recombinant sample (second last coord, before Origin (last))
+            // by default, use reference base, coord (0) Reference (1)
+            let mut rec_base = rec_table[row_i][1].as_str();
+            let deletion_coords = recombination
+                .sequence
+                .deletions
+                .iter()
+                .map(|del| del.coord)
+                .collect_vec();
+
+            // missing
+            if recombination.sequence.missing.contains(coord) {
+                rec_base = "N";
+            }
+            // deletion
+            else if deletion_coords.contains(coord) {
+                rec_base = "-";
+            }
+
+            // what is the col position of this sample?
+            // first 2 are coord, ref then parents
+
+            let col_i = 2 + parents.len() + rec_i;
+            row[col_i] = rec_base.to_string();
+        }
+
+        // Add processed row to table
+        combine_table.push(row);
+    }
+
+    Ok(combine_table)
 }
