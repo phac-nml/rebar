@@ -1,4 +1,5 @@
 use color_eyre::eyre::{eyre, Report, Result, WrapErr};
+use csv;
 use std::fs::{remove_file, write, File};
 use std::io::Read;
 use std::path::{Path, PathBuf};
@@ -59,6 +60,30 @@ pub fn decompress_file(
         }
         _ => return Err(eyre!("Decompression for .{ext:?} is not implemented yet.")),
     };
+
+    Ok(())
+}
+
+/// Write table to file.
+pub fn write_table(
+    table: &Vec<Vec<String>>,
+    output_path: &Path,
+    delim: Option<char>,
+) -> Result<(), Report> {
+    let delim = match delim {
+        Some(c) => c as u8,
+        None => b'\t',
+    };
+    let mut writer = csv::WriterBuilder::new()
+        .delimiter(delim)
+        .from_path(output_path)
+        .wrap_err_with(|| {
+            format!("Failed to write table to: {}", output_path.display())
+        })?;
+
+    for row in table {
+        writer.write_record(row)?;
+    }
 
     Ok(())
 }
