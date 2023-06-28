@@ -132,8 +132,7 @@ pub fn detect_recombination<'seq>(
 
     let mut table_rows = Vec::new();
 
-    // Identify which subs are non-bi-allelic, these will wind up being
-    // duplicate rows, which we'll need to reconcile and collapse
+    // Identify all subs found in parents and search_result
     let mut all_subs = Vec::new();
     for parent in parents {
         all_subs.extend(parent.substitutions.to_owned());
@@ -151,22 +150,29 @@ pub fn detect_recombination<'seq>(
     let mut privates = Vec::new();
 
     for coord in coords {
-        // add coord as first column
-        let mut row = vec![coord.to_string()];
+        // init row with columns:
+        // 5 for coord, Reference, Origin, search_result, sequence
+        // then variable number of parents
+        let num_cols = 5 + parents.len();
+        let mut row = vec![String::new(); num_cols];
+
+        // add coord as first column (i=0)
+        row[0] = coord.to_string();
 
         // init base origins (could be multiple)
+        // this will be the second columnn (i=1)
         let mut origins = Vec::new();
 
-        // add reference base as second column
+        // add reference base as third column (i=2)
         let ref_base = all_subs
             .iter()
             .filter(|sub| sub.coord == coord)
             .map(|sub| sub.reference)
             .next()
             .unwrap();
-        row.push(ref_base.to_string());
+        row[2] = ref_base.to_string();
 
-        // Base in Sample
+        // Base in Sample, will use for parent origin comparison
         let sample_base = args
             .sequence
             .substitutions
@@ -179,7 +185,7 @@ pub fn detect_recombination<'seq>(
         // Add the known parents as next columns
         let mut parent_bases = Vec::new();
 
-        for parent in parents {
+        for (i, parent) in parents.iter().enumerate() {
             let parent_base = parent
                 .substitutions
                 .iter()
@@ -192,7 +198,7 @@ pub fn detect_recombination<'seq>(
                 origins.push(parent.consensus_population.clone());
             }
 
-            row.push(parent_base.to_string());
+            row[i + 3] = parent_base.to_string();
             parent_bases.push(parent_base);
         }
 
@@ -208,11 +214,13 @@ pub fn detect_recombination<'seq>(
         if match_base == sample_base {
             origins.push(search_result.consensus_population.clone());
         }
-        row.push(match_base.to_string());
+
+        // Add search result match_base, second last column
+        row[num_cols - 2] = match_base.to_string();
         parent_bases.push(match_base);
 
-        // Add the sample base
-        row.push(sample_base.to_string());
+        // Add the sample base, last column
+        row[num_cols - 1] = sample_base.to_string();
 
         // Is this coord a discriminating site?
         // Remove subs that are identical between all parents
@@ -232,10 +240,13 @@ pub fn detect_recombination<'seq>(
                 .find(|sub| sub.coord == coord);
             privates.push(private);
         } else if origins.len() == 1 {
-            row.push(origins[0].clone());
+            // origins is second columnn (i=1)
+            row[1] = origins.iter().join(",");
             table_rows.push(row);
         }
     }
+
+    debug!("{table_rows:?}");
 
     // --------------------------------------------------------------------
     // Group Substitutions into Parental Regions
@@ -350,13 +361,16 @@ pub fn detect_recombination<'seq>(
     // --------------------------------------------------------------------
 
     // table headers
-    let mut headers = vec!["coord".to_string(), "Reference".to_string()];
+    let mut headers = vec!["coord", "origin", "Reference"]
+        .into_iter()
+        .map(String::from)
+        .collect_vec();
+
     for parent in parents {
         headers.push(parent.consensus_population.to_owned());
     }
     headers.push(search_result.consensus_population.to_owned());
     headers.push(args.sequence.id.to_owned());
-    headers.push("origin".to_string());
 
     // filter the table for the region subs
     let mut region_sub_coords = Vec::new();
@@ -445,9 +459,9 @@ pub fn identify_regions(
 
     for row in table_rows {
         let coord = row[0].parse::<usize>().unwrap();
-        let origin = row[row.len() - 1].to_string();
-        let reference = row[1].chars().next().unwrap();
-        let alt = row[row.len() - 2].chars().next().unwrap();
+        let origin = row[1].to_string();
+        let reference = row[2].chars().next().unwrap();
+        let alt = row[row.len() - 1].chars().next().unwrap();
         let substitutions = vec![Substitution {
             coord,
             reference,
@@ -660,7 +674,7 @@ pub fn combine_tables(
     let mut combine_table: Vec<Vec<String>> = Vec::new();
 
     // Mandatory headers (coord and Reference)
-    let mut headers = vec!["coord", "Reference"];
+    let mut headers = vec!["coord", "origin", "Reference"];
     // Dynamic headers (parents and sequence IDs)
     for parent in parents.iter() {
         headers.push(parent)
@@ -668,10 +682,6 @@ pub fn combine_tables(
     for sequence_id in sequence_ids.iter() {
         headers.push(sequence_id)
     }
-    // add an extra col num_parents (so its standalone for plotting)
-    headers.push("num_parents");
-    // add an extra col genome_length (so its standalone for plotting)
-    headers.push("genome_length");
     // convert to String, &str won't work here, since we're going to create
     // table row values within a for loop scope later
     let headers = headers.into_iter().map(String::from).collect_vec();
@@ -692,13 +702,9 @@ pub fn combine_tables(
     for coord in &coords {
         // init row with empty strings for all columns
         let mut row = vec![String::new(); headers.len()];
-        // second last column is number of parents
-        row[headers.len() - 2] = parents.len().to_string();
 
         // iterate through each recombinant sample
         for (rec_i, recombination) in recombinations.iter().enumerate() {
-            // last column is genome length
-            row[headers.len() - 1] = recombination.sequence.genome_length.to_string();
             // store the recombinant barcode table
             // skip the first row (header)
             let rec_table = &recombination.table.iter().skip(1).collect_vec();
@@ -721,20 +727,25 @@ pub fn combine_tables(
             if row[0] == String::new() {
                 // Add the coord to the table row, coord is always first col (i=0)
                 row[0] = coord.to_string();
-                // Reference is always the second col (i=1)
-                let ref_base = &rec_table[row_i][1];
-                row[1] = ref_base.to_string();
 
-                // Add parents (i + 2, after coord (0) and Reference (1))
+                // Origin is second col (i=1)
+                let origin = &rec_table[row_i][1];
+                row[1] = origin.to_string();
+
+                // Reference is always the third col (i=2)
+                let ref_base = &rec_table[row_i][2];
+                row[2] = ref_base.to_string();
+
+                // Add parents, i + 3, after coord (0), Origin (1), Reference (2)
                 for (i, _parent) in parents.iter().enumerate() {
-                    let parent_base = &rec_table[row_i][i + 2];
-                    row[i + 2] = parent_base.to_string();
+                    let parent_base = &rec_table[row_i][i + 3];
+                    row[i + 3] = parent_base.to_string();
                 }
             }
 
-            // Add recombinant sample (second last coord, before Origin (last))
-            // by default, use reference base, coord (0) Reference (1)
-            let mut rec_base = rec_table[row_i][1].as_str();
+            // Add recombinant sample (last col in rec table)
+            let mut rec_base = rec_table[row_i][3 + parents.len()].as_str();
+            // convert deletions to just coords for checking
             let deletion_coords = recombination
                 .sequence
                 .deletions
@@ -752,9 +763,8 @@ pub fn combine_tables(
             }
 
             // what is the col position of this sample?
-            // first 2 are coord, ref then parents
-
-            let col_i = 2 + parents.len() + rec_i;
+            // first 3 are coord, origin, ref, then parents, then recs
+            let col_i = 3 + parents.len() + rec_i;
             row[col_i] = rec_base.to_string();
         }
 
