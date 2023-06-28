@@ -44,5 +44,7 @@ jobs:
         run: cargo run -- dataset download --output-dir dataset/sars-cov-2/latest --name sars-cov-2 --tag latest
 
       - name: run
-        run: |
-          cargo run -- run --dataset-dir dataset/sars-cov-2/latest --output-dir output/XBB.1.16 --populations "XBB.1.16,XBB.1.16.1"
+        run: cargo run -- run --dataset-dir dataset/sars-cov-2/latest --output-dir output/XBB.1.16 --populations "XBB.1.16,XBB.1.16.1"
+
+      - name: plot
+        run: cargo run -- plot --linelist output/XBB.1.16/linelist.tsv --barcodes-dir output/XBB.1.16/barcodes --output-dir output/XBB.1.16/plots

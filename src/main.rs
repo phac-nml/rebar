@@ -18,7 +18,7 @@ async fn main() -> Result<()> {
     // initialize env_logger crate for logging/verbosity level
     env_logger::init();
 
-    // check which CLI command we're running (dataset or run)
+    // check which CLI command we're running (dataset, run, plot)
     match args.command {
         // --------------------------------------------------------------------
         // Dataset
@@ -38,6 +38,11 @@ async fn main() -> Result<()> {
         // Run
         rebar::cli::Command::Run(args) => {
             rebar::run(*args)?;
+        }
+        // --------------------------------------------------------------------
+        // Plot
+        rebar::cli::Command::Plot(args) => {
+            rebar::plot(*args)?;
         }
     }
 

@@ -2,12 +2,13 @@ pub mod cli;
 pub mod dataset;
 pub mod export;
 pub mod phylogeny;
+pub mod plot;
 pub mod recombination;
 pub mod sequence;
 pub mod utils;
 
 use bio::io::fasta;
-use color_eyre::eyre::{Report, Result, WrapErr};
+use color_eyre::eyre::{eyre, Report, Result, WrapErr};
 use itertools::Itertools;
 use log::{debug, info, warn};
 use serde::Serialize;
@@ -153,6 +154,58 @@ pub fn run(args: cli::RunArgs) -> Result<(), Report> {
         utils::write_table(&barcode_table, &output_barcode_table, Some('\t'))?;
     }
 
+    info!("Done.");
+    Ok(())
+}
+
+/// Plot rebar output
+pub fn plot(args: cli::PlotArgs) -> Result<(), Report> {
+    // parse input/output paths
+    let barcodes_file = &args.barcodes.barcodes_file;
+    let barcodes_dir = &args.barcodes.barcodes_dir;
+    let output_dir = &args.output_dir;
+
+    // create output directory if it doesn't exist
+    if !args.output_dir.exists() {
+        info!("Creating output directory: {:?}", args.output_dir);
+        create_dir_all(&args.output_dir)?;
+    }
+
+    // combine files from single input and directory
+    let mut barcodes_files: Vec<std::path::PathBuf> = Vec::new();
+
+    // ------------------------------------------------------------------------
+    // Input File Specified
+
+    if let Some(barcodes_file) = barcodes_file {
+        barcodes_files.push(barcodes_file.clone());
+    }
+
+    // ------------------------------------------------------------------------
+    // Input Directory Specified
+
+    if let Some(barcodes_dir) = barcodes_dir {
+        let files = std::fs::read_dir(barcodes_dir)?;
+
+        for result in files {
+            let file_path = result?.path();
+            let file_ext = file_path.extension().ok_or_else(|| {
+                eyre!("Failed to parse file extension from {file_path:?}")
+            })?;
+            if file_ext == "tsv" {
+                barcodes_files.push(file_path.clone());
+            }
+        }
+    }
+
+    for barcodes_file in barcodes_files {
+        info!("Plotting barcodes file: {:?}", barcodes_file);
+        let output_prefix = barcodes_file.file_stem().unwrap().to_str().unwrap();
+        let output_path = output_dir.join(format!("{}.png", output_prefix));
+        plot::create(&barcodes_file, &args.linelist, &output_path)?;
+    }
+
+    info!("Done.");
     Ok(())
 }
 

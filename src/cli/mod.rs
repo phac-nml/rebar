@@ -25,12 +25,13 @@ pub struct Cli {
     pub verbosity: Verbosity,
 }
 
-/// Rebar CLI commands (dataset, run).
+/// Rebar CLI commands (dataset, run, plot).
 #[derive(Subcommand, Debug)]
 #[clap(verbatim_doc_comment)]
 pub enum Command {
     Dataset(Box<DatasetArgs>),
     Run(Box<RunArgs>),
+    Plot(Box<PlotArgs>),
 }
 
 // -----------------------------------------------------------------------------
@@ -152,6 +153,40 @@ pub struct RunInput {
     /// Input dataset population
     #[arg(long)]
     pub alignment: Option<PathBuf>,
+}
+
+// -----------------------------------------------------------------------------
+// Plot
+// -----------------------------------------------------------------------------
+
+/// Plot Rebar output from input barcodes tsv or barcodes directory.
+#[derive(Clone, Debug, Parser)]
+#[clap(verbatim_doc_comment)]
+pub struct PlotArgs {
+    #[command(flatten)]
+    pub barcodes: PlotInput,
+
+    /// Input linelist from rebar run.
+    #[clap(short = 'i', long, required = true)]
+    pub linelist: PathBuf,
+
+    /// Output directory.
+    ///
+    /// If the directory does not exist, it will be created.
+    #[clap(short = 'o', long, required = true)]
+    pub output_dir: PathBuf,
+}
+
+#[derive(Args, Clone, Debug)]
+#[group(required = true, multiple = true)]
+pub struct PlotInput {
+    /// Input barcodes tsv
+    #[arg(short = 'f', long)]
+    pub barcodes_file: Option<PathBuf>,
+
+    /// Input barcodes directory
+    #[arg(short = 'd', long)]
+    pub barcodes_dir: Option<PathBuf>,
 }
 
 // -----------------------------------------------------------------------------
