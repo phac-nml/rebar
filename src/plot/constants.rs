@@ -28,9 +28,9 @@ pub const BLACK: Source = Source::Solid(SolidSource {
     a: 255,
 });
 pub const GREY: Source = Source::Solid(SolidSource {
-    r: 196,
-    g: 196,
-    b: 196,
+    r: 225,
+    g: 225,
+    b: 225,
     a: 255,
 });
 pub const TRANSPARENT: Source = Source::Solid(SolidSource {
@@ -39,12 +39,12 @@ pub const TRANSPARENT: Source = Source::Solid(SolidSource {
     b: 0,
     a: 0,
 });
-pub const FONT_SIZE: i32 = 12;
+pub const FONT_SIZE: i32 = 20;
 // want at least 2, a single pixel causes blurry artifacts
 pub const LINE_WIDTH: f32 = 2.;
 
 // needs to be just large enough to fit single char in FONT_SIZE
-pub const X_INC: i32 = 25;
+pub const X_INC: i32 = 50;
 
 // pseudo-contants
 pub const BASIC_STROKE_STYLE: StrokeStyle = StrokeStyle {
