@@ -38,4 +38,4 @@ jobs:
           toolchain: 1.69.0
 
       - name: build
-        run: cargo build --release --all-features
+        run: cargo build --release --all-features --target ${{ matrix.arch }}
