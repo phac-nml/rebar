@@ -1,4 +1,4 @@
-name: Build
+name: Test
 
 on:
   push:
@@ -23,10 +23,10 @@ jobs:
           #- aarch64-apple-darwin
           #- aarch64-unknown-linux-gnu
           #- aarch64-unknown-linux-musl
-          - x86_64-apple-darwin
-          - x86_64-pc-windows-gnu
+          #- x86_64-apple-darwin
+          #- x86_64-pc-windows-gnu
           - x86_64-unknown-linux-gnu
-          - x86_64-unknown-linux-musl
+          #- x86_64-unknown-linux-musl
 
     steps:
       - name: checkout repo
@@ -39,3 +39,10 @@ jobs:
 
       - name: build
         run: cargo build --release --all-features
+
+      - name: dataset
+        run: cargo run -- dataset download --output-dir dataset/sars-cov-2/latest --name sars-cov-2 --tag latest
+
+      - name: run
+        run: |
+          cargo run -- run --dataset-dir dataset/sars-cov-2/latest --output-dir output/XBB.1.16 --populations "XBB.1.16,XBB.1.16.1"
