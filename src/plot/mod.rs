@@ -1,7 +1,7 @@
 pub mod constants;
-pub mod data;
 pub mod text;
 
+use crate::utils;
 use color_eyre::eyre::{eyre, Report, Result};
 use color_eyre::Help;
 use itertools::Itertools;
@@ -70,8 +70,8 @@ pub fn create(
     // Import Data
     // ------------------------------------------------------------------------
 
-    let mut linelist = data::Table::from_tsv(linelist_path)?;
-    let barcodes = data::Table::from_tsv(barcodes_path)?;
+    let mut linelist = utils::Table::from_tsv(linelist_path)?;
+    let barcodes = utils::Table::from_tsv(barcodes_path)?;
 
     // check for mandatory columns and header pos
     let genome_length_i = linelist.header_position("genome_length")?;
@@ -191,7 +191,7 @@ pub fn create(
         + (constants::X_INC * sequence_ids.len() as i32) // sequence/sample bases
         + constants::X_INC; // white-space bottom
 
-    println!("Width: {canvas_width}, Height: {canvas_height}");
+    debug!("Creating canvas: {canvas_width} x {canvas_height}");
 
     // add white space between sub boxes by making them smaller than X_INC
     let sub_box_w = constants::X_INC as f32 * 0.8;
