@@ -170,6 +170,10 @@ pub struct PlotArgs {
     #[clap(short = 'i', long, required = true)]
     pub linelist: PathBuf,
 
+    /// Dataset annotations TSV
+    #[clap(short = 'a', long, required = false)]
+    pub annotations: Option<PathBuf>,
+
     /// Output directory.
     ///
     /// If the directory does not exist, it will be created.

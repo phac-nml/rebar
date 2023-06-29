@@ -161,10 +161,15 @@ pub fn run(args: cli::RunArgs) -> Result<(), Report> {
 
 /// Plot rebar output
 pub fn plot(args: cli::PlotArgs) -> Result<(), Report> {
-    // parse input/output paths
+    // parse mandatory paths
+    let linelist = &args.linelist;
+    let output_dir = &args.output_dir;
+
+    // parse optional paths
     let barcodes_file = &args.barcodes.barcodes_file;
     let barcodes_dir = &args.barcodes.barcodes_dir;
-    let output_dir = &args.output_dir;
+    // Convert annotations from Option<PathBuf> to Option<&Path> for plot::create
+    let annotations = args.annotations.as_deref();
 
     // create output directory if it doesn't exist
     if !args.output_dir.exists() {
@@ -203,7 +208,7 @@ pub fn plot(args: cli::PlotArgs) -> Result<(), Report> {
         info!("Plotting barcodes file: {:?}", barcodes_file);
         let output_prefix = barcodes_file.file_stem().unwrap().to_str().unwrap();
         let output_path = output_dir.join(format!("{}.png", output_prefix));
-        plot::create(&barcodes_file, &args.linelist, &output_path)?;
+        plot::create(&barcodes_file, linelist, annotations, &output_path)?;
     }
 
     info!("Done.");
