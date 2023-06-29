@@ -61,17 +61,26 @@ pub fn get_base_rgba(base: &String, ref_base: &String, pal_i: usize) -> [u8; 4] 
     rgba
 }
 
+#[allow(unused_variables)]
 pub fn create(
     barcodes_path: &std::path::Path,
     linelist_path: &std::path::Path,
+    annotations_path: Option<&std::path::Path>,
     output_path: &std::path::Path,
 ) -> Result<(), Report> {
     // ------------------------------------------------------------------------
     // Import Data
     // ------------------------------------------------------------------------
 
+    // mandatory import data
     let mut linelist = utils::Table::from_tsv(linelist_path)?;
     let barcodes = utils::Table::from_tsv(barcodes_path)?;
+
+    // optional import data
+    // let mut annotations = utils::Table::new();
+    // if let Some(annotations_path) = annotations_path {
+    //     annotations = utils::Table::from_tsv(annotations_path)?
+    // }
 
     // check for mandatory columns and header pos
     let genome_length_i = linelist.header_position("genome_length")?;
@@ -306,6 +315,12 @@ pub fn create(
     }
 
     section_y += constants::X_INC * 2;
+
+    // ------------------------------------------------------------------------
+    // Annotations
+    // ------------------------------------------------------------------------
+
+    // TBD
 
     // ------------------------------------------------------------------------
     // Guide
