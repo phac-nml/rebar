@@ -1,3 +1,4 @@
+use crate::annotation::Annotations;
 use crate::phylogeny::{Phylogeny, PhylogenyExportFormat, PhylogenyImportFormat};
 use crate::sequence::{Sequence, Substitution};
 use crate::utils;
@@ -648,6 +649,15 @@ pub async fn download(name: &Name, tag: &Tag, output_dir: &Path) -> Result<(), R
     let reference_path = output_dir.join("reference.fasta");
     info!("Downloading reference: {} to {:?}", url, reference_path);
     utils::download_file(&url, &reference_path, decompress).await?;
+
+    // --------------------------------------------------------------------
+    // Create Annotations
+
+    let annotations_path = output_dir.join("annotations.tsv");
+    info!("Downloading annotations to {:?}", annotations_path);
+    let annotations = Annotations::from_name(name)?;
+    let annotations_table = annotations.to_table()?;
+    annotations_table.write(&annotations_path, Some('\t'))?;
 
     // --------------------------------------------------------------------
     // Download Populations

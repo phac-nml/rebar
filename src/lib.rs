@@ -1,3 +1,4 @@
+pub mod annotation;
 pub mod cli;
 pub mod dataset;
 pub mod export;
