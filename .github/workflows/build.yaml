@@ -37,5 +37,8 @@ jobs:
         with:
           toolchain: 1.69.0
 
+      - name: install target
+        run: rustup target add ${{ matrix.arch }}
+
       - name: build
         run: cargo build --release --all-features --target ${{ matrix.arch }}
