@@ -635,6 +635,7 @@ pub fn identify_breakpoints(
 /// Combine recombination tables.
 pub fn combine_tables(
     recombinations: &[Recombination],
+    reference: &Sequence,
 ) -> Result<Vec<Vec<String>>, Report> {
     // ------------------------------------------------------------------------
     // Input Checking
@@ -702,9 +703,20 @@ pub fn combine_tables(
     for coord in &coords {
         // init row with empty strings for all columns
         let mut row = vec![String::new(); headers.len()];
+        // get reference base directly from sequence
+        let ref_base = reference.seq[coord - 1].to_string();
+        // Reference is always the third col (i=2)
+        row[2] = ref_base.to_string();
 
-        // iterate through each recombinant sample
+        // iterate through recombinants, identifying ref, parents, seq bases
         for (rec_i, recombination) in recombinations.iter().enumerate() {
+            // get sequence base directly from sequence
+            let rec_base = recombination.sequence.seq[coord - 1].to_string();
+            // what is the col position of this sample?
+            // first 3 are coord, origin, ref, then parents, then recs
+            let col_i = 3 + parents.len() + rec_i;
+            row[col_i] = rec_base;
+
             // store the recombinant barcode table
             // skip the first row (header)
             let rec_table = &recombination.table.iter().skip(1).collect_vec();
@@ -715,57 +727,63 @@ pub fn combine_tables(
                 .map(|row| row[0].parse::<usize>().unwrap())
                 .collect_vec();
 
-            // get table index of coord, otherwise skip sample
-            let coord_search = rec_coords.iter().position(|c| c == coord);
-            let row_i = match coord_search {
-                Some(i) => i,
-                None => continue,
-            };
+            // get table index of coord
+            let row_i = rec_coords.iter().position(|c| c == coord);
 
-            // check if this is the first sample that has this coord,
-            // need to add: coord, Reference, and parents
-            if row[0] == String::new() {
-                // Add the coord to the table row, coord is always first col (i=0)
-                row[0] = coord.to_string();
+            // if this sample has the coord
+            if let Some(row_i) = row_i {
+                // if it's the first sample encountered add the ref and parent bases
+                if row[0] == String::new() {
+                    // Add the coord to the table row, coord is always first col (i=0)
+                    row[0] = coord.to_string();
 
-                // Origin is second col (i=1)
-                let origin = &rec_table[row_i][1];
-                row[1] = origin.to_string();
+                    // Origin is second col (i=1)
+                    let origin = &rec_table[row_i][1];
+                    row[1] = origin.to_string();
 
-                // Reference is always the third col (i=2)
-                let ref_base = &rec_table[row_i][2];
-                row[2] = ref_base.to_string();
-
-                // Add parents, i + 3, after coord (0), Origin (1), Reference (2)
-                for (i, _parent) in parents.iter().enumerate() {
-                    let parent_base = &rec_table[row_i][i + 3];
-                    row[i + 3] = parent_base.to_string();
+                    // Add parents, i + 3, after coord (0), Origin (1), Reference (2)
+                    for (i, _parent) in parents.iter().enumerate() {
+                        let parent_base = &rec_table[row_i][i + 3];
+                        row[i + 3] = parent_base.to_string();
+                    }
                 }
             }
 
-            // Add recombinant sample (last col in rec table)
-            let mut rec_base = rec_table[row_i][3 + parents.len()].as_str();
-            // convert deletions to just coords for checking
-            let deletion_coords = recombination
-                .sequence
-                .deletions
-                .iter()
-                .map(|del| del.coord)
-                .collect_vec();
+            // let rec_base = recombinant.sequence.seq
 
-            // missing
-            if recombination.sequence.missing.contains(coord) {
-                rec_base = "N";
-            }
-            // deletion
-            else if deletion_coords.contains(coord) {
-                rec_base = "-";
-            }
+            // // convert deletions to just coords for checking
+            // let deletion_coords = recombination
+            //     .sequence
+            //     .deletions
+            //     .iter()
+            //     .map(|del| del.coord)
+            //     .collect_vec();
+
+            // // convert subs to just coords for checking
+            // let substitution_coords = recombination
+            //     .sequence
+            //     .substitutions
+            //     .iter()
+            //     .map(|sub| sub.coord)
+            //     .collect_vec();
+
+            // // missing
+            // if recombination.sequence.missing.contains(coord) {
+            //     rec_base = "N";
+            // }
+            // // substitution
+            // else if substitutions_coords.contains(coord) {
+            //     rec_base = recombination.sequence.substitutions
+            // }
+            // // deletion
+            // else if deletion_coords.contains(coord) {
+            //     rec_base = "-";
+            // }
 
             // what is the col position of this sample?
             // first 3 are coord, origin, ref, then parents, then recs
-            let col_i = 3 + parents.len() + rec_i;
-            row[col_i] = rec_base.to_string();
+            //let col_i = 3 + parents.len() + rec_i;
+            //row[col_i] = rec_base.to_string();
         }
 
         // Add processed row to table
