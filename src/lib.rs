@@ -150,7 +150,8 @@ pub fn run(args: cli::RunArgs) -> Result<(), Report> {
             .cloned()
             .collect_vec();
         // combine all the sample barcode tables
-        let barcode_table = recombination::combine_tables(&unique_rec)?;
+        let barcode_table =
+            recombination::combine_tables(&unique_rec, &dataset.reference)?;
         let output_barcode_table = outdir_barcodes.join(format!("{unique_key}.tsv"));
         utils::write_table(&barcode_table, &output_barcode_table, Some('\t'))?;
     }
