@@ -246,8 +246,6 @@ pub fn detect_recombination<'seq>(
         }
     }
 
-    debug!("{table_rows:?}");
-
     // --------------------------------------------------------------------
     // Group Substitutions into Parental Regions
     // --------------------------------------------------------------------
