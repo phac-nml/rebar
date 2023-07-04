@@ -258,8 +258,11 @@ impl Phylogeny {
         Ok(descendants)
     }
 
+    /// Get list of ancestors from name to 'root'. Will include a vec of vecs,
+    /// because might be recombinant with multiple parents.
+    /// NOTE: Don't think this will work with 3+ parents yet, to be tested.
     pub fn get_ancestors(&self, name: &String) -> Result<Vec<Vec<String>>, Report> {
-        let mut ancestors = Vec::new();
+        let mut ancestors: Vec<Vec<String>> = Vec::new();
 
         // Copy graph so we can mutate it here with reverse
         let mut graph = self.graph.clone();
@@ -272,12 +275,36 @@ impl Phylogeny {
         // Walk to the root, there might be multiple paths (recombinants)
         let mut path_nodes = Vec::new();
         let mut prev_name = String::new();
+        // if a recombinant is in the ancestors, store all its descendants to the node name
+        let mut recombinant_desc = Vec::new();
 
         // Skip self?
-        //dfs.next(&graph);
+        // Update; don't skip self, because if self is a recombinant node (ex. XBB),
+        // skipping self will only get half of the parents (only BJ.1, skip CJ.1.1)
         while let Some(nx) = dfs.next(&graph) {
             // Get node name
             let nx_name = self.get_name(&nx).unwrap();
+
+            // check if it's same as self, then skip over
+            if nx_name == *name {
+                continue;
+            }
+
+            // get the number of edges, to indicate recombinant with multiple parents
+            let mut edges = graph.neighbors_directed(nx, petgraph::Outgoing).detach();
+            let mut num_edges = 0;
+            while let Some(_edge) = edges.next_edge(&graph) {
+                num_edges += 1;
+            }
+
+            // if we haven't topped out, add node to path
+            if prev_name != "root" {
+                path_nodes.push(nx_name.clone());
+            }
+
+            if num_edges > 1 {
+                recombinant_desc.extend(path_nodes.clone());
+            }
 
             // If the previous node name was root, that means we topped
             // out the search in the last iter, but still have alternate
@@ -287,23 +314,28 @@ impl Phylogeny {
                 path_nodes.reverse();
                 ancestors.push(path_nodes.clone());
 
-                // Initialize vector for new paths
-                //path_nodes = Vec::new();
-
-                // Recursive search, swap graph back and forth
+                // Recursive search, return graph to its original order
                 graph.reverse();
                 let nx_ancestors = self.get_ancestors(&nx_name).unwrap();
-                for ancestor_nodes in &nx_ancestors {
-                    ancestors.push(ancestor_nodes.clone());
+
+                // add recursive results, and recombinant desc before
+                for anc_path in nx_ancestors {
+                    let mut full_ancestors = anc_path.clone();
+                    // reverse the order of the rec desc
+                    let mut recombinant_desc_rev = recombinant_desc.clone();
+                    recombinant_desc_rev.reverse();
+                    // combine and update ancestors
+                    full_ancestors.extend(recombinant_desc_rev);
+                    ancestors.push(full_ancestors);
                 }
+                // put graph back in reverse mode for rest of function
                 graph.reverse();
             }
-
-            path_nodes.push(nx_name.clone());
 
             prev_name = nx_name;
         }
 
+        // the previous node was 'root' if ancestors didn't include any recombinants
         if prev_name == "root" {
             path_nodes.reverse();
             ancestors.push(path_nodes.clone());
@@ -327,11 +359,25 @@ impl Phylogeny {
         let mut ancestor_depths: HashMap<String, isize> = HashMap::new();
 
         for name in names {
-            let ancestor_paths = self.get_ancestors(name).unwrap();
+            let mut ancestor_paths = self.get_ancestors(name).unwrap();
+            // add self to all ancestor paths, because some datasets have named
+            // internal nodes, so ancestor could already be in list
+            for path in ancestor_paths.iter_mut() {
+                path.push(name.clone());
+            }
+            debug!("{name}: {ancestor_paths:?}");
+
             for ancestor_path in ancestor_paths {
                 for (depth, ancestor) in ancestor_path.iter().enumerate() {
                     let depth = depth as isize;
+                    // add ancestor if first time encountered
                     ancestor_depths.entry(ancestor.clone()).or_insert(depth);
+
+                    // recombinants can appear multiple times in ancestors, update
+                    // depth map to use deepest one
+                    if depth > ancestor_depths[ancestor] {
+                        ancestor_depths.insert(ancestor.clone(), depth);
+                    }
                     ancestor_counts
                         .entry(ancestor.clone())
                         .and_modify(|p| {
