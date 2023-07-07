@@ -2,14 +2,13 @@ pub mod parent_search;
 
 use crate::dataset::SearchResult;
 use crate::sequence::{Sequence, Substitution};
+use crate::utils;
 use color_eyre::eyre::{eyre, Report, Result};
-use csv;
 use itertools::Itertools;
 use log::debug;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 use std::default::Default;
-use std::path::Path;
 use tabled::builder::Builder;
 use tabled::settings::Style;
 
@@ -75,7 +74,7 @@ pub struct Recombination<'seq> {
     pub regions: BTreeMap<usize, Region>,
     pub genome_length: usize,
     #[serde(skip_serializing)]
-    pub table: Vec<Vec<String>>,
+    pub table: utils::Table,
 }
 
 impl<'seq> Recombination<'seq> {
@@ -87,21 +86,9 @@ impl<'seq> Recombination<'seq> {
             parents: Vec::new(),
             breakpoints: Vec::new(),
             regions: BTreeMap::new(),
-            table: Vec::new(),
+            table: utils::Table::new(),
             genome_length: 0,
         }
-    }
-
-    pub fn write_tsv(&self, output_path: &Path) -> Result<(), Report> {
-        let mut writer = csv::WriterBuilder::new()
-            .delimiter(b'\t')
-            .from_path(output_path)?;
-
-        for row in &self.table {
-            writer.write_record(row)?;
-        }
-
-        Ok(())
     }
 }
 
@@ -420,15 +407,15 @@ pub fn detect_recombination<'seq>(
     // --------------------------------------------------------------------
 
     // for the table_rows, combine header and data
-    let mut table = vec![headers];
-    table.extend(table_rows_filter);
+    let mut table = utils::Table::new();
+    table.headers = headers;
+    table.rows = table_rows_filter;
 
     // update all the attributes
     recombination.parents = region_origins;
     recombination.regions = regions_intersect;
     recombination.breakpoints = breakpoints;
     recombination.table = table;
-
     recombination.recombinant = args.best_match.recombinant.clone();
 
     // Grab name of recombinant for unique key
@@ -634,7 +621,7 @@ pub fn identify_breakpoints(
 pub fn combine_tables(
     recombinations: &[Recombination],
     reference: &Sequence,
-) -> Result<Vec<Vec<String>>, Report> {
+) -> Result<utils::Table, Report> {
     // ------------------------------------------------------------------------
     // Input Checking
 
@@ -670,27 +657,37 @@ pub fn combine_tables(
     // Construct Table Headers
 
     // final result to mutate and return
-    let mut combine_table: Vec<Vec<String>> = Vec::new();
+    let mut combine_table = utils::Table::new();
 
-    // Mandatory headers (coord and Reference)
-    let mut headers = vec!["coord", "origin", "Reference"];
-    // Dynamic headers (parents and sequence IDs)
-    for parent in parents.iter() {
-        headers.push(parent)
-    }
-    for sequence_id in sequence_ids.iter() {
-        headers.push(sequence_id)
-    }
+    // Mandatory headers
     // convert to String, &str won't work here, since we're going to create
     // table row values within a for loop scope later
-    let headers = headers.into_iter().map(String::from).collect_vec();
-    combine_table.push(headers.clone());
+    combine_table.headers = vec!["coord", "origin", "Reference"]
+        .into_iter()
+        .map(String::from)
+        .collect_vec();
+
+    // Dynamic headers (parents and sequence IDs)
+    for parent in parents {
+        combine_table.headers.push(parent.clone())
+    }
+    for sequence_id in sequence_ids {
+        combine_table.headers.push(sequence_id.clone())
+    }
+
+    // get output col idx of mandatory columns
+    let coord_output_i = combine_table.header_position("coord")?;
+    let origin_output_i = combine_table.header_position("origin")?;
+    let ref_output_i = combine_table.header_position("Reference")?;
+
+    // ------------------------------------------------------------------------
+    // Combine Coordinate Bases
 
     // identify all coords in all samples, convert from string to numeric
     // so they can be sorted nicely
     let mut coords = recombinations
         .iter()
-        .flat_map(|rec| rec.table.iter().map(|row| &row[0]).collect_vec())
+        .flat_map(|rec| rec.table.rows.iter().map(|row| &row[0]).collect_vec())
         .unique()
         .filter(|c| c.as_str() != "coord")
         .map(|c| c.parse::<usize>().unwrap())
@@ -700,92 +697,62 @@ pub fn combine_tables(
     // combine tables, row by row (coord by coord)
     for coord in &coords {
         // init row with empty strings for all columns
-        let mut row = vec![String::new(); headers.len()];
+        let mut row = vec![String::new(); combine_table.headers.len()];
         // get reference base directly from sequence
         let ref_base = reference.seq[coord - 1].to_string();
         // Reference is always the third col (i=2)
-        row[2] = ref_base.to_string();
+        row[ref_output_i] = ref_base.to_string();
 
         // iterate through recombinants, identifying ref, parents, seq bases
-        for (rec_i, recombination) in recombinations.iter().enumerate() {
+        for recombination in recombinations {
             // get sequence base directly from sequence
             let rec_base = recombination.sequence.seq[coord - 1].to_string();
-            // what is the col position of this sample?
-            // first 3 are coord, origin, ref, then parents, then recs
-            let col_i = 3 + parents.len() + rec_i;
-            row[col_i] = rec_base;
-
-            // store the recombinant barcode table
-            // skip the first row (header)
-            let rec_table = &recombination.table.iter().skip(1).collect_vec();
+            let rec_output_i =
+                combine_table.header_position(&recombination.sequence.id)?;
+            row[rec_output_i] = rec_base;
 
             // check which coords appeared in this sample
-            let rec_coords = rec_table
+            let coord_input_i = recombination.table.header_position("coord")?;
+            let rec_coords = recombination
+                .table
+                .rows
                 .iter()
-                .map(|row| row[0].parse::<usize>().unwrap())
+                .map(|row| row[coord_input_i].parse::<usize>().unwrap())
                 .collect_vec();
 
-            // get table index of coord
-            let row_i = rec_coords.iter().position(|c| c == coord);
+            // get table index of these coords
+            let row_input_i = rec_coords.iter().position(|c| c == coord);
+
+            // get table index of origin
+            let origin_input_i = recombination.table.header_position("origin")?;
 
             // if this sample has the coord
-            if let Some(row_i) = row_i {
-                // if it's the first sample encountered add the ref and parent bases
-                if row[0] == String::new() {
-                    // Add the coord to the table row, coord is always first col (i=0)
-                    row[0] = coord.to_string();
+            if let Some(row_input_i) = row_input_i {
+                // if it's the first sample encountered add the coord, origin,
+                // Reference base and parent bases
+                if row[coord_output_i] == String::new() {
+                    // Add the coord to the output table
+                    row[coord_output_i] = coord.to_string();
 
-                    // Origin is second col (i=1)
-                    let origin = &rec_table[row_i][1];
-                    row[1] = origin.to_string();
+                    // add the origin to the output table
+                    let origin = &recombination.table.rows[row_input_i][origin_input_i];
+                    row[origin_output_i] = origin.to_string();
 
-                    // Add parents, i + 3, after coord (0), Origin (1), Reference (2)
-                    for (i, _parent) in parents.iter().enumerate() {
-                        let parent_base = &rec_table[row_i][i + 3];
-                        row[i + 3] = parent_base.to_string();
+                    // Add parents bases to the output table
+                    for parent in parents {
+                        let parent_input_i =
+                            recombination.table.header_position(parent)?;
+                        let parent_output_i = combine_table.header_position(parent)?;
+                        let parent_base =
+                            &recombination.table.rows[row_input_i][parent_input_i];
+                        row[parent_output_i] = parent_base.to_string();
                     }
                 }
             }
-
-            // let rec_base = recombinant.sequence.seq
-
-            // // convert deletions to just coords for checking
-            // let deletion_coords = recombination
-            //     .sequence
-            //     .deletions
-            //     .iter()
-            //     .map(|del| del.coord)
-            //     .collect_vec();
-
-            // // convert subs to just coords for checking
-            // let substitution_coords = recombination
-            //     .sequence
-            //     .substitutions
-            //     .iter()
-            //     .map(|sub| sub.coord)
-            //     .collect_vec();
-
-            // // missing
-            // if recombination.sequence.missing.contains(coord) {
-            //     rec_base = "N";
-            // }
-            // // substitution
-            // else if substitutions_coords.contains(coord) {
-            //     rec_base = recombination.sequence.substitutions
-            // }
-            // // deletion
-            // else if deletion_coords.contains(coord) {
-            //     rec_base = "-";
-            // }
-
-            // what is the col position of this sample?
-            // first 3 are coord, origin, ref, then parents, then recs
-            //let col_i = 3 + parents.len() + rec_i;
-            //row[col_i] = rec_base.to_string();
         }
 
         // Add processed row to table
-        combine_table.push(row);
+        combine_table.rows.push(row);
     }
 
     Ok(combine_table)

@@ -1,6 +1,6 @@
 use crate::dataset;
 use crate::utils;
-use color_eyre::Report;
+use color_eyre::eyre::{eyre, Report, Result};
 use csv;
 use itertools::Itertools;
 use log::{debug, info};
@@ -8,7 +8,6 @@ use petgraph::dot::{Config, Dot};
 use petgraph::graph::{Graph, NodeIndex};
 use petgraph::visit::Dfs;
 use petgraph::Direction;
-//use serde;
 use serde::{Deserialize, Serialize};
 use serde_json;
 use std::collections::HashMap;
@@ -241,9 +240,7 @@ impl Phylogeny {
         let mut descendants = Vec::new();
 
         // Find the node that matches the name
-        let node = self
-            .get_node(name)
-            .unwrap_or_else(|| panic!("Couldn't find node name in phylogeny: {}", name));
+        let node = self.get_node(name)?;
         // Construct a depth-first-search (Dfs)
         let mut dfs = Dfs::new(&self.graph, node);
         // Skip over self?
@@ -258,92 +255,84 @@ impl Phylogeny {
         Ok(descendants)
     }
 
-    /// Get list of ancestors from name to 'root'. Will include a vec of vecs,
-    /// because might be recombinant with multiple parents.
+    /// Get parent names of node
+    pub fn get_parents(&self, name: &String) -> Result<Vec<String>, Report> {
+        let mut parents = Vec::new();
+
+        let node = self.get_node(name)?;
+        let mut neighbors = self
+            .graph
+            .neighbors_directed(node, Direction::Incoming)
+            .detach();
+        while let Some(parent_node) = neighbors.next_node(&self.graph) {
+            let parent_name = self.get_name(&parent_node).unwrap();
+            parents.push(parent_name);
+        }
+
+        Ok(parents)
+    }
+
+    /// Get all paths from the origin node to the destination node, always traveling
+    /// in the specified direction (Incoming towards root, Outgoing towards tips)/
+    /// petgraph must have this already implemented, but I can't find it in docs
+    pub fn get_paths(
+        &self,
+        origin: &String,
+        dest: &String,
+        direction: petgraph::Direction,
+    ) -> Result<Vec<Vec<String>>, Report> {
+        // container to hold the paths we've found, is a vector of vectors
+        // because there might be recombinants with multiple paths
+        let mut paths: Vec<Vec<String>> = Vec::new();
+
+        // check that the origin and dest actually exist in the graph
+        let origin_node = self.get_node(origin)?;
+        let _dest_node = self.get_node(dest)?;
+
+        // Check if we've reached the destination
+        if origin == dest {
+            paths.push(vec![origin.clone()]);
+        }
+        // Otherwise, continue the search!
+        else {
+            let mut neighbors = self
+                .graph
+                .neighbors_directed(origin_node, direction)
+                .detach();
+            while let Some(parent_node) = neighbors.next_node(&self.graph) {
+                // convert the parent graph index to a string name
+                let parent_name = self.get_name(&parent_node).unwrap();
+
+                // recursively get path of each parent to the destination
+                let mut parent_paths = self.get_paths(&parent_name, dest, direction)?;
+
+                // prepend the origin to the paths
+                parent_paths
+                    .iter_mut()
+                    .for_each(|p| p.insert(0, origin.clone()));
+
+                // update the paths container to return at end of function
+                for p in parent_paths {
+                    paths.push(p);
+                }
+            }
+        }
+
+        Ok(paths)
+    }
+
     /// NOTE: Don't think this will work with 3+ parents yet, to be tested.
     pub fn get_ancestors(&self, name: &String) -> Result<Vec<Vec<String>>, Report> {
-        let mut ancestors: Vec<Vec<String>> = Vec::new();
+        let mut paths = self.get_paths(name, &"root".to_string(), petgraph::Incoming)?;
 
-        // Copy graph so we can mutate it here with reverse
-        let mut graph = self.graph.clone();
+        // remove self name (first element) from paths, and then reverse order
+        // so that it's ['root'.... name]
+        paths.iter_mut().for_each(|p| {
+            p.remove(0);
+            p.reverse();
+        });
 
-        // Construct a backwards depth-first-search (Dfs)
-        graph.reverse();
-        let node = self.get_node(name).unwrap();
-        let mut dfs = Dfs::new(&graph, node);
-
-        // Walk to the root, there might be multiple paths (recombinants)
-        let mut path_nodes = Vec::new();
-        let mut prev_name = String::new();
-        // if a recombinant is in the ancestors, store all its descendants to the node name
-        let mut recombinant_desc = Vec::new();
-
-        // Skip self?
-        // Update; don't skip self, because if self is a recombinant node (ex. XBB),
-        // skipping self will only get half of the parents (only BJ.1, skip CJ.1.1)
-        while let Some(nx) = dfs.next(&graph) {
-            // Get node name
-            let nx_name = self.get_name(&nx).unwrap();
-
-            // check if it's same as self, then skip over
-            if nx_name == *name {
-                continue;
-            }
-
-            // get the number of edges, to indicate recombinant with multiple parents
-            let mut edges = graph.neighbors_directed(nx, petgraph::Outgoing).detach();
-            let mut num_edges = 0;
-            while let Some(_edge) = edges.next_edge(&graph) {
-                num_edges += 1;
-            }
-
-            // if we haven't topped out, add node to path
-            if prev_name != "root" {
-                path_nodes.push(nx_name.clone());
-            }
-
-            if num_edges > 1 {
-                recombinant_desc.extend(path_nodes.clone());
-            }
-
-            // If the previous node name was root, that means we topped
-            // out the search in the last iter, but still have alternate
-            // recombinant paths to deal with
-            if prev_name == "root" {
-                // Add the topped out path to our list of paths
-                path_nodes.reverse();
-                ancestors.push(path_nodes.clone());
-
-                // Recursive search, return graph to its original order
-                graph.reverse();
-                let nx_ancestors = self.get_ancestors(&nx_name).unwrap();
-
-                // add recursive results, and recombinant desc before
-                for anc_path in nx_ancestors {
-                    let mut full_ancestors = anc_path.clone();
-                    // reverse the order of the rec desc
-                    let mut recombinant_desc_rev = recombinant_desc.clone();
-                    recombinant_desc_rev.reverse();
-                    // combine and update ancestors
-                    full_ancestors.extend(recombinant_desc_rev);
-                    ancestors.push(full_ancestors);
-                }
-                // put graph back in reverse mode for rest of function
-                graph.reverse();
-            }
-
-            prev_name = nx_name;
-        }
-
-        // the previous node was 'root' if ancestors didn't include any recombinants
-        if prev_name == "root" {
-            path_nodes.reverse();
-            ancestors.push(path_nodes.clone());
-        }
-
-        // Restore original graph order
-        graph.reverse();
-        Ok(ancestors)
+        Ok(paths)
     }
 
     /// Identify the most recent common ancestor shared between all node names.
@@ -359,13 +348,12 @@ impl Phylogeny {
         let mut ancestor_depths: HashMap<String, isize> = HashMap::new();
 
         for name in names {
-            let mut ancestor_paths = self.get_ancestors(name).unwrap();
-            // add self to all ancestor paths, because some datasets have named
-            // internal nodes, so ancestor could already be in list
-            for path in ancestor_paths.iter_mut() {
-                path.push(name.clone());
-            }
-            debug!("{name}: {ancestor_paths:?}");
+            // directly use the get_paths method over get_ancestors, because
+            // get_ancestors removes the self node name from the list,
+            // but some datasets have named internal nodes, so a listed
+            // node could be a common ancestor!
+            let ancestor_paths =
+                self.get_paths(name, &"root".to_string(), petgraph::Incoming)?;
 
             for ancestor_path in ancestor_paths {
                 for (depth, ancestor) in ancestor_path.iter().enumerate() {
@@ -408,13 +396,13 @@ impl Phylogeny {
         Ok(common_ancestor)
     }
 
-    pub fn get_node(&self, name: &String) -> Option<NodeIndex> {
+    pub fn get_node(&self, name: &String) -> Result<NodeIndex, Report> {
         if self.lookup.contains_key(name) {
             let node = self.lookup[name];
-            return Some(node);
+            Ok(node)
+        } else {
+            Err(eyre!("Node {name} is not found in the phylogeny."))
         }
-
-        None
     }
 
     pub fn get_name(&self, node: &NodeIndex) -> Option<String> {
@@ -542,8 +530,6 @@ pub async fn create_sarscov2_graph_data(
         }
 
         let parents = get_lineage_parents(lineage.clone(), &alias_key).unwrap();
-
-        //debug!("Lineage: {lineage}; Parents: {parents:?}");
 
         graph_order.push(lineage.to_string().clone());
         graph_data.insert(lineage.clone(), parents.clone());
