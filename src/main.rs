@@ -1,12 +1,12 @@
 use clap::Parser; // CLI argument parsing
-use color_eyre::eyre::Result; // colorized logging and error handling
+use color_eyre::eyre::{Report, Result}; // colorized logging and error handling
 
 #[tokio::main]
-async fn main() -> Result<()> {
+async fn main() -> Result<(), Report> {
     // Parse CLI parameters
     let args = rebar::cli::Cli::parse();
 
-    // --------------------------------------------------------------------
+    // ------------------------------------------------------------------------
     // CLI Setup
 
     // initialize color_eyre crate for colorized logs

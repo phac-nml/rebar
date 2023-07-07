@@ -58,16 +58,16 @@ pub fn search_all<'seq>(
         return Ok((parents, recombination));
     }
 
-    // by default, include all dataset populations
-    let mut include_populations = args
-        .dataset
-        .populations
-        .keys()
-        .map(|pop| pop.to_owned())
-        .collect::<Vec<_>>();
-
-    // by default, don't exclude any populations
+    // don't restrict which populations are excluded/included
+    // by default, dataset.search will look through all populations
     let mut exclude_populations = Vec::new();
+    let mut include_populations = Vec::new();
+
+    // For known recombinants, prioritize designated parent
+    let recombinant = &args.best_match.recombinant;
+    if let Some(recombinant) = recombinant {
+        include_populations = args.dataset.phylogeny.get_parents(recombinant)?;
+    }
 
     // Primary parent
     let parent_primary =
@@ -76,7 +76,7 @@ pub fn search_all<'seq>(
 
     // Secondary parents ( 2 : max_parents)
     // this function consumes `parents`, modifies it, then returns it
-    (parents, recombination) = search_secondary(args.sequence, parents, &args)?;
+    (parents, recombination) = search_secondary(parents, &args)?;
 
     Ok((parents, recombination))
 }
@@ -115,15 +115,20 @@ pub fn search_primary(
 
 // Search for the secondary recombination parent(s).
 pub fn search_secondary<'seq>(
-    sequence: &'seq Sequence,
     mut parents: Vec<SearchResult>,
     args: &Args<'_, 'seq, '_>,
 ) -> Result<(Vec<SearchResult>, Recombination<'seq>), Report> {
-    let mut recombination = Recombination::new(sequence);
-
+    let mut recombination = Recombination::new(args.sequence);
     let mut num_iter = 0;
     let mut num_parents = 1;
     let mut exclude_populations = Vec::new();
+
+    // For known recombinants, prioritize designated parents
+    let mut designated_parents = Vec::new();
+    let recombinant = &args.best_match.recombinant;
+    if let Some(recombinant) = recombinant {
+        designated_parents = args.dataset.phylogeny.get_parents(recombinant)?;
+    }
 
     loop {
         // --------------------------------------------------------------------
@@ -161,7 +166,8 @@ pub fn search_secondary<'seq>(
             .collect_vec();
 
         // identify conflict_alt (alt base) in sequence not resolved by any parent
-        let conflict_alt = sequence
+        let conflict_alt = args
+            .sequence
             .substitutions
             .iter()
             .filter(|sub| !parent_substitutions.contains(sub))
@@ -254,6 +260,12 @@ pub fn search_secondary<'seq>(
                 .filter(|pop| !exclude_populations.contains(pop))
                 .collect::<Vec<_>>();
             exclude_populations.extend(ancestors_to_exclude);
+
+            // filter designated parents to prioritize search
+            designated_parents = designated_parents
+                .into_iter()
+                .filter(|p| *p != parent.consensus_population)
+                .collect_vec();
         }
 
         // --------------------------------------------------------------------
@@ -312,11 +324,23 @@ pub fn search_secondary<'seq>(
         let coordinates_range =
             (coordinates_min.to_owned()..coordinates_max.to_owned()).collect_vec();
 
-        let search_result = args.dataset.search(
-            sequence,
-            Some(&include_populations),
-            Some(&coordinates_range),
-        )?;
+        // prioritize known/designated parents first
+        let search_result = if !designated_parents.is_empty() {
+            debug!("Prioritizing remaining designated parents: {designated_parents:?}");
+            args.dataset.search(
+                args.sequence,
+                Some(&designated_parents),
+                Some(&coordinates_range),
+            )?
+        }
+        // otherwise prioritize populations that solve conflicts
+        else {
+            args.dataset.search(
+                args.sequence,
+                Some(&include_populations),
+                Some(&coordinates_range),
+            )?
+        };
         recombination = detect_recombination(&parents, Some(&search_result), args)?;
 
         // if the recombination search succeeded,
@@ -329,11 +353,23 @@ pub fn search_secondary<'seq>(
         // --------------------------------------------------------------------
         // Search Dataset #2 (Specific Listed Coordinates)
 
-        let search_result = args.dataset.search(
-            sequence,
-            Some(&include_populations),
-            Some(&coordinates),
-        )?;
+        // prioritize known/designated parents first
+        let search_result = if !designated_parents.is_empty() {
+            debug!("Prioritizing remaining designated parents: {designated_parents:?}");
+            args.dataset.search(
+                args.sequence,
+                Some(&designated_parents),
+                Some(&coordinates),
+            )?
+        }
+        // otherwise prioritize populations that solve conflicts
+        else {
+            args.dataset.search(
+                args.sequence,
+                Some(&include_populations),
+                Some(&coordinates),
+            )?
+        };
         recombination = detect_recombination(&parents, Some(&search_result), args)?;
 
         // if the recombination search succeeded,

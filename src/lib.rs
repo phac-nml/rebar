@@ -10,13 +10,21 @@ pub mod utils;
 
 use bio::io::fasta;
 use color_eyre::eyre::{eyre, Report, Result, WrapErr};
+use indicatif::ParallelProgressIterator;
 use itertools::Itertools;
 use log::{debug, info, warn};
+use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 use serde::Serialize;
 use std::fs::create_dir_all;
 
 /// Run rebar on input alignment or dataset population
 pub fn run(args: cli::RunArgs) -> Result<(), Report> {
+    // initialize threads for rayon parallelization
+    rayon::ThreadPoolBuilder::new()
+        .num_threads(args.threads)
+        .build_global()
+        .unwrap();
+
     // create output directory if it doesn't exist
     if !args.output_dir.exists() {
         info!("Creating output directory: {:?}", args.output_dir);
@@ -28,7 +36,7 @@ pub fn run(args: cli::RunArgs) -> Result<(), Report> {
     //   and optionally a phylogenetic representation.
     let dataset = dataset::load(&args.dataset_dir, args.mask)?;
 
-    // init a containter to hold query sequences, either dataset
+    // init a container to hold query sequences, either dataset
     // populations or sequences from an input alignment
     let mut sequences = Vec::new();
 
@@ -102,6 +110,14 @@ pub fn run(args: cli::RunArgs) -> Result<(), Report> {
     let mut best_matches = Vec::new();
     let mut recombinations = Vec::new();
 
+    let v: Vec<_> = (0..100000).collect();
+    let v2: Vec<_> = v
+        .par_iter()
+        .progress_count(v.len() as u64)
+        .map(|i| i + 1)
+        .collect();
+    assert_eq!(v2[0], 1);
+
     for sequence in &sequences {
         // find the best match in the dataset to the full sequence
         let best_match = dataset.search(sequence, None, None)?;
@@ -152,8 +168,8 @@ pub fn run(args: cli::RunArgs) -> Result<(), Report> {
         // combine all the sample barcode tables
         let barcode_table =
             recombination::combine_tables(&unique_rec, &dataset.reference)?;
-        let output_barcode_table = outdir_barcodes.join(format!("{unique_key}.tsv"));
-        utils::write_table(&barcode_table, &output_barcode_table, Some('\t'))?;
+        let barcode_table_path = outdir_barcodes.join(format!("{unique_key}.tsv"));
+        barcode_table.write(&barcode_table_path, Some('\t'))?;
     }
 
     info!("Done.");
