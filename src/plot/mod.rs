@@ -77,13 +77,15 @@ pub fn create(
     let barcodes = utils::Table::from_tsv(barcodes_path)?;
 
     // optional import data
-    // let mut annotations = utils::Table::new();
-    // if let Some(annotations_path) = annotations_path {
-    //     annotations = utils::Table::from_tsv(annotations_path)?
-    // }
+    let mut annotations = utils::Table::new();
+    if let Some(annotations_path) = annotations_path {
+        annotations = utils::Table::from_tsv(annotations_path)?
+    }
 
     // check for mandatory columns and header pos
     let genome_length_i = linelist.header_position("genome_length")?;
+    let breakpoints_i = linelist.header_position("breakpoints")?;
+
     let coord_i = barcodes.header_position("coord")?;
     let origin_i = barcodes.header_position("origin")?;
     let reference_i = barcodes.header_position("Reference")?;
@@ -175,49 +177,51 @@ pub fn create(
         .ok_or_else(|| eyre!("Failed to calculated the maximum sequence ID length"))?;
 
     let section_gap = constants::X_INC;
-    let label_gap = constants::X_INC / 2;
+    let label_gap = constants::X_INC / 2.;
 
     // this is the x position each section will start at
     let section_x = constants::X_INC             // white-space left
-        + longest_sequence_id                    // labels on left-hand-side
+        + longest_sequence_id as f32             // labels on left-hand-side
         + label_gap                              // gap between labels and sections
         + constants::X_INC; // white-space buffer labels-sections
 
     let canvas_width = section_x                 // x coord of section start
-        + (num_coords as i32 * constants::X_INC) // coord boxes
+        + (num_coords as f32 * constants::X_INC) // coord boxes
         + constants::X_INC; // white-space right
 
     let mut section_y = constants::X_INC; // white-space top
 
-    let canvas_height = section_y                        // white-space top
-        + (constants::X_INC * 2)                         // parent regions and text labels
-        + section_gap                                    // section gap
-        + constants::X_INC                               // guide section
-        + section_gap                                    // section gap
+    let mut canvas_height = constants::X_INC             // white-space top
+        + (constants::X_INC * 2.) + section_gap           // parent regions and text labels
+        + constants::X_INC  + section_gap                // guide section
         + constants::X_INC                               // reference bases
-        + (constants::X_INC * parents.len() as i32)      // parent bases
+        + (constants::X_INC * parents.len() as f32)      // parent bases
         + section_gap                                    // gap between parents and samples
-        + (constants::X_INC * sequence_ids.len() as i32) // sequence/sample bases
+        + (constants::X_INC * sequence_ids.len() as f32) // sequence/sample bases
         + constants::X_INC; // white-space bottom
+
+    // add extra height for optional annotations section
+    if !annotations.rows.is_empty() {
+        canvas_height += (constants::X_INC * 2.) + section_gap
+    }
 
     debug!("Creating canvas: {canvas_width} x {canvas_height}");
 
     // add white space between sub boxes by making them smaller than X_INC
-    let sub_box_w = constants::X_INC as f32 * 0.8;
+    let sub_box_w = constants::X_INC * 0.8;
 
     // convert genomic coordinates to pixels, based on coords
-    let pixels_per_base =
-        (num_coords as f32 * constants::X_INC as f32) / genome_length as f32;
+    let pixels_per_base = (num_coords as f32 * constants::X_INC) / genome_length as f32;
 
     // ------------------------------------------------------------------------
     // Background
     // ------------------------------------------------------------------------
 
-    let mut canvas = DrawTarget::new(canvas_width, canvas_height);
+    let mut canvas = DrawTarget::new(canvas_width as i32, canvas_height as i32);
 
     // draw white background
     let mut background = PathBuilder::new();
-    background.rect(0., 0., canvas_width as f32, canvas_height as f32);
+    background.rect(0., 0., canvas_width, canvas_height);
     let background = background.finish();
     canvas.fill(&background, &constants::WHITE, &DrawOptions::new());
 
@@ -227,17 +231,27 @@ pub fn create(
 
     debug!("Drawing genomic coordinates guide.");
 
-    let section_label = String::from("Regions");
     // draw section label
-    let text_properties = text::TextProps {
-        text: section_label,
-        size: constants::FONT_SIZE,
-    };
-    let text_buffer = text::text(&text_properties, text_color);
-    let text_x = (section_x - label_gap - text_buffer.width) as f32;
-    let text_y = section_y as f32 + (constants::X_INC as f32 * 1.5)
-        - (text_buffer.height as f32 / 2.);
-    text_buffer.render(&mut canvas, Point::new(text_x, text_y));
+    let (label, x) = (String::from("Regions"), section_x);
+    let y = section_y + constants::X_INC;
+    draw_section_label(&mut canvas, label, text_color, x, y, label_gap)?;
+
+    // draw grey box as background (with cross hatching eventually)
+    let box_x = section_x;
+    let box_y = section_y + constants::X_INC;
+    let box_w = num_coords as f32 * constants::X_INC;
+    let box_h = constants::X_INC;
+
+    let draw_x = vec![box_x, box_x, box_x + box_w, box_x + box_w];
+    let draw_y = vec![box_y, box_y + box_h, box_y + box_h, box_y];
+    draw_polygon(
+        &mut canvas,
+        &draw_x,
+        &draw_y,
+        &constants::GREY,
+        &constants::TRANSPARENT,
+        &constants::BASIC_STROKE_STYLE,
+    )?;
 
     // iterate over parental regions in linelist
     let regions_i = linelist.header_position("regions")?;
@@ -268,11 +282,11 @@ pub fn create(
 
         // draw the region box, leave X_INC gap at top for parent text labels
         // convert genomic coordinates to pixel coordinates
-        let box_x = section_x as f32 + (region_start as f32 * pixels_per_base);
+        let box_x = section_x + (region_start as f32 * pixels_per_base);
         let box_w = (region_end - region_start) as f32 * pixels_per_base;
 
-        let box_y = (section_y + constants::X_INC) as f32;
-        let box_h = constants::X_INC as f32;
+        let box_y = section_y + constants::X_INC;
+        let box_h = constants::X_INC;
 
         // region text label
         let text_properties = text::TextProps {
@@ -281,7 +295,7 @@ pub fn create(
         };
         let text_buffer = text::text(&text_properties, text_color);
         let text_x = (box_x + (box_w / 2.)) - ((text_buffer.width / 2) as f32);
-        let text_y = section_y as f32;
+        let text_y = section_y;
         text_buffer.render(&mut canvas, Point::new(text_x, text_y));
 
         // region text line
@@ -314,39 +328,26 @@ pub fn create(
         )?;
     }
 
-    section_y += constants::X_INC * 2;
-
-    // ------------------------------------------------------------------------
-    // Annotations
-    // ------------------------------------------------------------------------
-
-    // TBD
+    section_y += constants::X_INC * 2.;
 
     // ------------------------------------------------------------------------
     // Guide
     // ------------------------------------------------------------------------
 
-    debug!("Drawing coordinate guide.");
+    debug!("Drawing genomic guide.");
 
     section_y += section_gap;
 
     // draw section label
-    let section_label = String::from("Guide");
-    let text_properties = text::TextProps {
-        text: section_label,
-        size: constants::FONT_SIZE,
-    };
-    let text_buffer = text::text(&text_properties, text_color);
-    let text_x = (section_x - label_gap - text_buffer.width) as f32;
-    let text_y = section_y as f32 + (constants::X_INC as f32 / 2.)
-        - (text_buffer.height as f32 / 2.);
-    text_buffer.render(&mut canvas, Point::new(text_x, text_y));
+    let (label, x) = (String::from("Genome"), section_x);
+    let y = section_y + constants::X_INC;
+    draw_section_label(&mut canvas, label, text_color, x, y, label_gap)?;
 
     // draw grey box
-    let box_x = section_x as f32;
-    let box_y = section_y as f32;
-    let box_w = num_coords as f32 * constants::X_INC as f32;
-    let box_h = constants::X_INC as f32;
+    let box_x = section_x;
+    let box_y = section_y + constants::X_INC;
+    let box_w = num_coords as f32 * constants::X_INC;
+    let box_h = constants::X_INC;
 
     let draw_x = vec![box_x, box_x, box_x + box_w, box_x + box_w];
     let draw_y = vec![box_y, box_y + box_h, box_y + box_h, box_y];
@@ -359,14 +360,92 @@ pub fn create(
         &constants::BASIC_STROKE_STYLE,
     )?;
 
+    // ------------------------------------------------------------------------
+    // Annotations (Optional)
+
+    // special pallete for annotations, that interleaves dark and light
+    // skip colors reserverd for parents, x 2 for interleaved palette
+    // todo!() raise error if no colors left, parents consumed it all
+    let annot_palette = constants::PALETTE_DARK
+        .iter()
+        .zip(constants::PALETTE_LIGHT.iter())
+        .skip(parents.len())
+        .flat_map(|(dark, light)| vec![*dark, *light])
+        .collect_vec();
+
+    for (i, row) in annotations.rows.iter().enumerate() {
+        let abbrev_i = annotations.header_position("abbreviation")?;
+        let start_i = annotations.header_position("start")?;
+        let end_i = annotations.header_position("end")?;
+
+        let abbreviation = &annotations.rows[i][abbrev_i];
+        let start = annotations.rows[i][start_i].parse::<usize>()?;
+        let end = annotations.rows[i][end_i].parse::<usize>()?;
+
+        // use colors from the color palette that are not reserved for pops
+        let mut color_i = i;
+        if color_i >= annot_palette.len() {
+            color_i -= annot_palette.len();
+        }
+        let [r, g, b, a] = annot_palette[color_i];
+        let color = Source::Solid(SolidSource { r, g, b, a });
+        // draw the region box, leave X_INC gap at top for annotation labels
+        // convert genomic coordinates to pixel coordinates
+        let box_x = section_x + (start as f32 * pixels_per_base);
+        let box_y = section_y + constants::X_INC;
+        let box_w = (end - start) as f32 * pixels_per_base;
+        let box_h = constants::X_INC;
+        let draw_x = vec![box_x, box_x, box_x + box_w, box_x + box_w];
+        let draw_y = vec![box_y, box_y + box_h, box_y + box_h, box_y];
+
+        draw_polygon(
+            &mut canvas,
+            &draw_x,
+            &draw_y,
+            &color,
+            &constants::TRANSPARENT,
+            &constants::BASIC_STROKE_STYLE,
+        )?;
+
+        // text label
+        let text_properties = text::TextProps {
+            text: abbreviation.to_string(),
+            size: constants::FONT_SIZE - 5,
+        };
+        let text_buffer = text::text(&text_properties, text_color);
+        let text_x = (box_x + (box_w / 2.)) - ((text_buffer.width / 2) as f32);
+        // interleave height of adjacent labels
+        let text_y = if let 0 = i % 2 {
+            section_y
+        } else {
+            section_y - (constants::X_INC / 2.)
+        };
+        text_buffer.render(&mut canvas, Point::new(text_x, text_y));
+
+        // text line
+        let draw_x = vec![box_x + (box_w / 2.), box_x + (box_w / 2.)];
+        let draw_y = vec![box_y, text_y + text_buffer.height as f32];
+        draw_polygon(
+            &mut canvas,
+            &draw_x,
+            &draw_y,
+            &constants::TRANSPARENT,
+            &constants::BLACK,
+            &constants::BASIC_STROKE_STYLE,
+        )?;
+    }
+
+    // ------------------------------------------------------------------------
+    // Sub markers
+
     // draw coord black lines
     for coord in coords.iter() {
         // convert genomic coord to numeric then to pixels
         let coord = coord.parse::<f32>().unwrap();
 
-        let line_x = section_x as f32 + (coord * pixels_per_base);
-        let line_y1 = section_y as f32;
-        let line_y2 = (section_y + constants::X_INC) as f32;
+        let line_x = section_x + (coord * pixels_per_base);
+        let line_y1 = section_y + constants::X_INC;
+        let line_y2 = section_y + constants::X_INC * 2.;
         let draw_x = vec![line_x, line_x];
         let draw_y = vec![line_y1, line_y2];
         draw_polygon(
@@ -379,7 +458,205 @@ pub fn create(
         )?;
     }
 
-    section_y += constants::X_INC;
+    section_y += constants::X_INC * 2.;
+
+    // ------------------------------------------------------------------------
+    // Guide to Sub Polyons
+    // ------------------------------------------------------------------------
+
+    // draw coord black lines
+    for (i, coord) in coords.iter().enumerate() {
+        // convert genomic coord to numeric then to pixels
+        let coord = coord.parse::<f32>().unwrap();
+
+        // x coordinate for top of triangle, connects with guide
+        let guide_x = section_x + (coord * pixels_per_base);
+        let guide_y = section_y;
+        // x coordinates for bottom of triangle, connects with sub bases
+        // adjust based on sub_box_w
+        let sub_x_buff = (constants::X_INC - sub_box_w) / 2.;
+        let sub_x1 = section_x + (i as f32 * constants::X_INC) + sub_x_buff;
+        let sub_x2 = section_x + ((i + 1) as f32 * (constants::X_INC)) - sub_x_buff;
+        let sub_y1 = section_y + (constants::X_INC * 3.) + sub_x_buff;
+        let sub_y2 = sub_y1;
+        // Draw triangle from guide to top row of subs
+        let draw_x = vec![guide_x, sub_x1, sub_x2];
+        let draw_y = vec![guide_y, sub_y1, sub_y2];
+
+        draw_polygon(
+            &mut canvas,
+            &draw_x,
+            &draw_y,
+            &constants::LIGHT_GREY,
+            &constants::TRANSPARENT,
+            &constants::BASIC_STROKE_STYLE,
+        )?;
+    }
+
+    // ------------------------------------------------------------------------
+    // Axis coordinates (on top of sub triangle polygons)
+
+    // check how long the longest coord label is (in pixels)
+    let longest_coord = coords
+        .iter()
+        .map(|c| text::TextProps {
+            text: (*c).clone(),
+            size: constants::FONT_SIZE - 5,
+        })
+        .map(|text_props| text::text(&text_props, text_color))
+        .map(|text| text.width)
+        .max()
+        .ok_or_else(|| eyre!("Failed to calculated the maximum coord length"))?;
+    // how many x_inc are needed for it, add 1 extra x_inc for buffer
+    let longest_coord_x_inc = (longest_coord as f32 / constants::X_INC).ceil() + 1.0;
+    // maximum number of coord labels we can fit
+    let max_num_coords = num_coords as f32 / longest_coord_x_inc;
+    // calculate interval, round up to next pretty number (ex. 500)
+    let coord_interval =
+        (((genome_length as f32 / max_num_coords) / 500.).ceil() * 500.) as usize;
+
+    let mut ax_coords = (0..genome_length).step_by(coord_interval).collect_vec();
+    ax_coords.push(genome_length);
+
+    for coord in ax_coords {
+        // convert genomic units to pixel coords
+        let coord_x = section_x + (coord as f32 * pixels_per_base);
+
+        // draw line
+        let line_y1 = section_y;
+        let line_y2 = line_y1 + (constants::X_INC / 4.);
+        let draw_x = vec![coord_x, coord_x];
+        let draw_y = vec![line_y1, line_y2];
+        draw_polygon(
+            &mut canvas,
+            &draw_x,
+            &draw_y,
+            &constants::TRANSPARENT,
+            &constants::BLACK,
+            &constants::BASIC_STROKE_STYLE,
+        )?;
+
+        // draw text
+        let text_properties = text::TextProps {
+            text: coord.to_string(),
+            size: constants::FONT_SIZE - 5,
+        };
+        let text_buffer = text::text(&text_properties, text_color);
+        let text_x = coord_x - (text_buffer.width / 2) as f32;
+        let text_y = line_y2;
+        text_buffer.render(&mut canvas, Point::new(text_x, text_y));
+    }
+
+    // ------------------------------------------------------------------------
+    // Breakpoints
+    // ------------------------------------------------------------------------
+
+    // draw section label
+    let (label, x) = (String::from("Breakpoints"), section_x);
+    let y = section_y + constants::X_INC;
+    draw_section_label(&mut canvas, label, text_color, x, y, label_gap)?;
+
+    let breakpoints = linelist
+        .rows
+        .iter()
+        .flat_map(|row| row[breakpoints_i].split(','))
+        .unique()
+        .collect_vec();
+
+    let dash_stroke_style: StrokeStyle = StrokeStyle {
+        cap: LineCap::Square,
+        join: LineJoin::Miter,
+        width: constants::LINE_WIDTH,
+        miter_limit: 2.,
+        dash_array: vec![8., 20.],
+        dash_offset: 0.,
+    };
+
+    for (i, breakpoint) in breakpoints.iter().enumerate() {
+        // get the region start/end
+        let breakpoint_parts = breakpoint.split('-').collect_vec();
+        let prev_region_end = breakpoint_parts[0].parse::<f32>()? - 1.;
+        let next_region_start = breakpoint_parts[1].parse::<f32>()? + 1.;
+        //println!("{prev_region_end} {next_region_start}");
+
+        // which subs does this fall between
+        let coord_prev_i = coords
+            .iter()
+            .position(|c| **c == prev_region_end.to_string())
+            .unwrap();
+        let coord_next_i = coords
+            .iter()
+            .position(|c| **c == next_region_start.to_string())
+            .unwrap();
+        //println!("\t{coord_prev_i} {coord_next_i}");
+
+        // middle will depend on breakpoints uncertainy
+        let line_x = section_x
+            + (coord_prev_i + 1 + (coord_next_i - coord_prev_i) / 2) as f32
+                * constants::X_INC;
+        // top of the line will be the sme
+        let line_y1 = if let 0 = i % 2 {
+            section_y + (constants::X_INC * 2.)
+        } else {
+            section_y + constants::X_INC
+        };
+
+        // option 1: draw line if coords right next to each other
+        if coord_next_i - coord_prev_i == 1 {
+            // the line bottom is alll the way at the bottom of ref, parents, sample
+            let sub_y_buff = (constants::X_INC - sub_box_w) / 2.;
+            let line_y2 = section_y
+                + (constants::X_INC * 4.) // this height of the breakpoints section
+                + (constants::X_INC * populations.len() as f32)
+                - sub_y_buff;
+            let draw_x = vec![line_x, line_x];
+            let draw_y = vec![line_y1, line_y2];
+            draw_polygon(
+                &mut canvas,
+                &draw_x,
+                &draw_y,
+                &constants::TRANSPARENT,
+                &constants::BLACK,
+                &dash_stroke_style,
+            )?;
+        }
+        // option 2: draw box around coords if multiple
+        else {
+            todo!();
+        }
+
+        // breakpoint label, prep buffer, draw box background first before render
+        let label = format!("Breakpoint #{}", i + 1);
+        let text_properties = text::TextProps {
+            text: label,
+            size: constants::FONT_SIZE,
+        };
+        let text_buffer = text::text(&text_properties, text_color);
+        let text_x = line_x - ((text_buffer.width / 2) as f32);
+        let text_y = line_y1;
+
+        // draw breakpoint box background, add several pixels for buffer
+        let box_x = line_x - (text_buffer.width as f32 / 2.) - 5.;
+        let box_y = line_y1 - 5.;
+        let box_w = text_buffer.width as f32 + 10.;
+        let box_h = text_buffer.height as f32 + 10.;
+        let draw_x = vec![box_x, box_x, box_x + box_w, box_x + box_w];
+        let draw_y = vec![box_y, box_y + box_h, box_y + box_h, box_y];
+
+        draw_polygon(
+            &mut canvas,
+            &draw_x,
+            &draw_y,
+            &constants::WHITE,
+            &constants::BLACK,
+            &constants::BASIC_STROKE_STYLE,
+        )?;
+
+        // render breakpoint label
+        text_buffer.render(&mut canvas, Point::new(text_x, text_y));
+    }
+
+    section_y += constants::X_INC * 2.;
 
     // ------------------------------------------------------------------------
     // Sub Box
@@ -392,7 +669,7 @@ pub fn create(
     // iterate through sub coordinates
     for (coord_i, _coord) in coords.iter().enumerate() {
         // absolute x coord
-        let x = (section_x + (constants::X_INC * (coord_i as i32))) as f32;
+        let x = section_x + (constants::X_INC * coord_i as f32);
 
         // reference genome base
         let ref_base = barcodes.rows[coord_i][reference_i].to_string();
@@ -403,32 +680,24 @@ pub fn create(
         // iterate through samples
         for (pop_i, population) in populations.iter().enumerate() {
             // absolute y coord
-            let mut y = (section_y + (constants::X_INC * (pop_i as i32))) as f32;
+            let mut y = section_y + (constants::X_INC * pop_i as f32);
 
             // shift samples down, to make gap between parents
             // 1 for reference + variable number of parents
             if pop_i > parents.len() {
-                y += section_gap as f32;
+                y += section_gap;
             }
 
-            // On the first coord, write pop label
+            // On the first coord, write pop label.
+            // pop label has same pos as section_label, use that function
             if coord_i == 0 {
-                let text_properties = text::TextProps {
-                    text: population.to_string(),
-                    size: constants::FONT_SIZE,
-                };
-                let text_buffer = text::text(&text_properties, text_color);
-                let text_x = (section_x - longest_sequence_id - label_gap
-                    + (longest_sequence_id - text_buffer.width))
-                    as f32;
-                let text_y =
-                    y + (constants::X_INC as f32 / 2.) - (text_buffer.height as f32 / 2.);
-                text_buffer.render(&mut canvas, Point::new(text_x, text_y));
+                let (label, x, y) = (String::from(population), section_x, y);
+                draw_section_label(&mut canvas, label, text_color, x, y, label_gap)?;
             }
 
             // adjust box coord based on width/height of sub box
-            let box_x = x + (constants::X_INC as f32 / 2. - sub_box_w / 2.);
-            let box_y = y + (constants::X_INC as f32 / 2. - sub_box_w / 2.);
+            let box_x = x + (constants::X_INC / 2.) - (sub_box_w / 2.);
+            let box_y = y + (constants::X_INC / 2.) - (sub_box_w / 2.);
 
             // draw sub box
             let draw_x = vec![box_x, box_x, box_x + sub_box_w, box_x + sub_box_w];
@@ -485,6 +754,27 @@ pub fn create(
     // ------------------------------------------------------------------------
 
     canvas.write_png(output_path).unwrap();
+
+    Ok(())
+}
+
+pub fn draw_section_label(
+    canvas: &mut raqote::DrawTarget,
+    label: String,
+    text_color: raqote::Color,
+    section_x: f32,
+    section_y: f32,
+    label_gap: f32,
+) -> Result<(), Report> {
+    // draw section label
+    let text_properties = text::TextProps {
+        text: label,
+        size: constants::FONT_SIZE,
+    };
+    let text_buffer = text::text(&text_properties, text_color);
+    let text_x = section_x - label_gap - text_buffer.width as f32;
+    let text_y = section_y + (constants::X_INC / 2.) - (text_buffer.height as f32 / 2.);
+    text_buffer.render(canvas, Point::new(text_x, text_y));
 
     Ok(())
 }
