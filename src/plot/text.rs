@@ -74,7 +74,11 @@ unsafe impl Send for TextRenderBuffer {}
 
 fn render_text(props: TextProps, colour: raqote::Color) -> TextRenderBuffer {
     let font = get_font();
-    let size = rusttype::Scale::uniform(props.size as f32 * 1.333f32);
+
+    //println!("props: {props:?}");
+    // the scaling factor depends on the props.size?
+    //let size = rusttype::Scale::uniform(props.size as f32 * 1.333f32);
+    let size = rusttype::Scale::uniform(props.size as f32);
     let metrics = font.v_metrics(size);
 
     let glyphs: Vec<_> = font
@@ -91,7 +95,8 @@ fn render_text(props: TextProps, colour: raqote::Color) -> TextRenderBuffer {
                 .last()
                 .map(|g| g.pixel_bounding_box().unwrap().max.x)
                 .unwrap();
-            max_x - min_x + 1
+            //max_x - min_x + 1
+            max_x - min_x + 2
         };
         let height: i32 = (metrics.ascent - metrics.descent).ceil() as i32;
 
@@ -105,21 +110,27 @@ fn render_text(props: TextProps, colour: raqote::Color) -> TextRenderBuffer {
     };
 
     // Loop through the glyphs in the text, positing each one on a line
-    for glyph in glyphs {
+    for (_i, glyph) in glyphs.iter().enumerate() {
+        //println!("\t{i}: {glyph:?}");
+
         if let Some(bounding_box) = glyph.pixel_bounding_box() {
-            // DejaVuSans letter 'T' has problems
-            // if bounding_box.min.x < 0 {
-            //     println!("bounding_box.min: {:?}", bounding_box.min);
-            //     continue
-            // }
+            //println!("\t\tbounding_box: {bounding_box:?}");
+
             glyph.draw(|x, y, v| {
                 // original, usize conversion causes overflow, when bounding_box.min.x is < 0
                 //let index = ((y as usize + bounding_box.min.y as usize) * image.width as usize) + (x as usize + bounding_box.min.x as usize);
                 // custom, do usize conversion after
+
                 let index = (((y as isize + bounding_box.min.y as isize)
                     * image.width as isize)
                     + (x as isize + bounding_box.min.x as isize))
                     as usize;
+                // let index = if bounding_box.min.x < 0 {
+                //     (((y as isize + bounding_box.min.y as isize) * image.width as isize) + (x as isize + bounding_box.min.x as isize)) as usize
+                // } else {
+                //     ((y as usize + bounding_box.min.y as usize) * image.width as usize) + (x as usize + bounding_box.min.x as usize)
+                // };
+                //println!("\t\t\tx: {x}, y: {y}, v: {v}, index: {index}");
 
                 image.data[index] = u32::from_be_bytes([
                     (colour.a() as f32 * v) as u8,
