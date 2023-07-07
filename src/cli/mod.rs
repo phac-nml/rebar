@@ -141,6 +141,10 @@ pub struct RunArgs {
     /// If the directory does not exist, it will be created.
     #[clap(short = 'o', long, required = true)]
     pub output_dir: PathBuf,
+
+    /// If the directory does not exist, it will be created.
+    #[clap(short = 't', long, default_value_t = 1)]
+    pub threads: usize,
 }
 
 #[derive(Args, Clone, Debug)]
