@@ -1,207 +1,216 @@
-// Author: @J-Cake
-// Source: https://gist.github.com/J-Cake/ddccf99d3f7d6fc947fc60204aa41e09
-// Edited by: Katherine Eaton
-// Last edited: 2023-06-28
+// load font from file
+use color_eyre::eyre::{eyre, Report, Result, WrapErr};
+use image::{ImageBuffer, Rgba};
+use itertools::Itertools;
+//use log::debug;
+use std::path::Path;
 
-#[derive(Clone, Eq, PartialEq)]
-pub(crate) struct TextRenderBuffer {
-    pub width: i32,
-    pub height: i32,
-    pub baseline: i32,
-    pub data: Vec<u32>,
-    pub text: String,
+#[derive(Debug)]
+pub enum HorizontalAlignment {
+    Left,
+    Center,
+    Right,
 }
 
-impl TextRenderBuffer {
-    pub fn to_image(&self) -> raqote::Image {
-        raqote::Image {
-            width: self.width,
-            height: self.height,
-            data: &self.data,
-        }
-    }
-
-    pub fn render(&self, ctx: &mut raqote::DrawTarget, point: raqote::Point) -> &Self {
-        ctx.draw_image_at(
-            point.x,
-            point.y,
-            &self.to_image(),
-            &raqote::DrawOptions {
-                blend_mode: raqote::BlendMode::SrcAtop,
-                alpha: 1.,
-                antialias: raqote::AntialiasMode::Gray,
-            },
-        );
-
-        self
-    }
-
-    // pub fn measure(&self) -> Size {
-    //     return Size::new(self.width as f64, self.height as f64, self.baseline as f64);
-    // }
+#[derive(Debug)]
+pub enum VerticalAlignment {
+    Top,
+    Center,
+    Bottom,
 }
 
-impl std::fmt::Debug for TextRenderBuffer {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(
-            f,
-            "RenderBuffer {{ {}x{}_{} '{}' }}",
-            self.width, self.height, self.baseline, self.text
-        )
-        .unwrap();
-        Ok(())
-    }
+pub fn load_font(path: &Path) -> Result<rusttype::Font, Report> {
+    let font_bytes = std::fs::read(path).wrap_err_with(|| {
+        format!("Could not load font from file path: {}", path.display())
+    })?;
+    let font = rusttype::Font::try_from_vec(font_bytes)
+        .ok_or_else(|| eyre!("Could not convert file to Font: {}", path.display()))?;
+
+    Ok(font)
 }
 
-pub(crate) fn get_font<'a>() -> rusttype::Font<'a> {
-    // TODO: Replace with dynamic font-lookup
-    return rusttype::Font::try_from_vec(
-        std::fs::read("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf").unwrap(),
-    )
-    .unwrap();
-    //return rusttype::Font::try_from_vec(std::fs::read("/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf").unwrap()).unwrap();
-}
+/// Convert text string to an image::ImageBuffer
+pub fn to_image(
+    text: &str,
+    font_path: &Path,
+    font_size: f32,
+    color: &image::Rgba<u8>,
+) -> Result<ImageBuffer<Rgba<u8>, Vec<u8>>, Report> {
+    // get rgba channels of text color
+    let [r, g, b, a] = [color.0[0], color.0[1], color.0[2], color.0[3]];
 
-#[derive(Eq, PartialEq, Debug, Clone, Hash)]
-pub struct TextProps {
-    pub text: String,
-    pub size: i32,
-}
+    // load font from file path
+    let font = load_font(font_path)?;
 
-unsafe impl Send for TextProps {}
+    // ------------------------------------------------------------------------
+    // Image Dimensions
 
-unsafe impl Send for TextRenderBuffer {}
+    // Set font size and get metrics
+    let scale = rusttype::Scale::uniform(font_size);
+    let metrics = font.v_metrics(scale);
 
-fn render_text(props: TextProps, colour: raqote::Color) -> TextRenderBuffer {
-    let font = get_font();
-
-    //println!("props: {props:?}");
-    // the scaling factor depends on the props.size?
-    //let size = rusttype::Scale::uniform(props.size as f32 * 1.333f32);
-    let size = rusttype::Scale::uniform(props.size as f32);
-    let metrics = font.v_metrics(size);
-
+    // layout the glyphs in the text horizontally
     let glyphs: Vec<_> = font
-        .layout(&props.text, size, rusttype::point(0., 0. + metrics.ascent))
+        .layout(text, scale, rusttype::point(0., 0. + metrics.ascent))
         .collect();
 
-    let mut image = {
-        let width: i32 = {
-            let min_x = glyphs
-                .first()
-                .map(|g| g.pixel_bounding_box().unwrap().min.x)
-                .unwrap();
-            let max_x = glyphs
-                .last()
-                .map(|g| g.pixel_bounding_box().unwrap().max.x)
-                .unwrap();
-            //max_x - min_x + 1
-            max_x - min_x + 2
-        };
-        let height: i32 = (metrics.ascent - metrics.descent).ceil() as i32;
+    // get output image height from the font metrics, since height is only dependent on font
+    let height = (metrics.ascent - metrics.descent).ceil();
 
-        TextRenderBuffer {
-            width,
-            height,
-            text: props.text.clone(),
-            baseline: metrics.ascent as i32,
-            data: vec![0u32; (width * height) as usize],
-        }
-    };
+    // Get output image widths from the pixel bounding boxes, since width is dependent
+    // on font + the text to write (for horizontal layout)
+    let min_x = glyphs
+        .iter()
+        .map(|g| {
+            if let Some(bounding_box) = g.pixel_bounding_box() {
+                bounding_box.min.x
+            } else {
+                0
+            }
+        })
+        .min()
+        .unwrap();
 
-    // Loop through the glyphs in the text, positing each one on a line
-    for (_i, glyph) in glyphs.iter().enumerate() {
-        //println!("\t{i}: {glyph:?}");
+    let max_x = glyphs
+        .iter()
+        .map(|g| {
+            if let Some(bounding_box) = g.pixel_bounding_box() {
+                bounding_box.max.x
+            } else {
+                0
+            }
+        })
+        .max()
+        .unwrap();
+
+    let width = if min_x >= 0 { max_x } else { max_x - min_x };
+
+    //debug!("width: {width}, height: {height}");
+
+    // ------------------------------------------------------------------------
+    // Rasterize Glyphs
+
+    // construct an image buffer to hold text pixels
+    let mut image_buffer =
+        ImageBuffer::<Rgba<u8>, Vec<_>>::new(width as u32, height as u32);
+    let default_pixel: Rgba<u8> = Rgba([0, 0, 0, 0]);
+
+    // iterate through each glyph ('letter')
+    for glyph in glyphs {
+        //debug!("glyph: {glyph:?}");
 
         if let Some(bounding_box) = glyph.pixel_bounding_box() {
-            //println!("\t\tbounding_box: {bounding_box:?}");
+            //debug!("\tbounding_box: {bounding_box:?}");
 
+            // rasterize each glyph, by iterating through the pixels
+            // x, y are relative to bounding box, v is 'coverage'
             glyph.draw(|x, y, v| {
-                // original, usize conversion causes overflow, when bounding_box.min.x is < 0
-                //let index = ((y as usize + bounding_box.min.y as usize) * image.width as usize) + (x as usize + bounding_box.min.x as usize);
-                // custom, do usize conversion after
+                //debug!("\t\tx: {x}, y: {y}, v: {v}");
+                let y = y as i32 + bounding_box.min.y;
 
-                let index = (((y as isize + bounding_box.min.y as isize)
-                    * image.width as isize)
-                    + (x as isize + bounding_box.min.x as isize))
-                    as usize;
-                // let index = if bounding_box.min.x < 0 {
-                //     (((y as isize + bounding_box.min.y as isize) * image.width as isize) + (x as isize + bounding_box.min.x as isize)) as usize
-                // } else {
-                //     ((y as usize + bounding_box.min.y as usize) * image.width as usize) + (x as usize + bounding_box.min.x as usize)
-                // };
-                //println!("\t\t\tx: {x}, y: {y}, v: {v}, index: {index}");
+                // sometimes x bounding box is negative, because kerning is applied
+                // ex. the letter 'T' in isolation
+                // in this case, force 0 to be the start point
+                let x = if bounding_box.min.x >= 0 {
+                    x as i32 + bounding_box.min.x
+                } else {
+                    x as i32
+                };
 
-                image.data[index] = u32::from_be_bytes([
-                    (colour.a() as f32 * v) as u8,
-                    (colour.r() as f32 * v) as u8,
-                    (colour.g() as f32 * v) as u8,
-                    (colour.b() as f32 * v) as u8,
+                //debug!("\t\tx: {x}, y: {y}, v: {v}");
+
+                // construct a pixel
+                let pixel = Rgba([
+                    (r as f32 * v) as u8,
+                    (g as f32 * v) as u8,
+                    (b as f32 * v) as u8,
+                    (a as f32 * v) as u8,
                 ]);
+                // add pixel to image buffer, if that pixel is still the default
+                if image_buffer.get_pixel(x as u32, y as u32) == &default_pixel {
+                    image_buffer.put_pixel(x as u32, y as u32, pixel);
+                }
             });
         }
     }
 
-    image
+    Ok(image_buffer)
 }
 
-lazy_static::lazy_static!(static ref CACHE: std::sync::Mutex<std::collections::HashMap<TextProps, std::sync::Arc<TextRenderBuffer>>> = std::sync::Mutex::new(std::collections::HashMap::new()););
-pub(crate) fn text(
-    props: &TextProps,
-    colour: raqote::Color,
-) -> std::sync::Arc<TextRenderBuffer> {
-    let mut cache = CACHE.lock().unwrap();
+/// Convert image::ImageBuffer data text to u32 for raqote
+pub fn to_raqote_data(
+    image: &ImageBuffer<Rgba<u8>, Vec<u8>>,
+) -> Result<Vec<u32>, Report> {
+    // convert from u8 to u32
+    let data = image
+        .pixels()
+        .map(|rgba| u32::from_be_bytes([rgba.0[3], rgba.0[0], rgba.0[1], rgba.0[2]]))
+        .collect_vec();
 
-    if let Some(texture) = cache.get(props) {
-        return texture.clone();
+    Ok(data)
+}
+
+//#[derive(Debug)]
+pub struct DrawRaqoteArgs<'canvas> {
+    pub canvas: &'canvas mut raqote::DrawTarget,
+    pub text: String,
+    pub font_path: std::path::PathBuf,
+    pub font_size: f32,
+    pub color: image::Rgba<u8>,
+    pub x: f32,
+    pub y: f32,
+    pub vertical_alignment: VerticalAlignment,
+    pub horizontal_alignment: HorizontalAlignment,
+    pub rotate: u8,
+}
+
+impl<'canvas> DrawRaqoteArgs<'canvas> {
+    pub fn from_canvas(canvas: &'canvas mut raqote::DrawTarget) -> Self {
+        DrawRaqoteArgs {
+            canvas,
+            text: String::new(),
+            font_path: std::path::PathBuf::from(
+                "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+            ),
+            font_size: 12.0,
+            color: image::Rgba([0, 0, 0, 255]),
+            x: 0.0,
+            y: 0.0,
+            vertical_alignment: VerticalAlignment::Top,
+            horizontal_alignment: HorizontalAlignment::Left,
+            rotate: 0,
+        }
     }
-
-    let buffer = std::sync::Arc::new(render_text(props.clone(), colour));
-
-    cache.insert(props.clone(), buffer);
-    return cache.get(props).unwrap().clone();
 }
 
-// pub struct Size {
-//     pub width: f64,
-//     pub height: f64,
-//     pub baseline: f64,
-// }
+pub fn draw_raqote(
+    args: &mut DrawRaqoteArgs,
+) -> Result<ImageBuffer<Rgba<u8>, Vec<u8>>, Report> {
+    let image = to_image(&args.text, &args.font_path, args.font_size, &args.color)?;
 
-// impl Size {
-//     pub fn new(width: f64, height: f64, baseline: f64) -> Self {
-//         Size { width, height, baseline }
-//     }
-// }
+    // optional rotate
+    let data = to_raqote_data(&image)?;
 
-// fn measure_text(props: &TextProps) -> Size {
-//     let font = get_font();
-//     let size = rusttype::Scale::uniform(props.size as f32 * 1.333f32);
-//     let metrics = font.v_metrics(size);
+    let x = match args.horizontal_alignment {
+        HorizontalAlignment::Left => args.x,
+        HorizontalAlignment::Center => args.x - (image.width() as f32 / 2.),
+        HorizontalAlignment::Right => args.x - image.width() as f32,
+    };
 
-//     let glyphs: Vec<_> = font
-//         .layout(&props.text, size, rusttype::point(0., 0. + metrics.ascent))
-//         .collect();
+    let y = match args.vertical_alignment {
+        VerticalAlignment::Top => args.y,
+        VerticalAlignment::Center => args.y + (image.height() as f32 / 2.),
+        VerticalAlignment::Bottom => args.y - image.height() as f32,
+    };
 
-//     return Size::new({
-//                          let min_x = glyphs
-//                              .first()
-//                              .map(|g| g.pixel_bounding_box().unwrap().min.x)
-//                              .unwrap();
-//                          let max_x = glyphs
-//                              .last()
-//                              .map(|g| g.pixel_bounding_box().unwrap().max.x)
-//                              .unwrap();
-//                          (max_x - min_x + 1) as f64
-//                      }, (metrics.ascent - metrics.descent).ceil() as f64, metrics.ascent as f64);
-// }
+    let point = raqote::Point::new(x, y);
+    let draw_image = raqote::Image {
+        width: image.width() as i32,
+        height: image.height() as i32,
+        data: &data,
+    };
+    args.canvas
+        .draw_image_at(point.x, point.y, &draw_image, &raqote::DrawOptions::new());
 
-// pub(crate) fn measure(props: &TextProps) -> Size {
-//     let cache = CACHE.lock().unwrap();
-
-//     if let Some(texture) = cache.get(props) {
-//         return Size::new(texture.width as f64, texture.height as f64, texture.baseline as f64);
-//     }
-
-//     return measure_text(props)
-// }
+    Ok(image)
+}
