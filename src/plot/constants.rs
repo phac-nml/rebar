@@ -41,6 +41,9 @@ pub const BLACK: Source = Source::Solid(SolidSource {
     b: 0,
     a: 255,
 });
+
+pub const BLACK_ALT: image::Rgba<u8> = image::Rgba([0, 0, 0, 255]);
+
 pub const GREY: Source = Source::Solid(SolidSource {
     r: 225,
     g: 225,
@@ -61,7 +64,9 @@ pub const TRANSPARENT: Source = Source::Solid(SolidSource {
     b: 0,
     a: 0,
 });
-pub const FONT_SIZE: i32 = 25;
+
+pub const TEXT_COLOR: image::Rgba<u8> = image::Rgba([0, 0, 0, 255]);
+pub const FONT_SIZE: f32 = 25.0;
 // want at least 2, a single pixel causes blurry artifacts
 pub const LINE_WIDTH: f32 = 2.0;
 

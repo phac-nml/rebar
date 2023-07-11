@@ -1,4 +1,5 @@
 pub mod constants;
+pub mod polygon;
 pub mod text;
 
 use crate::utils;
@@ -8,40 +9,7 @@ use itertools::Itertools;
 use log::debug;
 use raqote::*;
 
-pub fn draw_polygon(
-    canvas: &mut raqote::DrawTarget,
-    x_coords: &[f32],
-    y_coords: &[f32],
-    fill: &raqote::Source,
-    stroke: &raqote::Source,
-    stroke_style: &raqote::StrokeStyle,
-) -> Result<(), Report> {
-    // construct a list of path operations (drawing instructions)
-    let mut ops: Vec<PathOp> = Vec::new();
-    let winding = raqote::Winding::EvenOdd;
-
-    for (i, it) in x_coords.iter().zip(y_coords.iter()).enumerate() {
-        let (x, y) = it;
-        let point = Point::new(*x, *y);
-        let op = match i {
-            0 => raqote::PathOp::MoveTo(point),
-            _ => raqote::PathOp::LineTo(point),
-        };
-        ops.push(op);
-    }
-
-    ops.push(raqote::PathOp::Close);
-
-    let path = raqote::Path { ops, winding };
-
-    // fill polygon
-    canvas.fill(&path, fill, &DrawOptions::new());
-    // outline polygon
-    canvas.stroke(&path, stroke, stroke_style, &DrawOptions::new());
-
-    Ok(())
-}
-
+/// Get the background color (RGBA) of a nucleotide base
 pub fn get_base_rgba(base: &String, ref_base: &String, pal_i: usize) -> [u8; 4] {
     // default WHITE
     let mut rgba = [255, 255, 255, 255];
@@ -71,6 +39,10 @@ pub fn create(
     // ------------------------------------------------------------------------
     // Import Data
     // ------------------------------------------------------------------------
+
+    // find system font, TBD
+    let font_path =
+        std::path::PathBuf::from("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf");
 
     // mandatory import data
     let mut linelist = utils::Table::from_tsv(linelist_path)?;
@@ -116,10 +88,14 @@ pub fn create(
         .collect_vec();
 
     if parents.len() > constants::PALETTE_DARK.len() {
-        return Err(
-            eyre!("There are more parents than colors in the palette!")
-            .suggestion(format!("Are you sure you want to plot recombination involving {} parents?", parents.len()))
-            .suggestion("If so, please contact the developer to expand the color palette options."));
+        return Err(eyre!("There are more parents than colors in the palette!")
+            .suggestion(format!(
+                "Are you sure you want to plot recombination involving {} parents?",
+                parents.len()
+            ))
+            .suggestion(
+                "If so, please contact the developer to expand the color palette options.",
+            ));
     }
 
     // get sequence ids (columns after mandatory cols and parents)
@@ -160,21 +136,32 @@ pub fn create(
 
     let num_coords = barcodes.rows.len();
 
-    //let longest_seq_id = sequence_ids.iter().map(|id| id.len()).max()?;
-    //println!("{longest_seq_id:?}");
-
-    // longest sequence id (in pixels)
-    let text_color = raqote::Color::new(255, 0, 0, 0);
+    // longest sequence text id (in pixels)
     let longest_sequence_id = sequence_ids
         .iter()
-        .map(|id| text::TextProps {
-            text: id.to_owned(),
-            size: constants::FONT_SIZE,
+        .map(|id| {
+            text::to_image(id, &font_path, constants::FONT_SIZE, &constants::TEXT_COLOR)
+                .unwrap()
+                .width()
         })
-        .map(|text_props| text::text(&text_props, text_color))
-        .map(|text| text.width)
         .max()
         .ok_or_else(|| eyre!("Failed to calculated the maximum sequence ID length"))?;
+
+    // longest coord label (in pixels)
+    let longest_coord = coords
+        .iter()
+        .map(|coord| {
+            text::to_image(
+                coord,
+                &font_path,
+                constants::FONT_SIZE,
+                &constants::TEXT_COLOR,
+            )
+            .unwrap()
+            .width()
+        })
+        .max()
+        .ok_or_else(|| eyre!("Failed to calculated the maximum coord length"))?;
 
     let section_gap = constants::X_INC;
     let label_gap = constants::X_INC / 2.;
@@ -198,6 +185,7 @@ pub fn create(
         + (constants::X_INC * parents.len() as f32)      // parent bases
         + section_gap                                    // gap between parents and samples
         + (constants::X_INC * sequence_ids.len() as f32) // sequence/sample bases
+        + longest_coord as f32                           // x-axis coord ticks
         + constants::X_INC; // white-space bottom
 
     // add extra height for optional annotations section
@@ -214,10 +202,14 @@ pub fn create(
     let pixels_per_base = (num_coords as f32 * constants::X_INC) / genome_length as f32;
 
     // ------------------------------------------------------------------------
-    // Background
+    // Canvas
     // ------------------------------------------------------------------------
 
     let mut canvas = DrawTarget::new(canvas_width as i32, canvas_height as i32);
+
+    // ------------------------------------------------------------------------
+    // Background
+    // ------------------------------------------------------------------------
 
     // draw white background
     let mut background = PathBuilder::new();
@@ -229,12 +221,17 @@ pub fn create(
     // Regions
     // ------------------------------------------------------------------------
 
-    debug!("Drawing genomic coordinates guide.");
+    debug!("Drawing parental regions.");
 
     // draw section label
-    let (label, x) = (String::from("Regions"), section_x);
-    let y = section_y + constants::X_INC;
-    draw_section_label(&mut canvas, label, text_color, x, y, label_gap)?;
+    let mut args = text::DrawRaqoteArgs::from_canvas(&mut canvas);
+    args.text = "Regions".to_string();
+    args.font_size = constants::FONT_SIZE;
+    args.x = section_x - label_gap;
+    args.y = section_y + constants::X_INC;
+    args.horizontal_alignment = text::HorizontalAlignment::Right;
+    args.vertical_alignment = text::VerticalAlignment::Center;
+    text::draw_raqote(&mut args)?;
 
     // draw grey box as background (with cross hatching eventually)
     let box_x = section_x;
@@ -244,7 +241,7 @@ pub fn create(
 
     let draw_x = vec![box_x, box_x, box_x + box_w, box_x + box_w];
     let draw_y = vec![box_y, box_y + box_h, box_y + box_h, box_y];
-    draw_polygon(
+    polygon::draw_raqote(
         &mut canvas,
         &draw_x,
         &draw_y,
@@ -289,19 +286,19 @@ pub fn create(
         let box_h = constants::X_INC;
 
         // region text label
-        let text_properties = text::TextProps {
-            text: parent.to_string(),
-            size: constants::FONT_SIZE,
-        };
-        let text_buffer = text::text(&text_properties, text_color);
-        let text_x = (box_x + (box_w / 2.)) - ((text_buffer.width / 2) as f32);
-        let text_y = section_y;
-        text_buffer.render(&mut canvas, Point::new(text_x, text_y));
+        let mut args = text::DrawRaqoteArgs::from_canvas(&mut canvas);
+        args.text = parent.to_string();
+        args.font_size = constants::FONT_SIZE - 5.0;
+        args.x = box_x + (box_w / 2.0);
+        args.y = section_y;
+        args.horizontal_alignment = text::HorizontalAlignment::Center;
+        args.vertical_alignment = text::VerticalAlignment::Top;
+        let image = text::draw_raqote(&mut args)?;
 
         // region text line
         let draw_x = vec![box_x + (box_w / 2.), box_x + (box_w / 2.)];
-        let draw_y = vec![box_y, text_y + text_buffer.height as f32];
-        draw_polygon(
+        let draw_y = vec![box_y, args.y + image.height() as f32];
+        polygon::draw_raqote(
             &mut canvas,
             &draw_x,
             &draw_y,
@@ -318,7 +315,7 @@ pub fn create(
         // draw region box
         let draw_x = vec![box_x, box_x, box_x + box_w, box_x + box_w];
         let draw_y = vec![box_y, box_y + box_h, box_y + box_h, box_y];
-        draw_polygon(
+        polygon::draw_raqote(
             &mut canvas,
             &draw_x,
             &draw_y,
@@ -339,9 +336,14 @@ pub fn create(
     section_y += section_gap;
 
     // draw section label
-    let (label, x) = (String::from("Genome"), section_x);
-    let y = section_y + constants::X_INC;
-    draw_section_label(&mut canvas, label, text_color, x, y, label_gap)?;
+    let mut args = text::DrawRaqoteArgs::from_canvas(&mut canvas);
+    args.text = "Genome".to_string();
+    args.font_size = constants::FONT_SIZE;
+    args.x = section_x - label_gap;
+    args.y = section_y + constants::X_INC;
+    args.horizontal_alignment = text::HorizontalAlignment::Right;
+    args.vertical_alignment = text::VerticalAlignment::Center;
+    text::draw_raqote(&mut args)?;
 
     // draw grey box
     let box_x = section_x;
@@ -351,7 +353,7 @@ pub fn create(
 
     let draw_x = vec![box_x, box_x, box_x + box_w, box_x + box_w];
     let draw_y = vec![box_y, box_y + box_h, box_y + box_h, box_y];
-    draw_polygon(
+    polygon::draw_raqote(
         &mut canvas,
         &draw_x,
         &draw_y,
@@ -362,6 +364,8 @@ pub fn create(
 
     // ------------------------------------------------------------------------
     // Annotations (Optional)
+
+    debug!("Drawing annotations.");
 
     // special pallete for annotations, that interleaves dark and light
     // skip colors reserverd for parents, x 2 for interleaved palette
@@ -398,7 +402,7 @@ pub fn create(
         let draw_x = vec![box_x, box_x, box_x + box_w, box_x + box_w];
         let draw_y = vec![box_y, box_y + box_h, box_y + box_h, box_y];
 
-        draw_polygon(
+        polygon::draw_raqote(
             &mut canvas,
             &draw_x,
             &draw_y,
@@ -408,24 +412,24 @@ pub fn create(
         )?;
 
         // text label
-        let text_properties = text::TextProps {
-            text: abbreviation.to_string(),
-            size: constants::FONT_SIZE - 5,
-        };
-        let text_buffer = text::text(&text_properties, text_color);
-        let text_x = (box_x + (box_w / 2.)) - ((text_buffer.width / 2) as f32);
-        // interleave height of adjacent labels
-        let text_y = if let 0 = i % 2 {
+
+        let mut args = text::DrawRaqoteArgs::from_canvas(&mut canvas);
+        args.text = abbreviation.to_string();
+        args.font_size = constants::FONT_SIZE - 5.0;
+        args.x = box_x + (box_w / 2.0);
+        args.y = if let 0 = i % 2 {
             section_y
         } else {
             section_y - (constants::X_INC / 2.)
         };
-        text_buffer.render(&mut canvas, Point::new(text_x, text_y));
+        args.horizontal_alignment = text::HorizontalAlignment::Center;
+        args.vertical_alignment = text::VerticalAlignment::Top;
+        let image = text::draw_raqote(&mut args)?;
 
         // text line
         let draw_x = vec![box_x + (box_w / 2.), box_x + (box_w / 2.)];
-        let draw_y = vec![box_y, text_y + text_buffer.height as f32];
-        draw_polygon(
+        let draw_y = vec![box_y, args.y + image.height() as f32];
+        polygon::draw_raqote(
             &mut canvas,
             &draw_x,
             &draw_y,
@@ -438,6 +442,8 @@ pub fn create(
     // ------------------------------------------------------------------------
     // Sub markers
 
+    debug!("Drawing substitution markers.");
+
     // draw coord black lines
     for coord in coords.iter() {
         // convert genomic coord to numeric then to pixels
@@ -448,7 +454,7 @@ pub fn create(
         let line_y2 = section_y + constants::X_INC * 2.;
         let draw_x = vec![line_x, line_x];
         let draw_y = vec![line_y1, line_y2];
-        draw_polygon(
+        polygon::draw_raqote(
             &mut canvas,
             &draw_x,
             &draw_y,
@@ -463,6 +469,8 @@ pub fn create(
     // ------------------------------------------------------------------------
     // Guide to Sub Polyons
     // ------------------------------------------------------------------------
+
+    debug!("Drawing substitution guides.");
 
     // draw coord black lines
     for (i, coord) in coords.iter().enumerate() {
@@ -483,7 +491,7 @@ pub fn create(
         let draw_x = vec![guide_x, sub_x1, sub_x2];
         let draw_y = vec![guide_y, sub_y1, sub_y2];
 
-        draw_polygon(
+        polygon::draw_raqote(
             &mut canvas,
             &draw_x,
             &draw_y,
@@ -496,17 +504,8 @@ pub fn create(
     // ------------------------------------------------------------------------
     // Axis coordinates (on top of sub triangle polygons)
 
-    // check how long the longest coord label is (in pixels)
-    let longest_coord = coords
-        .iter()
-        .map(|c| text::TextProps {
-            text: (*c).clone(),
-            size: constants::FONT_SIZE - 5,
-        })
-        .map(|text_props| text::text(&text_props, text_color))
-        .map(|text| text.width)
-        .max()
-        .ok_or_else(|| eyre!("Failed to calculated the maximum coord length"))?;
+    debug!("Drawing guide coordinates.");
+
     // how many x_inc are needed for it, add 1 extra x_inc for buffer
     let longest_coord_x_inc = (longest_coord as f32 / constants::X_INC).ceil() + 1.0;
     // maximum number of coord labels we can fit
@@ -522,12 +521,12 @@ pub fn create(
         // convert genomic units to pixel coords
         let coord_x = section_x + (coord as f32 * pixels_per_base);
 
-        // draw line
+        // draw x-tick line
         let line_y1 = section_y;
         let line_y2 = line_y1 + (constants::X_INC / 4.);
         let draw_x = vec![coord_x, coord_x];
         let draw_y = vec![line_y1, line_y2];
-        draw_polygon(
+        polygon::draw_raqote(
             &mut canvas,
             &draw_x,
             &draw_y,
@@ -536,25 +535,32 @@ pub fn create(
             &constants::BASIC_STROKE_STYLE,
         )?;
 
-        // draw text
-        let text_properties = text::TextProps {
-            text: coord.to_string(),
-            size: constants::FONT_SIZE - 5,
-        };
-        let text_buffer = text::text(&text_properties, text_color);
-        let text_x = coord_x - (text_buffer.width / 2) as f32;
-        let text_y = line_y2;
-        text_buffer.render(&mut canvas, Point::new(text_x, text_y));
+        // draw x-tick label
+        let mut args = text::DrawRaqoteArgs::from_canvas(&mut canvas);
+        args.text = coord.to_string();
+        args.font_size = constants::FONT_SIZE - 5.0;
+        args.x = coord_x;
+        args.y = line_y2;
+        args.horizontal_alignment = text::HorizontalAlignment::Center;
+        args.vertical_alignment = text::VerticalAlignment::Center;
+        text::draw_raqote(&mut args)?;
     }
 
     // ------------------------------------------------------------------------
     // Breakpoints
     // ------------------------------------------------------------------------
 
+    debug!("Drawing breakpoints.");
+
     // draw section label
-    let (label, x) = (String::from("Breakpoints"), section_x);
-    let y = section_y + constants::X_INC;
-    draw_section_label(&mut canvas, label, text_color, x, y, label_gap)?;
+    let mut args = text::DrawRaqoteArgs::from_canvas(&mut canvas);
+    args.text = "Breakpoints".to_string();
+    args.font_size = constants::FONT_SIZE;
+    args.x = section_x - label_gap;
+    args.y = section_y + constants::X_INC;
+    args.horizontal_alignment = text::HorizontalAlignment::Right;
+    args.vertical_alignment = text::VerticalAlignment::Center;
+    text::draw_raqote(&mut args)?;
 
     let breakpoints = linelist
         .rows
@@ -611,7 +617,7 @@ pub fn create(
                 - sub_y_buff;
             let draw_x = vec![line_x, line_x];
             let draw_y = vec![line_y1, line_y2];
-            draw_polygon(
+            polygon::draw_raqote(
                 &mut canvas,
                 &draw_x,
                 &draw_y,
@@ -625,25 +631,26 @@ pub fn create(
             todo!();
         }
 
-        // breakpoint label, prep buffer, draw box background first before render
-        let label = format!("Breakpoint #{}", i + 1);
-        let text_properties = text::TextProps {
-            text: label,
-            size: constants::FONT_SIZE,
-        };
-        let text_buffer = text::text(&text_properties, text_color);
-        let text_x = line_x - ((text_buffer.width / 2) as f32);
-        let text_y = line_y1;
+        // breakpoint label, just to get dimensions for box
+        let mut args = text::DrawRaqoteArgs::from_canvas(&mut canvas);
+        args.text = format!("Breakpoint {}", i + 1);
+        args.font_size = constants::FONT_SIZE;
+        args.x = line_x;
+        args.y = line_y1;
+        args.horizontal_alignment = text::HorizontalAlignment::Center;
+        args.vertical_alignment = text::VerticalAlignment::Top;
+        let image = text::draw_raqote(&mut args)?;
 
         // draw breakpoint box background, add several pixels for buffer
-        let box_x = line_x - (text_buffer.width as f32 / 2.) - 5.;
-        let box_y = line_y1 - 5.;
-        let box_w = text_buffer.width as f32 + 10.;
-        let box_h = text_buffer.height as f32 + 10.;
+        let buffer = 10.;
+        let box_x = line_x - (image.width() as f32 / 2.) - (buffer / 2.);
+        let box_y = line_y1 - (buffer / 2.);
+        let box_w = image.width() as f32 + buffer;
+        let box_h = image.height() as f32 + buffer;
         let draw_x = vec![box_x, box_x, box_x + box_w, box_x + box_w];
         let draw_y = vec![box_y, box_y + box_h, box_y + box_h, box_y];
 
-        draw_polygon(
+        polygon::draw_raqote(
             &mut canvas,
             &draw_x,
             &draw_y,
@@ -652,8 +659,15 @@ pub fn create(
             &constants::BASIC_STROKE_STYLE,
         )?;
 
-        // render breakpoint label
-        text_buffer.render(&mut canvas, Point::new(text_x, text_y));
+        // actually render the breakpoint label now, reborrowing the canvas
+        let mut args = text::DrawRaqoteArgs::from_canvas(&mut canvas);
+        args.text = format!("Breakpoint {}", i + 1);
+        args.font_size = constants::FONT_SIZE;
+        args.x = line_x;
+        args.y = line_y1;
+        args.horizontal_alignment = text::HorizontalAlignment::Center;
+        args.vertical_alignment = text::VerticalAlignment::Top;
+        let image = text::draw_raqote(&mut args)?;
     }
 
     section_y += constants::X_INC * 2.;
@@ -667,9 +681,11 @@ pub fn create(
     section_y += section_gap;
 
     // iterate through sub coordinates
-    for (coord_i, _coord) in coords.iter().enumerate() {
+    for (coord_i, coord) in coords.iter().enumerate() {
         // absolute x coord
         let x = section_x + (constants::X_INC * coord_i as f32);
+        // adjust box coord based on width/height of sub box
+        let box_x = x + (constants::X_INC / 2.) - (sub_box_w / 2.);
 
         // reference genome base
         let ref_base = barcodes.rows[coord_i][reference_i].to_string();
@@ -691,12 +707,17 @@ pub fn create(
             // On the first coord, write pop label.
             // pop label has same pos as section_label, use that function
             if coord_i == 0 {
-                let (label, x, y) = (String::from(population), section_x, y);
-                draw_section_label(&mut canvas, label, text_color, x, y, label_gap)?;
+                let mut args = text::DrawRaqoteArgs::from_canvas(&mut canvas);
+                args.text = population.to_string();
+                args.font_size = constants::FONT_SIZE;
+                args.x = section_x - label_gap;
+                args.y = y;
+                args.horizontal_alignment = text::HorizontalAlignment::Right;
+                args.vertical_alignment = text::VerticalAlignment::Center;
+                text::draw_raqote(&mut args)?;
             }
 
             // adjust box coord based on width/height of sub box
-            let box_x = x + (constants::X_INC / 2.) - (sub_box_w / 2.);
             let box_y = y + (constants::X_INC / 2.) - (sub_box_w / 2.);
 
             // draw sub box
@@ -725,7 +746,7 @@ pub fn create(
                 pop_color = Source::Solid(SolidSource { r, g, b, a });
             }
 
-            draw_polygon(
+            polygon::draw_raqote(
                 &mut canvas,
                 &draw_x,
                 &draw_y,
@@ -738,15 +759,40 @@ pub fn create(
             let pop_header_i = barcodes.header_position(population)?;
             let pop_base = barcodes.rows[coord_i][pop_header_i].to_string();
 
-            let text_properties = text::TextProps {
-                text: pop_base,
-                size: constants::FONT_SIZE,
-            };
-            let text_buffer = text::text(&text_properties, text_color);
-            let text_x = (box_x + (sub_box_w / 2.)) - ((text_buffer.width / 2) as f32);
-            let text_y = (box_y + (sub_box_w / 2.)) - ((text_buffer.height / 2) as f32);
-            text_buffer.render(&mut canvas, Point::new(text_x, text_y));
+            let mut args = text::DrawRaqoteArgs::from_canvas(&mut canvas);
+            args.text = pop_base;
+            args.font_size = constants::FONT_SIZE;
+            args.x = box_x + (sub_box_w / 2.);
+            args.y = y;
+            args.horizontal_alignment = text::HorizontalAlignment::Center;
+            args.vertical_alignment = text::VerticalAlignment::Center;
+            text::draw_raqote(&mut args)?;
         }
+
+        // draw x axis tick
+        let line_x = x + (constants::X_INC / 2.);
+        let line_y1 = section_y + (constants::X_INC * (populations.len() as f32 + 1.));
+        let line_y2 = line_y1 + (constants::X_INC / 4.);
+        let draw_x = vec![line_x, line_x];
+        let draw_y = vec![line_y1, line_y2];
+        polygon::draw_raqote(
+            &mut canvas,
+            &draw_x,
+            &draw_y,
+            &constants::TRANSPARENT,
+            &constants::BLACK,
+            &constants::BASIC_STROKE_STYLE,
+        )?;
+        // // draw x axis tick label
+        // let text_properties = text::TextProps {
+        //     text: coord.to_string(),
+        //     size: constants::FONT_SIZE - 5,
+        // };
+        // let text_buffer = text::text(&text_properties, text_color);
+        // let text_x = x;
+        // let text_y = line_y2;
+        // text_buffer.render(&mut canvas, Point::new(text_x, text_y), Some(&text_transform));
+        // canvas.set_transform(&restore_transform);
     }
 
     // ------------------------------------------------------------------------
@@ -754,27 +800,6 @@ pub fn create(
     // ------------------------------------------------------------------------
 
     canvas.write_png(output_path).unwrap();
-
-    Ok(())
-}
-
-pub fn draw_section_label(
-    canvas: &mut raqote::DrawTarget,
-    label: String,
-    text_color: raqote::Color,
-    section_x: f32,
-    section_y: f32,
-    label_gap: f32,
-) -> Result<(), Report> {
-    // draw section label
-    let text_properties = text::TextProps {
-        text: label,
-        size: constants::FONT_SIZE,
-    };
-    let text_buffer = text::text(&text_properties, text_color);
-    let text_x = section_x - label_gap - text_buffer.width as f32;
-    let text_y = section_y + (constants::X_INC / 2.) - (text_buffer.height as f32 / 2.);
-    text_buffer.render(canvas, Point::new(text_x, text_y));
 
     Ok(())
 }
