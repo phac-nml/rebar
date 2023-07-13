@@ -2,7 +2,7 @@ use crate::cli::RunArgs;
 use crate::dataset::{Dataset, SearchResult};
 use crate::recombination::{detect_recombination, Recombination};
 use crate::sequence::Sequence;
-use color_eyre::eyre::{Report, Result};
+use color_eyre::eyre::{eyre, Report, Result};
 use itertools::Itertools;
 use log::debug;
 use std::collections::BTreeMap;
@@ -50,13 +50,12 @@ impl<'data, 'seq, 'best, 'args> Args<'data, 'seq, 'best> {
 pub fn search_all<'seq>(
     args: Args<'_, 'seq, '_>,
 ) -> Result<(Vec<SearchResult>, Recombination<'seq>), Report> {
-    // initialize the two return values
-    let mut parents = Vec::new();
-    let mut recombination = Recombination::new(args.sequence);
-
     if args.max_parents == 0 {
-        return Ok((parents, recombination));
+        return Err(eyre!("Parameter max_parents is set to 0."));
     }
+
+    // initialize parents to return
+    let mut parents = Vec::new();
 
     // don't restrict which populations are excluded/included
     // by default, dataset.search will look through all populations
@@ -76,7 +75,7 @@ pub fn search_all<'seq>(
 
     // Secondary parents ( 2 : max_parents)
     // this function consumes `parents`, modifies it, then returns it
-    (parents, recombination) = search_secondary(parents, &args)?;
+    let (parents, recombination) = search_secondary(parents, &args)?;
 
     Ok((parents, recombination))
 }
@@ -121,7 +120,8 @@ pub fn search_secondary<'seq>(
     let mut recombination = Recombination::new(args.sequence);
     let mut num_iter = 0;
     let mut num_parents = 1;
-    let mut exclude_populations = Vec::new();
+
+    let mut exclude_populations: Vec<String> = Vec::new();
 
     // For known recombinants, prioritize designated parents
     let mut designated_parents = Vec::new();
@@ -138,15 +138,19 @@ pub fn search_secondary<'seq>(
         // max number of iterations max number of parents achieved.
 
         if num_parents >= args.max_parents {
-            debug!(
-                "Maximum number of parents reached ({}), stopping parent search.",
-                args.max_parents
-            );
-            break;
+            debug!("Maximum parents reached ({num_parents}).");
+            return Ok((parents, recombination));
         }
         if num_iter >= args.max_iter {
-            debug!("Maximum number of iterations reached ({num_iter}), stopping parent search.");
-            break;
+            // If we found parents, fine to max out iter
+            if num_parents > 1 {
+                debug!("Maximum iterations reached ({num_iter}).");
+                return Ok((parents, recombination));
+            }
+            // If we didn't find parents, this is a failure
+            else {
+                return Err(eyre!("Maximum iterations reached ({num_iter}) with no secondary parent found."));
+            }
         }
         num_iter += 1;
 
@@ -232,40 +236,37 @@ pub fn search_secondary<'seq>(
         debug!("coordinates: {coordinates:?}");
 
         // --------------------------------------------------------------------
-        // EXCLUDE descendants/ancestors(?) of known parents
+        // Exclude Populations
 
         for parent in &parents {
-            // exclude descendants
-            let descendants = args
-                .dataset
-                .phylogeny
-                .get_descendants(&parent.consensus_population)?;
-            let descendants_to_exclude = descendants
-                .into_iter()
-                .filter(|pop| !exclude_populations.contains(pop))
-                .collect::<Vec<_>>();
-            exclude_populations.extend(descendants_to_exclude);
+            // // exclude descendants of known parents
+            // let descendants = args
+            //     .dataset
+            //     .phylogeny
+            //     .get_descendants(&parent.consensus_population)?;
+            // let descendants_to_exclude = descendants
+            //     .into_iter()
+            //     .filter(|pop| !exclude_populations.contains(pop))
+            //     .collect::<Vec<_>>();
+            // exclude_populations.extend(descendants_to_exclude);
 
-            // exclude ancestors
-            let ancestors = args
-                .dataset
-                .phylogeny
-                .get_ancestors(&parent.consensus_population)?;
-            // because of possible recombination, ancestors is a vector of vectors
-            // to reflect multiple parents and paths to the root.
-            // just flatten them for all our purposes here
-            let ancestors_to_exclude = ancestors
-                .into_iter()
-                .flatten()
-                .filter(|pop| !exclude_populations.contains(pop))
-                .collect::<Vec<_>>();
-            exclude_populations.extend(ancestors_to_exclude);
+            // // exclude ancestors of known parents
+            // let ancestors = args
+            //     .dataset
+            //     .phylogeny
+            //     .get_ancestors(&parent.consensus_population)?;
+            // // because of possible recombination, ancestors is a vector of vectors
+            // // to reflect multiple parents and paths to the root.
+            // // just flatten them for all our purposes here
+            // let ancestors_to_exclude = ancestors
+            //     .into_iter()
+            //     .flatten()
+            //     .filter(|pop| !exclude_populations.contains(pop))
+            //     .collect::<Vec<_>>();
+            // exclude_populations.extend(ancestors_to_exclude);
 
             // filter designated parents to prioritize search
-            designated_parents = designated_parents
-                .into_iter()
-                .filter(|p| *p != parent.consensus_population)
-                .collect_vec();
+            designated_parents.retain(|p| p != &parent.consensus_population);
         }
 
         // --------------------------------------------------------------------
@@ -286,102 +287,109 @@ pub fn search_secondary<'seq>(
         let populations_to_exclude = conflict_ref_count
             .into_iter()
             .filter(|(_pop, count)| *count == conflict_ref.len())
-            .map(|(pop, _count)| pop.to_owned())
-            .collect::<Vec<_>>();
+            .map(|(pop, _count)| pop.clone())
+            .collect_vec();
         exclude_populations.extend(populations_to_exclude);
 
         // --------------------------------------------------------------------
-        // Include populations that help resolve the conflict_alt
+        // Include Populations
 
-        // count up the number of conflict_alt by population
-        let mut conflict_alt_count = BTreeMap::new();
-        for sub in conflict_alt {
-            if args.dataset.mutations.contains_key(sub) {
-                let populations = args.dataset.mutations[sub]
-                    .iter()
-                    .filter(|pop| !exclude_populations.contains(pop))
-                    .collect_vec();
-                for pop in populations {
-                    *conflict_alt_count.entry(pop).or_insert(0) += 1
+        // prioritize known/designated parents first in search
+        let include_populations = if !designated_parents.is_empty() {
+            debug!("Prioritizing designated parents: {designated_parents:?}");
+            designated_parents.clone()
+        }
+        // prioritize populations that have min_subs conflict_alt
+        // ie. help resolve the conflict_alt
+        else {
+            // count up the number of conflict_alt by population
+            let mut conflict_alt_count = BTreeMap::new();
+            for sub in conflict_alt {
+                if args.dataset.mutations.contains_key(sub) {
+                    let populations = args.dataset.mutations[sub]
+                        .iter()
+                        .filter(|pop| !exclude_populations.contains(pop))
+                        .collect_vec();
+                    for pop in populations {
+                        *conflict_alt_count.entry(pop).or_insert(0) += 1
+                    }
                 }
             }
-        }
 
-        // keep any populations that have min_subs conflict_alt
-        let include_populations = conflict_alt_count
-            .into_iter()
-            .filter(|(_pop, count)| *count >= args.min_subs)
-            .map(|(pop, _count)| pop)
-            .cloned()
-            .collect::<Vec<_>>();
+            //debug!("Prioritizing conflict_alt resolution: {conflict_alt_count:?}");
+            let conflict_alt_populations = conflict_alt_count
+                .into_iter()
+                .filter(|(_pop, count)| *count >= args.min_subs)
+                .map(|(pop, _count)| pop)
+                .cloned()
+                .collect_vec();
+
+            debug!("Prioritizing conflict_alt resolution: {conflict_alt_populations:?}");
+            conflict_alt_populations
+        };
 
         // --------------------------------------------------------------------
         // Search Dataset #1 (Full Coordinate Range)
 
         // find the next parent candidate based on the full coordinate range
-        let coordinates_min = coordinates.iter().min().unwrap();
-        let coordinates_max = coordinates.iter().max().unwrap();
-        let coordinates_range =
-            (coordinates_min.to_owned()..coordinates_max.to_owned()).collect_vec();
+        let coord_min = coordinates.iter().min().unwrap();
+        let coord_max = coordinates.iter().max().unwrap();
+        let coord_range = (coord_min.to_owned()..coord_max.to_owned()).collect_vec();
 
-        // prioritize known/designated parents first
-        let search_result = if !designated_parents.is_empty() {
-            debug!("Prioritizing remaining designated parents: {designated_parents:?}");
-            args.dataset.search(
-                args.sequence,
-                Some(&designated_parents),
-                Some(&coordinates_range),
-            )?
-        }
-        // otherwise prioritize populations that solve conflicts
-        else {
-            args.dataset.search(
-                args.sequence,
-                Some(&include_populations),
-                Some(&coordinates_range),
-            )?
-        };
-        recombination = detect_recombination(&parents, Some(&search_result), args)?;
+        debug!("Searching based on coordinate range: {coord_min} - {coord_max}");
 
-        // if the recombination search succeeded,
-        if !recombination.breakpoints.is_empty() {
-            num_parents += 1;
-            parents.push(search_result);
-            continue;
+        let search_result = args.dataset.search(
+            args.sequence,
+            Some(&include_populations),
+            Some(&coord_range),
+        );
+
+        // if the search found parents, check for recombination
+        if let Ok(search_result) = search_result {
+            // remove this parent from future searches
+            exclude_populations.push(search_result.consensus_population.clone());
+            designated_parents.retain(|p| p != &search_result.consensus_population);
+
+            // check for recombination
+            let detect_result =
+                detect_recombination(&parents, Some(&search_result), args);
+
+            // if successful, add this parent to the list and update recombination
+            if let Ok(detect_result) = detect_result {
+                num_parents += 1;
+                parents.push(search_result);
+                recombination = detect_result;
+                continue;
+            }
         }
 
         // --------------------------------------------------------------------
-        // Search Dataset #2 (Specific Listed Coordinates)
+        // Search Dataset #2 (Precise Coordinates)
 
-        // prioritize known/designated parents first
-        let search_result = if !designated_parents.is_empty() {
-            debug!("Prioritizing remaining designated parents: {designated_parents:?}");
-            args.dataset.search(
-                args.sequence,
-                Some(&designated_parents),
-                Some(&coordinates),
-            )?
-        }
-        // otherwise prioritize populations that solve conflicts
-        else {
-            args.dataset.search(
-                args.sequence,
-                Some(&include_populations),
-                Some(&coordinates),
-            )?
-        };
-        recombination = detect_recombination(&parents, Some(&search_result), args)?;
+        debug!("Searching based on precise coordinates: {coordinates:?}");
 
-        // if the recombination search succeeded,
-        if !recombination.breakpoints.is_empty() {
-            num_parents += 1;
-            parents.push(search_result);
-            continue;
-        }
-        // if failed, exclude search_result top_populations from next iteration?
-        // do we also want to exclude failed search #1 top_populations?
-        else {
-            exclude_populations.extend(search_result.top_populations);
+        let search_result = args.dataset.search(
+            args.sequence,
+            Some(&include_populations),
+            Some(&coordinates),
+        );
+
+        // if the search found parents, check for recombination
+        if let Ok(search_result) = search_result {
+            // remove this parent from future searches
+            exclude_populations.push(search_result.consensus_population.clone());
+            designated_parents.retain(|p| p != &search_result.consensus_population);
+
+            // check for recombination
+            let detect_result =
+                detect_recombination(&parents, Some(&search_result), args);
+            // if successful, add this parent to the list and update recombination
+            if let Ok(detect_result) = detect_result {
+                num_parents += 1;
+                parents.push(search_result);
+                recombination = detect_result;
+                continue;
+            }
         }
     }
 

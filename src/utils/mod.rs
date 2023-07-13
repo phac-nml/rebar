@@ -90,6 +90,63 @@ impl Table {
 
         Ok(())
     }
+
+    /// Convert table to markdown format
+    pub fn to_markdown(&self) -> Result<String, Report> {
+        // get the maximum width of each column
+        let col_widths = self
+            // iterate through columns/headers
+            .headers
+            .iter()
+            .enumerate()
+            .map(|(col_i, header)| {
+                self
+                    // iterate through this column's rows,
+                    // get max string width, +2 to add space on either side
+                    .rows
+                    .iter()
+                    .map(|row| {
+                        let cell_width = (*row[col_i]).len();
+                        if cell_width >= header.len() {
+                            cell_width + 2
+                        } else {
+                            header.len() + 2
+                        }
+                    })
+                    .max()
+                    .unwrap()
+            })
+            .collect_vec();
+
+        let mut markdown = String::from("|");
+        // frame in between headers and rows
+        let mut header_frame = String::from("|");
+
+        // Create the header line
+        for it in self.headers.iter().zip(col_widths.iter()) {
+            let (header, col_width) = it;
+            let cell = format!("{:^width$}|", header, width = col_width);
+            markdown.push_str(&cell);
+
+            let frame = format!("{}|", "-".repeat(*col_width));
+            header_frame.push_str(&frame);
+        }
+        markdown.push('\n');
+        markdown.push_str(&header_frame);
+        markdown.push('\n');
+
+        // Create the row lines
+        for row in &self.rows {
+            markdown.push('|');
+            for (col_i, col_width) in col_widths.iter().enumerate() {
+                let cell = format!("{:^width$}|", row[col_i], width = col_width);
+                markdown.push_str(&cell);
+            }
+            markdown.push('\n');
+        }
+
+        Ok(markdown)
+    }
 }
 
 pub async fn download_file(
