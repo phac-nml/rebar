@@ -1,6 +1,5 @@
-// load font from file
 use color_eyre::eyre::{eyre, Report, Result, WrapErr};
-use image::{ImageBuffer, Rgba};
+use image::{imageops, ImageBuffer, Rgba};
 use itertools::Itertools;
 //use log::debug;
 use std::path::Path;
@@ -19,6 +18,7 @@ pub enum VerticalAlignment {
     Bottom,
 }
 
+/// Load font from file path
 pub fn load_font(path: &Path) -> Result<rusttype::Font, Report> {
     let font_bytes = std::fs::read(path).wrap_err_with(|| {
         format!("Could not load font from file path: {}", path.display())
@@ -161,7 +161,7 @@ pub struct DrawRaqoteArgs<'canvas> {
     pub y: f32,
     pub vertical_alignment: VerticalAlignment,
     pub horizontal_alignment: HorizontalAlignment,
-    pub rotate: u8,
+    pub rotate: u32,
 }
 
 impl<'canvas> DrawRaqoteArgs<'canvas> {
@@ -183,12 +183,20 @@ impl<'canvas> DrawRaqoteArgs<'canvas> {
     }
 }
 
+/// Draw text string onto raqote canvas.
 pub fn draw_raqote(
     args: &mut DrawRaqoteArgs,
 ) -> Result<ImageBuffer<Rgba<u8>, Vec<u8>>, Report> {
     let image = to_image(&args.text, &args.font_path, args.font_size, &args.color)?;
 
     // optional rotate
+    let image = match args.rotate {
+        90 => imageops::rotate90(&image),
+        180 => imageops::rotate180(&image),
+        270 => imageops::rotate270(&image),
+        _ => image,
+    };
+
     let data = to_raqote_data(&image)?;
 
     let x = match args.horizontal_alignment {
@@ -199,7 +207,7 @@ pub fn draw_raqote(
 
     let y = match args.vertical_alignment {
         VerticalAlignment::Top => args.y,
-        VerticalAlignment::Center => args.y + (image.height() as f32 / 2.),
+        VerticalAlignment::Center => args.y - (image.height() as f32 / 2.),
         VerticalAlignment::Bottom => args.y - image.height() as f32,
     };
 
