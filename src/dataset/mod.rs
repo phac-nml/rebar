@@ -154,7 +154,7 @@ impl Default for ConflictSummary {
 // ----------------------------------------------------------------------------
 // Dataset Search Result
 
-#[derive(Clone, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 pub struct SearchResult {
     pub sequence_id: String,
     pub consensus_population: String,
@@ -437,8 +437,7 @@ impl Dataset {
         }
 
         if population_matches.is_empty() {
-            debug!("No mutations matched a population in the dataset.");
-            return Ok(search_result);
+            return Err(eyre!("No mutations matched a population in the dataset."));
         }
 
         // --------------------------------------------------------------------
@@ -781,7 +780,7 @@ pub fn load(dataset_dir: &Path, mask: usize) -> Result<Dataset, Report> {
     let mut diagnostic: BTreeMap<Substitution, String> = BTreeMap::new();
 
     if diagnostic_path.exists() {
-        info!("Loading diagnostic mutations.");
+        info!("Loading diagnostic mutations: {diagnostic_path:?}");
         let mut reader = csv::ReaderBuilder::new()
             .delimiter(b'\t')
             .from_path(diagnostic_path)?;
@@ -794,7 +793,7 @@ pub fn load(dataset_dir: &Path, mask: usize) -> Result<Dataset, Report> {
             diagnostic.insert(mutation.to_owned(), population.clone());
         }
     } else {
-        info!("Calculating diagnostic mutations.");
+        info!("Calculating diagnostic mutations: {diagnostic_path:?}");
         let mut writer = csv::WriterBuilder::new()
             .delimiter(b'\t')
             .from_path(diagnostic_path)?;
