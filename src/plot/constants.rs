@@ -58,6 +58,13 @@ pub const LIGHT_GREY: Source = Source::Solid(SolidSource {
     a: 255,
 });
 
+pub const DARK_GREY: Source = Source::Solid(SolidSource {
+    r: 175,
+    g: 175,
+    b: 175,
+    a: 255,
+});
+
 pub const TRANSPARENT: Source = Source::Solid(SolidSource {
     r: 0,
     g: 0,
@@ -72,6 +79,8 @@ pub const LINE_WIDTH: f32 = 2.0;
 
 // needs to be just large enough to fit single char in FONT_SIZE
 pub const X_INC: f32 = 50.0;
+// small buffer for legibility
+pub const BUFFER: f32 = 5.0;
 
 pub const BASIC_STROKE_STYLE: StrokeStyle = StrokeStyle {
     cap: LineCap::Square,
