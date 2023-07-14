@@ -20,6 +20,7 @@ pub struct Args<'data, 'seq, 'best> {
     pub min_consecutive: usize,
     pub min_length: usize,
     pub min_subs: usize,
+    pub unbiased: bool,
 }
 
 impl<'data, 'seq, 'best, 'args> Args<'data, 'seq, 'best> {
@@ -38,6 +39,7 @@ impl<'data, 'seq, 'best, 'args> Args<'data, 'seq, 'best> {
             min_consecutive: args.min_consecutive,
             min_length: args.min_length,
             min_subs: args.min_subs,
+            unbiased: args.unbiased,
         }
     }
 }
@@ -48,7 +50,7 @@ impl<'data, 'seq, 'best, 'args> Args<'data, 'seq, 'best> {
 
 // Search for all parents (primary and secondary recombination).
 pub fn search_all<'seq>(
-    args: Args<'_, 'seq, '_>,
+    args: &mut Args<'_, 'seq, '_>,
 ) -> Result<(Vec<SearchResult>, Recombination<'seq>), Report> {
     if args.max_parents == 0 {
         return Err(eyre!("Parameter max_parents is set to 0."));
@@ -62,20 +64,41 @@ pub fn search_all<'seq>(
     let mut exclude_populations = Vec::new();
     let mut include_populations = Vec::new();
 
-    // For known recombinants, prioritize designated parent
+    // For known recombinants
     let recombinant = &args.best_match.recombinant;
-    if let Some(recombinant) = recombinant {
-        include_populations = args.dataset.phylogeny.get_parents(recombinant)?;
+    // Running a biased search
+    if !args.unbiased {
+        if let Some(recombinant) = recombinant {
+            // prioritize designated parents
+            include_populations = args.dataset.phylogeny.get_parents(recombinant)?;
+            debug!("Prioritizing designated parents: {include_populations:?}");
+
+            // relax search parameters for maximum sensitivity
+            debug!(
+                "Relaxing parameters for sensitive detection of a designated recombinant"
+            );
+            debug!(
+                "\tFrom --min-consecutive {} to --min-consecutive 1",
+                args.min_consecutive
+            );
+            args.min_consecutive = 1;
+            debug!("\tFrom --min-length {} to --min-length 1", args.min_length);
+            args.min_length = 1;
+            debug!("\tFrom --min-subs {} to --min-subs 1", args.min_subs);
+            args.min_subs = 1;
+
+            // apply edge cases
+        }
     }
 
     // Primary parent
     let parent_primary =
-        search_primary(&args, &mut include_populations, &mut exclude_populations)?;
+        search_primary(args, &mut include_populations, &mut exclude_populations)?;
     parents.push(parent_primary);
 
     // Secondary parents ( 2 : max_parents)
     // this function consumes `parents`, modifies it, then returns it
-    let (parents, recombination) = search_secondary(parents, &args)?;
+    let (parents, recombination) = search_secondary(parents, args)?;
 
     Ok((parents, recombination))
 }
@@ -88,9 +111,18 @@ pub fn search_primary(
 ) -> Result<SearchResult, Report> {
     debug!("Searching for Parent 1");
 
-    // If this is a known recombinant, exclude self and the recombinant's descendants from parent search.
+    // If this is a known recombinant, exclude self and the recombinant's
+    // descendants from parent search.
+    // Is this a requirement, or should it be affected by unbiased?
     let recombinant = args.best_match.recombinant.clone();
-    let search_result = if let Some(recombinant) = recombinant {
+
+    // unbiased search, just use best_match/consensus as parent 1
+    let search_result = if args.unbiased {
+        args.best_match.to_owned()
+    }
+    // biased search, check if a known recombination, exclude self and
+    // the recombinant's descendants from parent search.
+    else if let Some(recombinant) = recombinant {
         // exclude self
         exclude_populations.push(args.best_match.consensus_population.clone());
         // exclude descendants
@@ -123,11 +155,14 @@ pub fn search_secondary<'seq>(
 
     let mut exclude_populations: Vec<String> = Vec::new();
 
-    // For known recombinants, prioritize designated parents
-    let mut designated_parents = Vec::new();
     let recombinant = &args.best_match.recombinant;
-    if let Some(recombinant) = recombinant {
-        designated_parents = args.dataset.phylogeny.get_parents(recombinant)?;
+    let mut designated_parents = Vec::new();
+
+    // running a biased search, prioritize designated parents
+    if !args.unbiased {
+        if let Some(recombinant) = recombinant {
+            designated_parents = args.dataset.phylogeny.get_parents(recombinant)?;
+        }
     }
 
     loop {
@@ -324,7 +359,14 @@ pub fn search_secondary<'seq>(
                 .cloned()
                 .collect_vec();
 
-            debug!("Prioritizing conflict_alt resolution: {conflict_alt_populations:?}");
+            // trunclate list for display
+            let display_populations = if conflict_alt_populations.len() <= 10 {
+                conflict_alt_populations.iter().join(", ")
+            } else {
+                format!("{} ...", conflict_alt_populations[0..10].iter().join(", "),)
+            };
+
+            debug!("Prioritizing conflict_alt resolution: {display_populations:?}");
             conflict_alt_populations
         };
 
@@ -357,6 +399,8 @@ pub fn search_secondary<'seq>(
             // if successful, add this parent to the list and update recombination
             if let Ok(detect_result) = detect_result {
                 num_parents += 1;
+                // reset the iter counter
+                num_iter = 0;
                 parents.push(search_result);
                 recombination = detect_result;
                 continue;
@@ -386,6 +430,8 @@ pub fn search_secondary<'seq>(
             // if successful, add this parent to the list and update recombination
             if let Ok(detect_result) = detect_result {
                 num_parents += 1;
+                // reset the iter counter
+                num_iter = 0;
                 parents.push(search_result);
                 recombination = detect_result;
                 continue;

@@ -1,6 +1,7 @@
 use crate::dataset;
 use clap::{Args, Parser, Subcommand, ValueEnum};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
+use std::default::Default;
 use std::path::PathBuf;
 
 // -----------------------------------------------------------------------------
@@ -65,12 +66,12 @@ pub enum DatasetCommand {
 pub struct DatasetDownloadArgs {
     /// Dataset name.
     #[clap(short = 'r', long, required = true)]
-    pub name: dataset::Name,
+    pub name: dataset::attributes::Name,
 
     /// Dataset tag.
     #[clap(short = 't', long)]
-    #[clap(default_value_t=dataset::Tag::default())]
-    pub tag: dataset::Tag,
+    #[clap(default_value_t=dataset::attributes::Tag::default())]
+    pub tag: dataset::attributes::Tag,
 
     /// Output directory.
     ///
@@ -102,7 +103,7 @@ pub struct DatasetListArgs {
 // -----------------------------------------------------------------------------
 
 /// Run Rebar on input alignment or dataset population.
-#[derive(Clone, Debug, Parser)]
+#[derive(Clone, Debug, Deserialize, Parser, Serialize)]
 #[clap(verbatim_doc_comment)]
 pub struct RunArgs {
     #[command(flatten)]
@@ -120,7 +121,7 @@ pub struct RunArgs {
     #[arg(short = 'p', long, default_value_t = 2)]
     pub max_parents: usize,
 
-    /// Maximum number of search iterations to find parents.
+    /// Maximum number of search iterations to find each parent.
     #[arg(short = 'i', long, default_value_t = 3)]
     pub max_iter: usize,
 
@@ -142,12 +143,52 @@ pub struct RunArgs {
     #[clap(short = 'o', long, required = true)]
     pub output_dir: PathBuf,
 
-    /// If the directory does not exist, it will be created.
+    /// Number of CPU threads to use.
     #[clap(short = 't', long, default_value_t = 1)]
     pub threads: usize,
+
+    /// Run an unbiased search, which does not use information about designated recombinant parents.
+    #[arg(short = 'u', long, default_value_t = false)]
+    pub unbiased: bool,
 }
 
-#[derive(Args, Clone, Debug)]
+impl Default for RunArgs {
+    fn default() -> Self {
+        RunArgs {
+            input: RunInput::default(),
+            dataset_dir: PathBuf::new(),
+            mask: 200,
+            max_parents: 2,
+            max_iter: 3,
+            min_consecutive: 3,
+            min_length: 500,
+            min_subs: 1,
+            output_dir: PathBuf::new(),
+            threads: 1,
+            unbiased: false,
+        }
+    }
+}
+
+impl RunArgs {
+    pub fn new() -> Self {
+        RunArgs {
+            input: RunInput::default(),
+            dataset_dir: PathBuf::new(),
+            mask: 0,
+            max_parents: 0,
+            max_iter: 0,
+            min_consecutive: 0,
+            min_length: 0,
+            min_subs: 0,
+            output_dir: PathBuf::new(),
+            threads: 0,
+            unbiased: false,
+        }
+    }
+}
+
+#[derive(Args, Clone, Debug, Deserialize, Serialize)]
 #[group(required = true, multiple = true)]
 pub struct RunInput {
     /// Input fasta alignment
@@ -157,6 +198,21 @@ pub struct RunInput {
     /// Input dataset population
     #[arg(long)]
     pub alignment: Option<PathBuf>,
+}
+
+impl Default for RunInput {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl RunInput {
+    pub fn new() -> Self {
+        RunInput {
+            populations: None,
+            alignment: None,
+        }
+    }
 }
 
 // -----------------------------------------------------------------------------

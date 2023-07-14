@@ -1,4 +1,4 @@
-use crate::dataset::Name;
+use crate::dataset::attributes::Name;
 use crate::utils;
 use color_eyre::eyre::{eyre, Report, Result};
 use itertools::Itertools;

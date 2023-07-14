@@ -22,28 +22,18 @@ async fn main() -> Result<(), Report> {
     match args.command {
         // --------------------------------------------------------------------
         // Dataset
-        rebar::cli::Command::Dataset(args) => {
-            match args.command {
-                // list
-                rebar::cli::DatasetCommand::List(_) => todo!(),
-                // download
-                rebar::cli::DatasetCommand::Download(args) => {
-                    rebar::dataset::download(&args.name, &args.tag, &args.output_dir)
-                        .await?;
-                }
+        rebar::cli::Command::Dataset(dataset_args) => match dataset_args.command {
+            rebar::cli::DatasetCommand::List(_dataset_list_args) => todo!(),
+            rebar::cli::DatasetCommand::Download(dataset_download_args) => {
+                rebar::dataset_download(dataset_download_args).await?
             }
-        }
-
+        },
         // --------------------------------------------------------------------
         // Run
-        rebar::cli::Command::Run(args) => {
-            rebar::run(*args)?;
-        }
+        rebar::cli::Command::Run(run_args) => rebar::run(*run_args)?,
         // --------------------------------------------------------------------
         // Plot
-        rebar::cli::Command::Plot(args) => {
-            rebar::plot(*args)?;
-        }
+        rebar::cli::Command::Plot(plot_args) => rebar::plot(*plot_args)?,
     }
 
     Ok(())
