@@ -20,6 +20,13 @@ use rayon::prelude::*;
 use serde::Serialize;
 use std::fs::create_dir_all;
 
+/// Download rebar dataset.
+pub async fn dataset_download(args: cli::DatasetDownloadArgs) -> Result<(), Report> {
+    dataset::io::download(&args.name, &args.tag, &args.output_dir).await?;
+
+    Ok(())
+}
+
 /// Run rebar on input alignment and/or dataset population
 pub fn run(args: cli::RunArgs) -> Result<(), Report> {
     // check how many threads are available on the system
@@ -61,7 +68,7 @@ pub fn run(args: cli::RunArgs) -> Result<(), Report> {
     // Collect files in dataset_dir into a dataset object
     // This mainly includes parent populations sequences
     //   and optionally a phylogenetic representation.
-    let dataset = dataset::load(&args.dataset_dir, args.mask)?;
+    let dataset = dataset::io::load(&args)?;
 
     // init a container to hold query sequences, dataset
     // populations and/or sequences from an input alignment
@@ -106,7 +113,9 @@ pub fn run(args: cli::RunArgs) -> Result<(), Report> {
         for population in search_populations {
             // check if population is in dataset
             if dataset.populations.contains_key(&population) {
-                let sequence = dataset.populations[&population].clone();
+                let mut sequence = dataset.populations[&population].clone();
+                // add prefix 'query_' to differentiate from dataset
+                sequence.id = format!("query_{}", sequence.id).to_string();
                 ids_seen.push(sequence.id.clone());
                 sequences.push(sequence);
                 debug!("Added population {population} to query sequences.");
@@ -178,9 +187,9 @@ pub fn run(args: cli::RunArgs) -> Result<(), Report> {
                 // use the successful search as the best_match
                 best_match = search_result;
                 // setup a search for the recombination parents
-                let parent_search_args =
+                let mut parent_search_args =
                     parent_search::Args::new(&dataset, sequence, &best_match, &args);
-                let parent_search = parent_search::search_all(parent_search_args);
+                let parent_search = parent_search::search_all(&mut parent_search_args);
                 // if the search was successful, unzip the results
                 if let Ok(parent_search) = parent_search {
                     (_, recombination) = parent_search;
@@ -210,6 +219,8 @@ pub fn run(args: cli::RunArgs) -> Result<(), Report> {
     // Export Linelist (single)
 
     let outpath_linelist = args.output_dir.join("linelist.tsv");
+    info!("Exporting linelist: {outpath_linelist:?}");
+
     let linelist = export::LineList::create(&recombinations, &best_matches, &dataset)?;
     let linelist_table = linelist.to_table()?;
     utils::write_table(&linelist_table, &outpath_linelist, Some('\t'))?;
@@ -218,14 +229,22 @@ pub fn run(args: cli::RunArgs) -> Result<(), Report> {
     // Export Barcodes (multiple, collected by recombinant)
 
     let outdir_barcodes = args.output_dir.join("barcodes");
+
     create_dir_all(&outdir_barcodes)?;
 
     // get unique keys of recombinants identified
     let unique_keys = recombinations
         .iter()
+        .filter(|rec| *rec.unique_key != String::new())
         .map(|rec| &rec.unique_key)
         .unique()
         .collect_vec();
+
+    if unique_keys.is_empty() {
+        warn!("No recombination detected, no barcodes will be output");
+    } else {
+        info!("Exporting recombination barcodes: {outdir_barcodes:?}");
+    }
 
     for unique_key in unique_keys {
         // filter recombinations down to just this recombinant unique_key

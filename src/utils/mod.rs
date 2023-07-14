@@ -92,6 +92,8 @@ impl Table {
     }
 
     /// Convert table to markdown format
+    ///
+    /// TBD: error handling for empty rows!
     pub fn to_markdown(&self) -> Result<String, Report> {
         // get the maximum width of each column
         let col_widths = self

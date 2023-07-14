@@ -129,11 +129,13 @@ impl Phylogeny {
 
     pub async fn build_graph(
         &mut self,
-        dataset_name: &dataset::Name,
+        dataset_name: &dataset::attributes::Name,
         dataset_dir: &Path,
     ) -> Result<(), Report> {
         let (graph_data, order) = match dataset_name {
-            &dataset::Name::SarsCov2 => create_sarscov2_graph_data(dataset_dir).await?,
+            &dataset::attributes::Name::SarsCov2 => {
+                create_sarscov2_graph_data(dataset_dir).await?
+            }
             _ => return Ok(()),
         };
 
@@ -205,6 +207,8 @@ impl Phylogeny {
             PhylogenyExportFormat::Dot => {
                 let mut output =
                     format!("{}", Dot::with_config(&self.graph, &[Config::EdgeNoLabel]));
+                // set graph id (for cytoscape)
+                output = str::replace(&output, "digraph", "digraph G");
                 // set horizontal (Left to Right) format for tree-like visualizer
                 output =
                     str::replace(&output, "digraph {", "digraph {\n    rankdir=\"LR\";");
@@ -353,7 +357,7 @@ impl Phylogeny {
             // but some datasets have named internal nodes, so a listed
             // node could be a common ancestor!
             let ancestor_paths =
-                self.get_paths(name, &"root".to_string(), petgraph::Incoming)?;
+                self.get_paths(&"root".to_string(), name, petgraph::Outgoing)?;
 
             for ancestor_path in ancestor_paths {
                 for (depth, ancestor) in ancestor_path.iter().enumerate() {
@@ -418,7 +422,7 @@ impl Phylogeny {
 
 pub async fn download_lineage_notes(dataset_dir: &Path) -> Result<PathBuf, Report> {
     let decompress = false;
-    let url = dataset::SARSCOV2_LINEAGE_NOTES_URL;
+    let url = dataset::constants::SARSCOV2_LINEAGE_NOTES_URL;
     let output_path = dataset_dir.join("lineage_notes.txt");
     utils::download_file(url, &output_path, decompress).await?;
 
@@ -429,7 +433,7 @@ pub async fn download_alias_key(dataset_dir: &Path) -> Result<PathBuf, Report> {
     // https://raw.githubusercontent.com/cov-lineages/pango-designation/master/pango_designation/alias_key.json
 
     let decompress = false;
-    let url = dataset::SARSCOV2_ALIAS_KEY_URL;
+    let url = dataset::constants::SARSCOV2_ALIAS_KEY_URL;
     let output_path = dataset_dir.join("alias_key.json");
     utils::download_file(url, &output_path, decompress).await?;
 
