@@ -1,156 +1,17 @@
+pub mod table;
+
+use crate::utils::table::Table;
 use color_eyre::eyre::{eyre, Report, Result, WrapErr};
-use csv;
+use color_eyre::Help;
 use itertools::Itertools;
+use log::warn;
 use std::fs::{remove_file, write, File};
-use std::io::Read;
+use std::io::{self, BufRead, Read};
 use std::path::{Path, PathBuf};
 use tempfile::TempDir;
 use zstd::stream::read::Decoder;
 
-#[derive(Debug, Clone)]
-pub struct Table {
-    pub headers: Vec<String>,
-    pub rows: Vec<Vec<String>>,
-    pub path: PathBuf,
-}
-
-impl Default for Table {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-impl Table {
-    pub fn new() -> Self {
-        Table {
-            path: PathBuf::new(),
-            headers: Vec::new(),
-            rows: Vec::new(),
-        }
-    }
-
-    pub fn from_tsv(path: &Path) -> Result<Self, Report> {
-        let mut table = Table::new();
-
-        // init reader from file path
-        let mut reader = csv::ReaderBuilder::new()
-            .delimiter(b'\t')
-            .from_path(path)
-            .wrap_err_with(|| format!("Failed to open table at: {}", path.display()))?;
-
-        // read in headers and convert to String
-        let headers = reader.headers()?.iter().map(String::from).collect_vec();
-
-        // read in records, then convert to rows of String
-        let records: Vec<csv::StringRecord> = reader
-            .records()
-            .collect::<Result<Vec<csv::StringRecord>, csv::Error>>()?;
-        let rows: Vec<Vec<String>> = records
-            .iter()
-            .map(|row| row.iter().map(String::from).collect_vec())
-            .collect_vec();
-
-        table.headers = headers;
-        table.rows = rows;
-        table.path = path.to_path_buf();
-
-        Ok(table)
-    }
-
-    pub fn header_position(&self, header: &str) -> Result<usize, Report> {
-        let pos = self
-            .headers
-            .iter()
-            .position(|h| h == header)
-            .ok_or_else(|| {
-                eyre!("Column '{header}' was not found in table: {:?}.", self.path)
-            })?;
-
-        Ok(pos)
-    }
-
-    /// write to file
-    pub fn write(&self, output_path: &Path, delim: Option<char>) -> Result<(), Report> {
-        let delim = match delim {
-            Some(c) => c as u8,
-            None => b'\t',
-        };
-        let mut writer = csv::WriterBuilder::new()
-            .delimiter(delim)
-            .from_path(output_path)
-            .wrap_err_with(|| {
-                format!("Failed to write table to: {}", output_path.display())
-            })?;
-
-        writer.write_record(&self.headers)?;
-
-        for row in &self.rows {
-            writer.write_record(row)?;
-        }
-
-        Ok(())
-    }
-
-    /// Convert table to markdown format
-    ///
-    /// TBD: error handling for empty rows!
-    pub fn to_markdown(&self) -> Result<String, Report> {
-        // get the maximum width of each column
-        let col_widths = self
-            // iterate through columns/headers
-            .headers
-            .iter()
-            .enumerate()
-            .map(|(col_i, header)| {
-                self
-                    // iterate through this column's rows,
-                    // get max string width, +2 to add space on either side
-                    .rows
-                    .iter()
-                    .map(|row| {
-                        let cell_width = (*row[col_i]).len();
-                        if cell_width >= header.len() {
-                            cell_width + 2
-                        } else {
-                            header.len() + 2
-                        }
-                    })
-                    .max()
-                    .unwrap()
-            })
-            .collect_vec();
-
-        let mut markdown = String::from("|");
-        // frame in between headers and rows
-        let mut header_frame = String::from("|");
-
-        // Create the header line
-        for it in self.headers.iter().zip(col_widths.iter()) {
-            let (header, col_width) = it;
-            let cell = format!("{:^width$}|", header, width = col_width);
-            markdown.push_str(&cell);
-
-            let frame = format!("{}|", "-".repeat(*col_width));
-            header_frame.push_str(&frame);
-        }
-        markdown.push('\n');
-        markdown.push_str(&header_frame);
-        markdown.push('\n');
-
-        // Create the row lines
-        for row in &self.rows {
-            markdown.push('|');
-            for (col_i, col_width) in col_widths.iter().enumerate() {
-                let cell = format!("{:^width$}|", row[col_i], width = col_width);
-                markdown.push_str(&cell);
-            }
-            markdown.push('\n');
-        }
-
-        Ok(markdown)
-    }
-}
-
+/// Download file from url to path, with optional decompression.
 pub async fn download_file(
     url: &str,
     output_path: &PathBuf,
@@ -172,23 +33,22 @@ pub async fn download_file(
         let tmp_path = PathBuf::from(tmp_dir.path()).join(format!("tmpfile.{ext}"));
         let content = response.bytes().await?;
         write(&tmp_path, content)
-            .wrap_err(format!("Unable to write file: {:?}", tmp_path))?;
+            .wrap_err_with(|| eyre!("Unable to write file: {tmp_path:?}"))?;
         decompress_file(&tmp_path, output_path, true)?;
     } else {
         let content = response.text().await?;
         write(output_path, content)
-            .wrap_err(format!("Unable to write file: {:?}", output_path))?;
+            .wrap_err_with(|| eyre!("Unable to write file: {output_path:?}"))?;
     }
 
     Ok(())
 }
 
-pub fn decompress_file(
-    input: &PathBuf,
-    output: &PathBuf,
-    inplace: bool,
-) -> Result<(), Report> {
-    let ext = input.extension().unwrap();
+/// Decompress file, optionally inplace
+pub fn decompress_file(input: &Path, output: &Path, inplace: bool) -> Result<(), Report> {
+    let ext = input
+        .extension()
+        .ok_or_else(|| eyre!("Unable to parse extension from file: {input:?}"))?;
 
     match ext.to_str().unwrap() {
         "zst" => {
@@ -209,26 +69,79 @@ pub fn decompress_file(
     Ok(())
 }
 
-/// Write table to file.
-pub fn write_table(
-    table: &Vec<Vec<String>>,
-    output_path: &Path,
-    delim: Option<char>,
-) -> Result<(), Report> {
-    let delim = match delim {
-        Some(c) => c as u8,
-        None => b'\t',
-    };
-    let mut writer = csv::WriterBuilder::new()
-        .delimiter(delim)
-        .from_path(output_path)
-        .wrap_err_with(|| {
-            format!("Failed to write table to: {}", output_path.display())
-        })?;
+// The output is wrapped in a Result to allow matching on errors
+// Returns an Iterator to the Reader of the lines of the file.
+/// Source: https://doc.rust-lang.org/rust-by-example/std_misc/file/read_lines.html
+pub fn read_lines(path: &Path) -> Result<io::Lines<io::BufReader<File>>, Report> {
+    // attempt to open the file path
+    let file = File::open(path)
+        .wrap_err_with(|| format!("Failed to open table at: {path:?}"))?;
+    // read in the lines
+    let lines = io::BufReader::new(file).lines();
+    Ok(lines)
+}
 
-    for row in table {
-        writer.write_record(row)?;
+pub fn read_table(path: &Path) -> Result<Table, Report> {
+    let mut table = Table::new();
+
+    // lookup delimiter from file extension
+    let delim = path_to_delim(path)?;
+
+    for line in (read_lines(path)?).flatten() {
+        let row = line
+            .split(delim)
+            .collect_vec()
+            .into_iter()
+            .map(String::from)
+            .collect_vec();
+        // if headers are empty, this is the first line, write headers
+        if table.headers.is_empty() {
+            table.headers = row;
+        }
+        // otherwise regular row
+        else {
+            table.rows.push(row);
+        }
     }
 
-    Ok(())
+    table.path = path.to_path_buf();
+
+    Ok(table)
+}
+
+pub fn ext_to_delim(ext: &str) -> Result<char, Report> {
+    let delim = match ext {
+        "tsv" => '\t',
+        "csv" => ',',
+        "txt" => {
+            warn!("File extension .txt is assumed to be tab-delimited.");
+            '\t'
+        }
+        _ => {
+            return Err(eyre!("Unknown file extension: {ext:?}")
+                .suggestion("Options are tsv or csv."))
+        }
+    };
+
+    Ok(delim)
+}
+
+pub fn path_to_delim(path: &Path) -> Result<char, Report> {
+    // get the path extension
+    let ext = path_to_ext(path)?;
+
+    // convert extension to the expected delimiter
+    let delim = ext_to_delim(&ext)?;
+
+    Ok(delim)
+}
+
+pub fn path_to_ext(path: &Path) -> Result<String, Report> {
+    let result = path.extension();
+    let ext = match result {
+        Some(ext) => ext.to_os_string().into_string().unwrap(),
+        None => return Err(eyre!("Unable to parse extension from file: {path:?}")),
+    };
+
+    Ok(ext)
 }

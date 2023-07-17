@@ -1,5 +1,6 @@
 use crate::dataset::{Dataset, SearchResult};
 use crate::recombination;
+use crate::utils;
 use color_eyre::eyre::{eyre, Report, Result};
 use itertools::Itertools;
 
@@ -83,12 +84,11 @@ impl LineList {
         .collect_vec()
     }
 
-    pub fn to_table(&self) -> Result<Vec<Vec<String>>, Report> {
-        let mut table = Vec::new();
+    pub fn to_table(&self) -> Result<utils::table::Table, Report> {
+        let mut table = utils::table::Table::new();
 
         // add headers
-        let headers = LineList::headers();
-        table.push(headers.clone());
+        table.headers = LineList::headers();
 
         let num_rows = self.strain.len();
 
@@ -98,12 +98,12 @@ impl LineList {
         }
 
         for row_i in 0..num_rows {
-            let mut row = vec![String::new(); headers.len()];
-            for (col_i, header) in headers.iter().enumerate() {
+            let mut row = vec![String::new(); table.headers.len()];
+            for (col_i, header) in table.headers.iter().enumerate() {
                 let vals = self.get(header)?;
                 row[col_i] = vals[row_i].to_string();
             }
-            table.push(row);
+            table.rows.push(row);
         }
 
         Ok(table)

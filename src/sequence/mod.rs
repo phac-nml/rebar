@@ -1,9 +1,9 @@
-use crate::ToYaml;
-use color_eyre::eyre::{Report, Result};
-use itertools::Itertools;
+use bio::io::fasta;
+use color_eyre::eyre::{eyre, Report, Result, WrapErr};
 use serde::{Deserialize, Serialize};
 use std::cmp::Ordering;
 use std::default::Default;
+use std::path::Path;
 use std::str::FromStr;
 
 #[derive(Copy, Clone, Debug, Serialize, Deserialize)]
@@ -124,25 +124,6 @@ pub struct Sequence {
     pub missing: Vec<usize>,
 }
 
-impl ToYaml for Sequence {
-    fn to_yaml(&self) -> String {
-        // This is terrible code formatting, I'm not surely how to improve yet,
-        // While keeping str output format readable
-        format!(
-            "\n
-            id:             {}
-            missing:        {}
-            deletions:      {}
-            substitutions:  {}
-            ",
-            self.id,
-            self.missing.iter().format(", "),
-            self.deletions.iter().format(", "),
-            self.substitutions.iter().format(", "),
-        )
-    }
-}
-
 impl Sequence {
     pub fn new() -> Self {
         Sequence {
@@ -214,4 +195,28 @@ impl Sequence {
 
         Ok(sample)
     }
+}
+
+// ----------------------------------------------------------------------------
+// Functions
+// ----------------------------------------------------------------------------
+
+/// Read first record of fasta path into sequence record.
+pub fn read_reference(path: &Path, mask: usize) -> Result<Sequence, Report> {
+    // start reading in the reference as fasta, raise error if file doesn't exist
+    let reader = fasta::Reader::from_file(path).expect("Unable to read reference");
+
+    // parse just the first record from the reference
+    // 1. raise error if record iterator doesn't work
+    // 2. raise error if first record is not proper fasta format.
+    let reference = reader
+        .records()
+        .next()
+        .ok_or_else(|| eyre!("Unable to read reference records: {path:?}"))?
+        .wrap_err_with(|| eyre!("Unable to read first fasta record: {path:?}"))?;
+
+    // convert to sequence
+    let reference = Sequence::from_record(reference, None, mask)?;
+
+    Ok(reference)
 }

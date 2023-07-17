@@ -1,4 +1,3 @@
-pub mod annotation;
 pub mod cli;
 pub mod dataset;
 pub mod export;
@@ -16,13 +15,11 @@ use indicatif::{style::ProgressStyle, ProgressBar};
 use itertools::Itertools;
 use log::{debug, info, warn};
 use rayon::prelude::*;
-//use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
-use serde::Serialize;
 use std::fs::create_dir_all;
 
 /// Download rebar dataset.
 pub async fn dataset_download(args: cli::DatasetDownloadArgs) -> Result<(), Report> {
-    dataset::io::download(&args.name, &args.tag, &args.output_dir).await?;
+    dataset::io::download_dataset(&args.name, &args.tag, &args.output_dir).await?;
 
     Ok(())
 }
@@ -68,7 +65,7 @@ pub fn run(args: cli::RunArgs) -> Result<(), Report> {
     // Collect files in dataset_dir into a dataset object
     // This mainly includes parent populations sequences
     //   and optionally a phylogenetic representation.
-    let dataset = dataset::io::load(&args)?;
+    let dataset = dataset::io::load_dataset(&args)?;
 
     // init a container to hold query sequences, dataset
     // populations and/or sequences from an input alignment
@@ -223,7 +220,7 @@ pub fn run(args: cli::RunArgs) -> Result<(), Report> {
 
     let linelist = export::LineList::create(&recombinations, &best_matches, &dataset)?;
     let linelist_table = linelist.to_table()?;
-    utils::write_table(&linelist_table, &outpath_linelist, Some('\t'))?;
+    linelist_table.write(&outpath_linelist)?;
 
     // ------------------------------------------------------------------------
     // Export Barcodes (multiple, collected by recombinant)
@@ -257,7 +254,7 @@ pub fn run(args: cli::RunArgs) -> Result<(), Report> {
         let barcode_table =
             recombination::combine_tables(&unique_rec, &dataset.reference)?;
         let barcode_table_path = outdir_barcodes.join(format!("{unique_key}.tsv"));
-        barcode_table.write(&barcode_table_path, Some('\t'))?;
+        barcode_table.write(&barcode_table_path)?;
     }
 
     info!("Done.");
@@ -322,17 +319,4 @@ pub fn plot(args: cli::PlotArgs) -> Result<(), Report> {
 
     info!("Done.");
     Ok(())
-}
-
-// ----------------------------------------------------------------------------
-// Traits
-// ----------------------------------------------------------------------------
-
-pub trait ToYaml {
-    fn to_yaml(&self) -> String
-    where
-        Self: Serialize,
-    {
-        serde_yaml::to_string(&self).unwrap()
-    }
 }

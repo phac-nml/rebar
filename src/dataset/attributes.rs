@@ -1,5 +1,7 @@
+use crate::utils;
 use color_eyre::eyre::{eyre, Report, Result, WrapErr};
 use color_eyre::Help;
+use itertools::Itertools;
 use log::info;
 use serde::{Deserialize, Serialize};
 use std::fmt;
@@ -193,5 +195,44 @@ impl std::fmt::Display for SummaryImportFormat {
         match self {
             SummaryImportFormat::Json => write!(f, "json"),
         }
+    }
+}
+
+// ----------------------------------------------------------------------------
+// Dataset Annotations
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct Annotations {
+    pub gene: Vec<String>,
+    pub abbreviation: Vec<String>,
+    pub start: Vec<usize>,
+    pub end: Vec<usize>,
+}
+
+impl Annotations {
+    pub fn to_table(&self) -> Result<utils::table::Table, Report> {
+        let mut table = utils::table::Table::new();
+
+        // headers
+        table.headers = vec!["gene", "abbreviation", "start", "end"]
+            .into_iter()
+            .map(String::from)
+            .collect_vec();
+
+        // rows
+        let mut rows = Vec::new();
+        for i in 0..(self.gene.len()) {
+            let row = vec![
+                self.gene[i].clone(),
+                self.abbreviation[i].clone(),
+                self.start[i].to_string(),
+                self.end[i].to_string(),
+            ];
+            rows.push(row);
+        }
+
+        table.rows = rows;
+
+        Ok(table)
     }
 }

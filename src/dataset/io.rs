@@ -1,13 +1,13 @@
-use crate::annotation::Annotations;
 use crate::cli;
+use crate::dataset::attributes::{Name, Summary, SummaryExportFormat, Tag};
 use crate::dataset::edge_cases::{EdgeCaseExportFormat, EdgeCaseImportFormat};
-use crate::dataset::{attributes, constants, edge_cases, Dataset};
+use crate::dataset::{edge_cases, sarscov2, Dataset};
 use crate::phylogeny::{Phylogeny, PhylogenyExportFormat, PhylogenyImportFormat};
-use crate::sequence::{Sequence, Substitution};
+use crate::sequence::{read_reference, Sequence, Substitution};
 use crate::utils;
 use bio::io::fasta;
 use color_eyre::eyre::{eyre, Report, Result};
-use log::info;
+use log::{info, warn};
 use std::collections::BTreeMap;
 use std::fs::{create_dir_all, File};
 use std::path::Path;
@@ -18,11 +18,12 @@ use std::str::FromStr;
 // ----------------------------------------------------------------------------
 
 /// Download a remote dataset
-pub async fn download(
-    name: &attributes::Name,
-    tag: &attributes::Tag,
+pub async fn download_dataset(
+    name: &Name,
+    tag: &Tag,
     output_dir: &Path,
 ) -> Result<(), Report> {
+    // Create the output directory if it doesn't exist
     if !output_dir.exists() {
         create_dir_all(output_dir)?;
         info!("Creating output directory: {:?}", output_dir);
@@ -32,14 +33,10 @@ pub async fn download(
     // Download Reference
 
     let url = match name {
-        attributes::Name::SarsCov2 => constants::SARSCOV2_REFERENCE_URL.to_string(),
-        _ => {
-            return Err(eyre!(
-                "Downloading the {name} dataset is not implemented yet."
-            ))
-        }
+        Name::SarsCov2 => sarscov2::REFERENCE_URL.to_string(),
+        _ => return Err(eyre!("Reference download for {name} is not implemented.")),
     };
-    let ext = Path::new(&url).extension().unwrap().to_str().unwrap();
+    let ext = utils::path_to_ext(Path::new(&url))?;
     let mut decompress = false;
     if ext != "fasta" && ext != "fa" {
         decompress = true;
@@ -53,22 +50,22 @@ pub async fn download(
 
     let annotations_path = output_dir.join("annotations.tsv");
     info!("Downloading annotations to {:?}", annotations_path);
-    let annotations = Annotations::from_name(name)?;
+
+    let annotations = match name {
+        Name::SarsCov2 => sarscov2::create_annotations()?,
+        _ => return Err(eyre!("Annotations for {name} dataset is not implemented.")),
+    };
     let annotations_table = annotations.to_table()?;
-    annotations_table.write(&annotations_path, Some('\t'))?;
+    annotations_table.write(&annotations_path)?;
 
     // --------------------------------------------------------------------
     // Download Populations
 
     let url = match name {
-        attributes::Name::SarsCov2 => constants::SARSCOV2_POPULATIONS_URL.to_string(),
-        _ => {
-            return Err(eyre!(
-                "Downloading the {name} dataset is not implemented yet."
-            ))
-        }
+        Name::SarsCov2 => sarscov2::POPULATIONS_URL.to_string(),
+        _ => return Err(eyre!("Population download for {name} is not implemented.")),
     };
-    let ext = Path::new(&url).extension().unwrap().to_str().unwrap();
+    let ext = utils::path_to_ext(Path::new(&url))?;
     let mut decompress = false;
     if ext != "fasta" && ext != "fa" {
         decompress = true;
@@ -99,28 +96,31 @@ pub async fn download(
     // let mask = 0;
     // let (_populations, mutations) = parse_populations(&populations_path, &reference_path, mask)?;
     // let diagnostic_table = identify_diagnostic_mutations(&mutations, &phylogeny)?;
-    // diagnostic_table.write(&diagnostic_path, Some('\t'))?;
+    // diagnostic_table.write(&diagnostic_path)?;
 
     // --------------------------------------------------------------------
     // Create Edge Cases
 
-    let edge_cases_path = output_dir.join("edge_cases.yaml");
+    let edge_cases_path = output_dir.join("edge_cases.json");
     info!("Creating edge cases: {:?}", edge_cases_path);
 
-    let edge_cases = edge_cases::from_dataset_name(name)?;
+    let edge_cases = match name {
+        Name::SarsCov2 => sarscov2::create_edge_cases()?,
+        _ => return Err(eyre!("Edge cases for {name} dataset is not implemented.")),
+    };
     edge_cases::export(&edge_cases, output_dir, EdgeCaseExportFormat::Json)?;
 
     // --------------------------------------------------------------------
     // Create Summary
 
-    let output_path = output_dir.join("summary.yaml");
+    let output_path = output_dir.join("summary.json");
     info!("Creating info summary: {:?}", output_path);
 
-    let summary = attributes::Summary {
+    let summary = Summary {
         name: *name,
         tag: tag.clone(),
     };
-    summary.export(output_dir, attributes::SummaryExportFormat::Json)?;
+    summary.export(output_dir, SummaryExportFormat::Json)?;
 
     // --------------------------------------------------------------------
     // Finish
@@ -134,7 +134,7 @@ pub async fn download(
 // ----------------------------------------------------------------------------
 
 /// Load a local dataset
-pub fn load(args: &cli::RunArgs) -> Result<Dataset, Report> {
+pub fn load_dataset(args: &cli::RunArgs) -> Result<Dataset, Report> {
     // Initialize a new container for our dataset pieces
     let mut dataset = Dataset::new();
 
@@ -142,19 +142,14 @@ pub fn load(args: &cli::RunArgs) -> Result<Dataset, Report> {
     // Load Reference (Required)
 
     let reference_path = args.dataset_dir.join("reference.fasta");
-    info!("Loading reference: {:?}", reference_path);
-    // read in reference from fasta
-    let reference_reader = fasta::Reader::from_file(reference_path.clone())
-        .expect("Unable to load reference");
-    // parse just the first record (ie. next() )
-    let reference = reference_reader.records().next().unwrap().unwrap();
-    // convert to a bio Sequence object
-    dataset.reference = Sequence::from_record(reference, None, args.mask)?;
+    info!("Loading reference: {reference_path:?}");
+    dataset.reference = read_reference(&reference_path, args.mask)?;
 
     // ------------------------------------------------------------------------
     // Load Populations and Parse Mutations (Required)
 
     let populations_path = args.dataset_dir.join("populations.fasta");
+    info!("Loading populations: {populations_path:?}");
     (dataset.populations, dataset.mutations) =
         parse_populations(&populations_path, &reference_path, args.mask)?;
 
@@ -165,12 +160,13 @@ pub fn load(args: &cli::RunArgs) -> Result<Dataset, Report> {
     if summary_path.exists() {
         info!("Loading summary: {:?}", summary_path);
         let reader = File::open(summary_path)?;
-        let summary: attributes::Summary = serde_json::from_reader(&reader)?;
+        let summary: Summary = serde_json::from_reader(&reader)?;
         dataset.name = summary.name;
         dataset.tag = summary.tag;
     } else {
-        dataset.tag = attributes::Tag::Unknown;
-        dataset.name = attributes::Name::Unknown;
+        warn!("Optional summary file was not found: {summary_path:?}");
+        dataset.tag = Tag::Unknown;
+        dataset.name = Name::Unknown;
     }
 
     // ------------------------------------------------------------------------
@@ -179,9 +175,11 @@ pub fn load(args: &cli::RunArgs) -> Result<Dataset, Report> {
     let phylogeny_path = args.dataset_dir.join("phylogeny.json");
     dataset.phylogeny = Phylogeny::new();
     if phylogeny_path.exists() {
-        info!("Loading phylogeny: {:?}", phylogeny_path);
+        info!("Loading phylogeny: {phylogeny_path:?}");
         dataset.phylogeny =
             Phylogeny::import(&args.dataset_dir, PhylogenyImportFormat::Json)?;
+    } else {
+        warn!("Optional phylogeny file was not found: {phylogeny_path:?}");
     }
 
     // --------------------------------------------------------------------
@@ -191,7 +189,7 @@ pub fn load(args: &cli::RunArgs) -> Result<Dataset, Report> {
     dataset.diagnostic = BTreeMap::new();
     if diagnostic_path.exists() {
         info!("Loading diagnostic mutations: {diagnostic_path:?}");
-        let diagnostic_table = utils::Table::from_tsv(&diagnostic_path)?;
+        let diagnostic_table = utils::read_table(&diagnostic_path)?;
         let mut_col_i = diagnostic_table.header_position("mutation")?;
         let pop_col_i = diagnostic_table.header_position("population")?;
 
@@ -200,17 +198,22 @@ pub fn load(args: &cli::RunArgs) -> Result<Dataset, Report> {
             let population = row[pop_col_i].clone();
             dataset.diagnostic.insert(mutation, population);
         }
+    } else {
+        warn!("Optional diagnostic mutations file was not found: {diagnostic_path:?}");
     }
 
     // --------------------------------------------------------------------
     // Load/Create Edge Cases (Optional)
 
-    let edge_cases_path = args.dataset_dir.join("edge_cases.yaml");
-    dataset.edge_cases = if edge_cases_path.exists() {
+    let edge_cases_path = args.dataset_dir.join("edge_cases.json");
+    dataset.edge_cases = Vec::new();
+
+    if edge_cases_path.exists() {
         info!("Loading edge cases: {edge_cases_path:?}");
-        edge_cases::import(&args.dataset_dir, EdgeCaseImportFormat::Json)?
+        dataset.edge_cases =
+            edge_cases::import(&args.dataset_dir, EdgeCaseImportFormat::Json)?
     } else {
-        Vec::new()
+        warn!("Optional edge cases file was not found: {edge_cases_path:?}");
     };
 
     // --------------------------------------------------------------------
@@ -220,7 +223,7 @@ pub fn load(args: &cli::RunArgs) -> Result<Dataset, Report> {
 }
 
 // ----------------------------------------------------------------------------
-// Functions
+// Parse Populations
 // ----------------------------------------------------------------------------
 
 #[allow(clippy::type_complexity)]
@@ -240,15 +243,11 @@ pub fn parse_populations(
         fasta::Reader::from_file(populations_path).expect("Unable to load populations");
 
     // read in reference from fasta
-    let reference_reader =
-        fasta::Reader::from_file(reference_path).expect("Unable to load reference");
-    // parse just the first record (ie. next() )
-    let reference = reference_reader.records().next().unwrap().unwrap();
-    // convert to a bio Sequence object
-    let reference = Sequence::from_record(reference, None, mask)?;
+    let reference = read_reference(reference_path, mask)?;
 
     let mut populations = BTreeMap::new();
     let mut mutations = BTreeMap::new();
+
     for result in populations_reader.records() {
         let record = result?;
         let sequence = Sequence::from_record(record, Some(&reference), mask)?;
@@ -267,8 +266,8 @@ pub fn parse_populations(
 pub fn identify_diagnostic_mutations(
     mutations: &BTreeMap<Substitution, Vec<String>>,
     phylogeny: &Phylogeny,
-) -> Result<utils::Table, Report> {
-    let mut table = utils::Table::new();
+) -> Result<utils::table::Table, Report> {
+    let mut table = utils::table::Table::new();
     table.headers = vec!["mutation", "population", "include_descendants"]
         .into_iter()
         .map(String::from)

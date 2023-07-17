@@ -45,13 +45,13 @@ pub fn create(
         std::path::PathBuf::from("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf");
 
     // mandatory import data
-    let mut linelist = utils::Table::from_tsv(linelist_path)?;
-    let barcodes = utils::Table::from_tsv(barcodes_path)?;
+    let mut linelist = utils::read_table(linelist_path)?;
+    let barcodes = utils::read_table(barcodes_path)?;
 
     // optional import data
-    let mut annotations = utils::Table::new();
+    let mut annotations = utils::table::Table::new();
     if let Some(annotations_path) = annotations_path {
-        annotations = utils::Table::from_tsv(annotations_path)?
+        annotations = utils::read_table(annotations_path)?
     }
 
     // check for mandatory columns and header pos

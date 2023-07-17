@@ -1,7 +1,6 @@
 use crate::cli;
-use crate::dataset;
 use color_eyre::eyre::{Report, Result, WrapErr};
-use log::{debug, info};
+use log::info;
 use serde::{Deserialize, Serialize};
 use std::default::Default;
 use std::fs::File;
@@ -17,8 +16,8 @@ use std::path::Path;
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct EdgeCase {
-    population: String,
-    args: cli::RunArgs,
+    pub population: String,
+    pub args: cli::RunArgs,
 }
 
 impl Default for EdgeCase {
@@ -86,40 +85,7 @@ impl std::fmt::Display for EdgeCaseImportFormat {
 // Functions
 // ----------------------------------------------------------------------------
 
-pub fn from_dataset_name(
-    name: &dataset::attributes::Name,
-) -> Result<Vec<EdgeCase>, Report> {
-    let edge_case: Vec<EdgeCase> = match name {
-        dataset::attributes::Name::SarsCov2 => create_sarscov2_edge_cases()?,
-        _ => Vec::new(),
-    };
-
-    Ok(edge_case)
-}
-
-pub fn create_sarscov2_edge_cases() -> Result<Vec<EdgeCase>, Report> {
-    info!("Creating SARS-CoV-2 edge cases.");
-    let mut edge_cases: Vec<EdgeCase> = Vec::new();
-
-    // default args to share between all recombinants
-    let default_args = cli::RunArgs::default();
-
-    // --------------------------------------------------------------------
-    // XCF
-    // XCF is XBB and FE.1 (XBB.1.18.1) with no unique subs from XBB
-
-    debug!("Creating XCF edge case.");
-    let mut xcf = EdgeCase {
-        population: "XCF".to_string(),
-        args: default_args,
-    };
-    xcf.args.min_subs = 0;
-    edge_cases.push(xcf);
-
-    Ok(edge_cases)
-}
-
-/// import edge cases from specified format
+/// Import edge cases from specified format.
 pub fn import(
     dataset_dir: &Path,
     format: EdgeCaseImportFormat,
@@ -139,7 +105,7 @@ pub fn import(
     Ok(edge_cases)
 }
 
-/// Export edge cases to specified format
+/// Export edge cases to specified format.
 pub fn export(
     edge_cases: &[EdgeCase],
     dataset_dir: &Path,

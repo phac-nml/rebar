@@ -1,8 +1,5 @@
-use crate::dataset;
-use crate::utils;
+use crate::dataset::{attributes::Name, sarscov2};
 use color_eyre::eyre::{eyre, Report, Result};
-use csv;
-use itertools::Itertools;
 use log::{debug, info};
 use petgraph::dot::{Config, Dot};
 use petgraph::graph::{Graph, NodeIndex};
@@ -13,14 +10,11 @@ use serde_json;
 use std::collections::HashMap;
 use std::fs::File;
 use std::io::Write;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::string::ToString;
 
-#[derive(serde::Deserialize, Debug)]
-struct LineageNotesRow<'a> {
-    lineage: &'a str,
-    _description: &'a str,
-}
+// ----------------------------------------------------------------------------
+// Phylogeny Export Format
 
 pub enum PhylogenyExportFormat {
     Dot,
@@ -49,6 +43,9 @@ pub enum PhylogenyImportFormat {
     Json,
 }
 
+// ----------------------------------------------------------------------------
+// Phylogeny Import Format
+
 impl PhylogenyImportFormat {
     pub fn extension(&self) -> String {
         match self {
@@ -64,6 +61,9 @@ impl std::fmt::Display for PhylogenyImportFormat {
         }
     }
 }
+
+// ----------------------------------------------------------------------------
+// Phylogeny
 
 #[derive(Debug, Deserialize, Serialize)]
 pub struct Phylogeny {
@@ -129,13 +129,11 @@ impl Phylogeny {
 
     pub async fn build_graph(
         &mut self,
-        dataset_name: &dataset::attributes::Name,
+        dataset_name: &Name,
         dataset_dir: &Path,
     ) -> Result<(), Report> {
         let (graph_data, order) = match dataset_name {
-            &dataset::attributes::Name::SarsCov2 => {
-                create_sarscov2_graph_data(dataset_dir).await?
-            }
+            &Name::SarsCov2 => sarscov2::create_graph_data(dataset_dir).await?,
             _ => return Ok(()),
         };
 
@@ -418,270 +416,4 @@ impl Phylogeny {
 
         None
     }
-}
-
-pub async fn download_lineage_notes(dataset_dir: &Path) -> Result<PathBuf, Report> {
-    let decompress = false;
-    let url = dataset::constants::SARSCOV2_LINEAGE_NOTES_URL;
-    let output_path = dataset_dir.join("lineage_notes.txt");
-    utils::download_file(url, &output_path, decompress).await?;
-
-    Ok(output_path)
-}
-
-pub async fn download_alias_key(dataset_dir: &Path) -> Result<PathBuf, Report> {
-    // https://raw.githubusercontent.com/cov-lineages/pango-designation/master/pango_designation/alias_key.json
-
-    let decompress = false;
-    let url = dataset::constants::SARSCOV2_ALIAS_KEY_URL;
-    let output_path = dataset_dir.join("alias_key.json");
-    utils::download_file(url, &output_path, decompress).await?;
-
-    Ok(output_path)
-}
-
-pub async fn import_alias_key(
-    dataset_dir: &Path,
-) -> Result<HashMap<String, Vec<String>>, Report> {
-    // download
-    let alias_key_path = download_alias_key(dataset_dir)
-        .await
-        .expect("Couldn't download alias_key from url.");
-
-    // read to json
-    let alias_key_str =
-        std::fs::read_to_string(alias_key_path).expect("Couldn't read alias_key file.");
-    let alias_key_val: serde_json::Value =
-        serde_json::from_str(&alias_key_str).expect("Couldn't convert alias_key to json");
-    // deserialize to object (raw, mixed types)
-    let alias_key_raw: serde_json::Map<String, serde_json::Value> = alias_key_val
-        .as_object()
-        .expect("Couldn't convert alias_key json to json Map")
-        .clone();
-
-    // This should probably be a custom deserializer fn for brevity,
-    //   but I don't know how to do that yet :)
-    let mut alias_key: HashMap<String, Vec<String>> = HashMap::new();
-
-    for (alias, lineage) in &alias_key_raw {
-        let mut lineage_paths: Vec<String> = Vec::new();
-
-        // Consistify the alias key types
-        match lineage.as_array() {
-            // If array, this is a recombinant alias with multiple parents.
-            Some(parents) => {
-                for parent in parents {
-                    let parent =
-                        parent.as_str().expect("Couldn't convert parent to str.");
-                    // Strip the wildcard asterisks from lineage name
-                    let parent_clean = str::replace(parent, "*", "");
-                    lineage_paths.push(parent_clean);
-                }
-            }
-            // Otherwise, it might be a string
-            None => {
-                let mut lineage_path = lineage
-                    .as_str()
-                    .expect("Couldn't convert lineage to str.")
-                    .to_string();
-                // If there is not lineage_path (ex. "" for A, B), set to self
-                if lineage_path.is_empty() {
-                    lineage_path = alias.clone();
-                }
-                lineage_paths.push(lineage_path);
-            }
-        }
-
-        alias_key.insert(alias.clone(), lineage_paths);
-    }
-
-    Ok(alias_key)
-}
-
-pub async fn create_sarscov2_graph_data(
-    dataset_dir: &Path,
-) -> Result<(HashMap<String, Vec<String>>, Vec<String>), Report> {
-    // ------------------------------------------------------------------------
-    // Download and import data
-
-    // Import the alias key
-    let alias_key = import_alias_key(dataset_dir).await?;
-
-    // Import the lineage notes
-    let lineage_notes_path = download_lineage_notes(dataset_dir)
-        .await
-        .expect("Couldn't download lineage notes from url.");
-    let mut reader = csv::ReaderBuilder::new()
-        .delimiter(b'\t')
-        .from_path(lineage_notes_path)?;
-    let _headers = reader.headers()?;
-
-    // ------------------------------------------------------------------------
-    // Map parent-child relationships
-
-    let mut graph_data: HashMap<String, Vec<String>> = HashMap::new();
-    let mut graph_order: Vec<String> = Vec::new();
-
-    for result in reader.records() {
-        let record = result?;
-
-        let row: LineageNotesRow = record.deserialize(None)?;
-        let lineage = row.lineage.to_string();
-
-        // Lineages that start with '*' have been withdrawn
-        if lineage.starts_with('*') {
-            continue;
-        }
-
-        let parents = get_lineage_parents(lineage.clone(), &alias_key).unwrap();
-
-        graph_order.push(lineage.to_string().clone());
-        graph_data.insert(lineage.clone(), parents.clone());
-    }
-
-    Ok((graph_data, graph_order))
-}
-
-pub fn get_lineage_parents(
-    lineage: String,
-    alias_key: &HashMap<String, Vec<String>>,
-) -> Result<Vec<String>, Report> {
-    let mut parents: Vec<String> = Vec::new();
-
-    // If Recombinant with multiple parents, if so, it will be in the alias
-    // key with the parents listed.
-    if alias_key.contains_key(&lineage) {
-        let lineage_paths = &alias_key[&lineage];
-        if lineage_paths.len() > 1 {
-            // Dedup in case multiple breakpoints/parents
-            parents = lineage_paths.clone().into_iter().unique().collect();
-            return Ok(parents);
-        }
-    }
-
-    // Otherwise, single parent
-    let decompress = decompress_lineage(&lineage, alias_key).unwrap();
-
-    // Ex. BA.5.2 -> ["BA", "5", "2"]
-    let decompress_parts = decompress
-        .split('.')
-        .map(|p| p.to_string())
-        .collect::<Vec<_>>();
-
-    // If just 1 part, parent is root (ex. A)
-    let mut parent = String::from("root");
-    if decompress_parts.len() > 1 {
-        parent = decompress_parts[0..(decompress_parts.len() - 1)].join(".");
-    }
-
-    // Compress the full parent back down with aliases
-    parent = compress_lineage(&parent, alias_key).unwrap();
-    parents.push(parent);
-
-    Ok(parents)
-}
-
-pub fn compress_lineage(
-    lineage: &String,
-    alias_key: &HashMap<String, Vec<String>>,
-) -> Result<String, Report> {
-    // By default, set compression level to self
-    let mut compress = lineage.to_string();
-
-    // Reverse the alias-> lineage path lookup
-    let mut alias_key_rev: HashMap<String, String> = HashMap::new();
-
-    for (alias, lineage_paths) in alias_key {
-        // Skip over recombinants with multiple parents, don't need their lookup
-        if lineage_paths.len() > 1 {
-            continue;
-        }
-        let lineage_path = lineage_paths[0].clone();
-        alias_key_rev.insert(lineage_path, alias.clone());
-    }
-
-    // Ex. BA.5.2 -> ["BA", "5", "2"]
-    let compress_parts = compress
-        .split('.')
-        .map(|p| p.to_string())
-        .collect::<Vec<_>>();
-
-    if compress_parts.len() > 1 {
-        for i in (0..compress_parts.len()).rev() {
-            let compress_subset = compress_parts[0..i].join(".");
-
-            if alias_key_rev.contains_key(&compress_subset) {
-                compress = alias_key_rev[&compress_subset].clone();
-                // Get the suffix that was chopped off in subset
-                let compress_suffix = &compress_parts[i..];
-
-                // Add the suffix
-                if !compress_suffix.is_empty() {
-                    compress = format!["{compress}.{}", compress_suffix.join(".")];
-                }
-                break;
-            }
-        }
-    }
-
-    Ok(compress)
-}
-
-/// Decompresses a SARS-CoV-2 lineage name.
-///
-/// Convert a compressed, SARS-CoV-2 lineage name into it's full unaliased form. q
-///
-/// # Arguments
-///
-///  * `lineage` | `String` | A String of a SARS-CoV-2 lineage name.
-///  * `alias_key` | `&HashMap<String, Vec<String>>` | A mapping of SARS-CoV-2 aliases to decompressed lineage paths.
-///
-/// # Basic usage:
-///
-/// ```
-/// decompress_lineage("BA.5.2", alias_key).unwrap();
-/// ```
-///
-/// # Example
-///
-/// ```no run
-/// let alias_key = import_alias_key(".").unwrap();
-/// decompress_lineage("BA.5.2", alias_key).unwrap();
-/// ```
-pub fn decompress_lineage(
-    lineage: &str,
-    alias_key: &HashMap<String, Vec<String>>,
-) -> Result<String, Report> {
-    // By default, set full path to lineage
-    let mut decompress = lineage.to_string();
-
-    // Split lineage into levels, Ex. BA.5.2 = ["BA", "5", "2"]
-    // Can be a maximum of 4 levels before aliasing
-    let mut lineage_level = 0;
-    let mut lineage_parts = vec![String::new(); 4];
-
-    for (i, level) in lineage.split('.').enumerate() {
-        lineage_parts[i] = level.to_string();
-        lineage_level = i + 1;
-    }
-
-    // Get the first letter prefix, Ex. BA.5.2 = "BA"
-    let lineage_prefix = lineage_parts[0].clone();
-    // If there were multiple parts, get suffix (Ex. "BA" and "5.2")
-    let lineage_suffix = lineage_parts[1..lineage_level].join(".");
-
-    // Decompressing logic
-    if alias_key.contains_key(&lineage_prefix) {
-        let lineage_paths = &alias_key[&lineage_prefix];
-        // Not multiple recombinant parents
-        if lineage_paths.len() == 1 {
-            decompress = lineage_paths[0].clone();
-            // Add back our suffix numbers
-            if lineage_level > 1 {
-                decompress = format!("{decompress}.{lineage_suffix}");
-            }
-        }
-    }
-
-    Ok(decompress)
 }
