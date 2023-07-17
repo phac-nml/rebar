@@ -8,7 +8,7 @@ pub mod sequence;
 pub mod utils;
 
 use crate::dataset::SearchResult;
-use crate::recombination::{parent_search, Recombination};
+use crate::recombination::{search, Recombination};
 use bio::io::fasta;
 use color_eyre::eyre::{eyre, Report, Result, WrapErr};
 use indicatif::{style::ProgressStyle, ProgressBar};
@@ -185,8 +185,8 @@ pub fn run(args: cli::RunArgs) -> Result<(), Report> {
                 best_match = search_result;
                 // setup a search for the recombination parents
                 let mut parent_search_args =
-                    parent_search::Args::new(&dataset, sequence, &best_match, &args);
-                let parent_search = parent_search::search_all(&mut parent_search_args);
+                    search::Args::new(&dataset, sequence, &best_match, &args);
+                let parent_search = search::all_parents(&mut parent_search_args);
                 // if the search was successful, unzip the results
                 if let Ok(parent_search) = parent_search {
                     (_, recombination) = parent_search;
