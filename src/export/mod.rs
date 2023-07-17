@@ -3,186 +3,170 @@ use crate::recombination;
 use crate::utils;
 use color_eyre::eyre::{eyre, Report, Result};
 use itertools::Itertools;
+use serde::{Deserialize, Serialize};
+use std::fmt;
+use std::str::FromStr;
+
+// ----------------------------------------------------------------------------
+// Validate
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub enum Validate {
+    // population status
+    CorrectPopulation,
+    IncorrectPopulation,
+    // // recombinant status
+    // PositiveRecombinant,
+    // NegativeRecombinant,
+    // FalsePositiveRecombinant,
+    // FalseNegativeRecombinant,
+    // // parents status
+    // CorrectParents,
+    // IncorrectParents,
+}
+
+impl FromStr for Validate {
+    type Err = Report;
+
+    fn from_str(result: &str) -> Result<Self, Report> {
+        let validate = match result {
+            "correct_population" => Validate::CorrectPopulation,
+            "incorrect_population" => Validate::IncorrectPopulation,
+            _ => return Err(eyre!("Unknown validation result: {result}")),
+        };
+
+        Ok(validate)
+    }
+}
+
+impl fmt::Display for Validate {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let validate = match self {
+            Validate::CorrectPopulation => "correct_population",
+            Validate::IncorrectPopulation => "incorrect_population",
+        };
+
+        write!(f, "{}", validate)
+    }
+}
 
 // ----------------------------------------------------------------------------
 // LineList
 
-#[derive(Debug)]
-pub struct LineList {
-    strain: Vec<String>,
-    population: Vec<String>,
-    recombinant: Vec<String>,
-    parents: Vec<String>,
-    breakpoints: Vec<String>,
-    unique_key: Vec<String>,
-    regions: Vec<String>,
-    private: Vec<String>,
-    genome_length: Vec<String>,
-    dataset_name: Vec<String>,
-    dataset_tag: Vec<String>,
-}
-
-impl Default for LineList {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-impl LineList {
-    pub fn new() -> Self {
-        LineList {
-            strain: Vec::new(),
-            population: Vec::new(),
-            recombinant: Vec::new(),
-            parents: Vec::new(),
-            breakpoints: Vec::new(),
-            unique_key: Vec::new(),
-            regions: Vec::new(),
-            private: Vec::new(),
-            genome_length: Vec::new(),
-            dataset_name: Vec::new(),
-            dataset_tag: Vec::new(),
-        }
+pub fn linelist(
+    recombinations: &Vec<recombination::Recombination>,
+    best_matches: &Vec<SearchResult>,
+    dataset: &Dataset,
+) -> Result<utils::table::Table, Report> {
+    // check for same length
+    if recombinations.len() != best_matches.len() {
+        return Err(eyre!(
+            "recombinations and best_matches are different lengths."
+        ));
     }
 
-    // Get LineList attribute by str.
-    pub fn get(&self, attribute: &str) -> Result<&Vec<String>, Report> {
-        let result = match attribute {
-            "strain" => &self.strain,
-            "population" => &self.population,
-            "recombinant" => &self.recombinant,
-            "parents" => &self.parents,
-            "breakpoints" => &self.breakpoints,
-            "unique_key" => &self.unique_key,
-            "regions" => &self.regions,
-            "private" => &self.private,
-            "genome_length" => &self.genome_length,
-            "dataset_name" => &self.dataset_name,
-            "dataset_tag" => &self.dataset_tag,
-            _ => return Err(eyre!("Attribute {attribute} is not in LineList.")),
-        };
+    let mut table = utils::table::Table::new();
 
-        Ok(result)
-    }
+    table.headers = vec![
+        "strain",
+        "population",
+        "recombinant",
+        "parents",
+        "breakpoints",
+        "validate",
+        "unique_key",
+        "regions",
+        "private",
+        "genome_length",
+        "dataset_name",
+        "dataset_tag",
+    ]
+    .into_iter()
+    .map(|s| s.to_string())
+    .collect_vec();
 
-    pub fn headers() -> Vec<String> {
-        vec![
-            "strain",
-            "population",
-            "recombinant",
-            "parents",
-            "breakpoints",
-            "unique_key",
-            "regions",
-            "private",
-            "genome_length",
-            "dataset_name",
-            "dataset_tag",
-        ]
-        .into_iter()
-        .map(|s| s.to_string())
-        .collect_vec()
-    }
+    // iterate in parallel, checking for same sequence id
+    for it in recombinations.iter().zip(best_matches.iter()) {
+        let (recombination, best_match) = it;
 
-    pub fn to_table(&self) -> Result<utils::table::Table, Report> {
-        let mut table = utils::table::Table::new();
-
-        // add headers
-        table.headers = LineList::headers();
-
-        let num_rows = self.strain.len();
-
-        // if the linelist was empty, just output headers
-        if num_rows == 0 {
-            return Ok(table);
-        }
-
-        for row_i in 0..num_rows {
-            let mut row = vec![String::new(); table.headers.len()];
-            for (col_i, header) in table.headers.iter().enumerate() {
-                let vals = self.get(header)?;
-                row[col_i] = vals[row_i].to_string();
-            }
-            table.rows.push(row);
-        }
-
-        Ok(table)
-    }
-
-    pub fn create(
-        recombinations: &Vec<recombination::Recombination>,
-        best_matches: &Vec<SearchResult>,
-        dataset: &Dataset,
-    ) -> Result<LineList, Report> {
-        // init linelist
-        let mut linelist = LineList::new();
-
-        // check for same length
-        if recombinations.len() != best_matches.len() {
+        // check that they're in the correct order
+        if recombination.sequence.id != best_match.sequence_id {
             return Err(eyre!(
-                "recombinations and best_matches are different lengths."
+                "Recombination ID {} is not the same as Best Match ID: {}",
+                recombination.sequence.id,
+                best_match.sequence_id,
             ));
         }
 
-        // iterate in parallel, checking for same sequence id
-        for it in recombinations.iter().zip(best_matches.iter()) {
-            let (recombination, best_match) = it;
+        // initialize the table row
+        let mut row = vec![String::new(); table.headers.len()];
 
-            // check that they're in the correct order
-            if recombination.sequence.id != best_match.sequence_id {
-                return Err(eyre!(
-                    "Recombination ID {} is not the same as Best Match ID: {}",
-                    recombination.sequence.id,
-                    best_match.sequence_id,
-                ));
-            }
+        // strain
+        let strain = recombination.sequence.id.to_string();
+        row[table.header_position("strain")?] = strain.clone();
 
-            // strain
-            let strain = recombination.sequence.id.to_string();
-            linelist.strain.push(strain);
+        // population
+        let population = best_match.consensus_population.to_string();
+        row[table.header_position("population")?] = population.clone();
 
-            // population
-            let population = best_match.consensus_population.to_string();
-            linelist.population.push(population);
-
-            // recombinant
-            let recombinant = &best_match.recombinant;
-            match recombinant {
-                Some(recombinant) => linelist.recombinant.push(recombinant.to_string()),
-                None => linelist.recombinant.push(String::new()),
-            }
-
-            // parents
-            let parents = recombination.parents.join(",").to_string();
-            linelist.parents.push(parents);
-
-            // breakpoints
-            let breakpoints = recombination.breakpoints.iter().join(",").to_string();
-            linelist.breakpoints.push(breakpoints);
-
-            // unique_key
-            let unique_key = recombination.unique_key.to_string();
-            linelist.unique_key.push(unique_key);
-
-            // regions
-            let regions = recombination.regions.values().join(",").to_string();
-            linelist.regions.push(regions);
-
-            // private mutations
-            let private = best_match.private.iter().join(",").to_string();
-            linelist.private.push(private);
-
-            // genome_length
-            let genome_length = recombination.genome_length.to_string();
-            linelist.genome_length.push(genome_length);
-
-            // dataset name
-            linelist.dataset_name.push(dataset.name.to_string());
-
-            // dataset tag
-            linelist.dataset_tag.push(dataset.tag.to_string());
+        // recombinant
+        if best_match.recombinant.is_some() {
+            let recombinant = best_match.recombinant.clone().unwrap();
+            row[table.header_position("recombinant")?] = recombinant;
         }
 
-        Ok(linelist)
+        // parents
+        let parents = recombination.parents.join(",").to_string();
+        row[table.header_position("parents")?] = parents;
+
+        // breakpoints
+        let breakpoints = recombination.breakpoints.iter().join(",").to_string();
+        row[table.header_position("breakpoints")?] = breakpoints;
+
+        // unique_key
+        let unique_key = recombination.unique_key.to_string();
+        row[table.header_position("unique_key")?] = unique_key;
+
+        // regions
+        let regions = recombination.regions.values().join(",").to_string();
+        row[table.header_position("regions")?] = regions;
+
+        // private mutations
+        let private = best_match.private.iter().join(",").to_string();
+        row[table.header_position("private")?] = private;
+
+        // genome_length
+        let genome_length = recombination.genome_length.to_string();
+        row[table.header_position("genome_length")?] = genome_length;
+
+        // dataset name
+        row[table.header_position("dataset_name")?] = dataset.name.to_string();
+
+        // dataset tag
+        row[table.header_position("dataset_tag")?] = dataset.tag.to_string();
+
+        // --------------------------------------------------------------------
+        // Validate
+
+        let mut validate = Vec::new();
+
+        let strain = strain.replace("query_", "");
+
+        if dataset.populations.contains_key(&strain) {
+            // Population status
+            if strain == population {
+                validate.push(Validate::CorrectPopulation);
+            } else {
+                validate.push(Validate::IncorrectPopulation);
+            }
+            // Recombinant status
+            // Parent status
+        }
+
+        row[table.header_position("validate")?] = validate.iter().join(",").to_string();
+
+        table.rows.push(row);
     }
+
+    Ok(table)
 }

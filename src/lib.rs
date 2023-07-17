@@ -86,9 +86,15 @@ pub fn run(args: cli::RunArgs) -> Result<(), Report> {
         // intermediate container to hold additional populations (like descendants)
         let mut search_populations = Vec::new();
 
-        // if population ends in '*', use phylogenetically aware mode
-        // to search for it and all descendants
         for population in populations {
+            // if population is '*', use all populations in dataset
+            // if population == "*" {
+            //     //search_populations = dataset.populations.keys().cloned().collect_vec();
+            //     // break from loop, we're using all populations
+            //     break
+            // }
+            // if population ends in '*', use phylogenetically aware mode
+            // to search for it and all descendants
             if population.ends_with('*') {
                 // remove last char (wildcard) with pop
                 let parent = population[0..population.len() - 1].to_string();
@@ -218,8 +224,7 @@ pub fn run(args: cli::RunArgs) -> Result<(), Report> {
     let outpath_linelist = args.output_dir.join("linelist.tsv");
     info!("Exporting linelist: {outpath_linelist:?}");
 
-    let linelist = export::LineList::create(&recombinations, &best_matches, &dataset)?;
-    let linelist_table = linelist.to_table()?;
+    let linelist_table = export::linelist(&recombinations, &best_matches, &dataset)?;
     linelist_table.write(&outpath_linelist)?;
 
     // ------------------------------------------------------------------------
