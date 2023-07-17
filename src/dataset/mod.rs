@@ -1,12 +1,11 @@
 pub mod attributes;
-pub mod constants;
 pub mod edge_cases;
 pub mod io;
+pub mod sarscov2;
 
 use crate::dataset::edge_cases::EdgeCase;
 use crate::phylogeny::Phylogeny;
 use crate::sequence::{Sequence, Substitution};
-use crate::ToYaml;
 use color_eyre::eyre::{eyre, Report, Result};
 use itertools::Itertools;
 use log::debug;
@@ -65,8 +64,24 @@ pub struct SearchResult {
     pub recombinant: Option<String>,
 }
 
-impl ToYaml for SearchResult {
-    fn to_yaml(&self) -> String {
+impl SearchResult {
+    pub fn new() -> Self {
+        SearchResult {
+            sequence_id: String::new(),
+            consensus_population: String::new(),
+            top_populations: Vec::new(),
+            diagnostic: Vec::new(),
+            support: BTreeMap::new(),
+            private: Vec::new(),
+            conflict_ref: BTreeMap::new(),
+            conflict_alt: BTreeMap::new(),
+            substitutions: Vec::new(),
+            total: BTreeMap::new(),
+            recombinant: None,
+        }
+    }
+
+    fn pretty_print(&self) -> String {
         // Order the population lists from 'best' to 'worst'
 
         // total
@@ -152,24 +167,6 @@ private:\n  {}",
     }
 }
 
-impl SearchResult {
-    pub fn new() -> Self {
-        SearchResult {
-            sequence_id: String::new(),
-            consensus_population: String::new(),
-            top_populations: Vec::new(),
-            diagnostic: Vec::new(),
-            support: BTreeMap::new(),
-            private: Vec::new(),
-            conflict_ref: BTreeMap::new(),
-            conflict_alt: BTreeMap::new(),
-            substitutions: Vec::new(),
-            total: BTreeMap::new(),
-            recombinant: None,
-        }
-    }
-}
-
 impl Default for SearchResult {
     fn default() -> Self {
         Self::new()
@@ -202,8 +199,6 @@ impl Default for Dataset {
         Self::new()
     }
 }
-
-impl ToYaml for Dataset {}
 
 impl Dataset {
     pub fn new() -> Self {
@@ -502,7 +497,7 @@ impl Dataset {
         debug!(
             "{}",
             search_result
-                .to_yaml()
+                .pretty_print()
                 .replace('\n', format!("\n{}", " ".repeat(40)).as_str())
         );
         Ok(search_result)

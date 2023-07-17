@@ -71,7 +71,7 @@ pub struct Recombination<'seq> {
     pub regions: BTreeMap<usize, Region>,
     pub genome_length: usize,
     #[serde(skip_serializing)]
-    pub table: utils::Table,
+    pub table: utils::table::Table,
 }
 
 impl<'seq> Recombination<'seq> {
@@ -83,7 +83,7 @@ impl<'seq> Recombination<'seq> {
             parents: Vec::new(),
             breakpoints: Vec::new(),
             regions: BTreeMap::new(),
-            table: utils::Table::new(),
+            table: utils::table::Table::new(),
             genome_length: 0,
         }
     }
@@ -113,7 +113,7 @@ pub fn detect_recombination<'seq>(
     // Create a table where rows are coordinates and columns are
     // coord, parent, Reference, <parents...>, <search_result> <sequence>
 
-    let mut table = utils::Table::new();
+    let mut table = utils::table::Table::new();
     table.headers = vec!["coord", "origin", "Reference"]
         .into_iter()
         .map(String::from)
@@ -379,7 +379,9 @@ pub fn detect_recombination<'seq>(
     Ok(recombination)
 }
 
-pub fn identify_regions(table: &utils::Table) -> Result<BTreeMap<usize, Region>, Report> {
+pub fn identify_regions(
+    table: &utils::table::Table,
+) -> Result<BTreeMap<usize, Region>, Report> {
     let mut origin_prev: Option<String> = None;
     let mut regions = BTreeMap::new();
     let mut start = 0;
@@ -569,7 +571,7 @@ pub fn identify_breakpoints(
 pub fn combine_tables(
     recombinations: &[Recombination],
     reference: &Sequence,
-) -> Result<utils::Table, Report> {
+) -> Result<utils::table::Table, Report> {
     // ------------------------------------------------------------------------
     // Input Checking
 
@@ -605,7 +607,7 @@ pub fn combine_tables(
     // Construct Table Headers
 
     // final result to mutate and return
-    let mut combine_table = utils::Table::new();
+    let mut combine_table = utils::table::Table::new();
 
     // Mandatory headers
     // convert to String, &str won't work here, since we're going to create

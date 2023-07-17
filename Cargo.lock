@@ -1800,13 +1800,10 @@ dependencies = [
  "bio",
  "clap",
  "color-eyre",
- "csv",
  "env_logger",
- "font-kit",
  "image",
  "indicatif",
  "itertools 0.11.0",
- "lazy_static",
  "log",
  "petgraph",
  "raqote",
@@ -1815,7 +1812,6 @@ dependencies = [
  "rusttype",
  "serde",
  "serde_json",
- "serde_yaml",
  "tempfile",
  "tokio",
  "url",
@@ -2086,19 +2082,6 @@ dependencies = [
  "itoa",
  "ryu",
  "serde",
-]
-
-[[package]]
-name = "serde_yaml"
-version = "0.9.21"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d9d684e3ec7de3bf5466b32bd75303ac16f0736426e5a4e0d6e489559ce1249c"
-dependencies = [
- "indexmap",
- "itoa",
- "ryu",
- "serde",
- "unsafe-libyaml",
 ]
 
 [[package]]
@@ -2469,12 +2452,6 @@ name = "unicode-width"
 version = "0.1.10"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c0edd1e5b14653f783770bce4a4dabb4a5108a5370a5f5d8cfe8710c361f6c8b"
-
-[[package]]
-name = "unsafe-libyaml"
-version = "0.2.8"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1865806a559042e51ab5414598446a5871b561d21b6764f2eabb0dd481d880a6"
 
 [[package]]
 name = "url"
