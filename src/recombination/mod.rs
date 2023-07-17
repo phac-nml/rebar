@@ -1,4 +1,4 @@
-pub mod parent_search;
+pub mod search;
 
 use crate::dataset::SearchResult;
 use crate::sequence::{Sequence, Substitution};
@@ -96,7 +96,7 @@ impl<'seq> Recombination<'seq> {
 pub fn detect_recombination<'seq>(
     parents: &Vec<SearchResult>,
     search_result: Option<&SearchResult>,
-    args: &parent_search::Args<'_, 'seq, '_>,
+    args: &search::Args<'_, 'seq, '_>,
 ) -> Result<Recombination<'seq>, Report> {
     let mut recombination = Recombination::new(args.sequence);
 

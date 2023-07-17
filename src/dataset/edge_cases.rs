@@ -14,15 +14,29 @@ use std::path::Path;
 // ----------------------------------------------------------------------------
 // EdgeCase
 
+/// These parameters come from recombination::search::Args
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct EdgeCase {
     pub population: String,
-    pub args: cli::RunArgs,
+    pub max_parents: usize,
+    pub max_iter: usize,
+    pub min_consecutive: usize,
+    pub min_length: usize,
+    pub min_subs: usize,
+    pub unbiased: bool,
 }
 
 impl Default for EdgeCase {
     fn default() -> Self {
-        Self::new()
+        EdgeCase {
+            population: String::new(),
+            max_parents: cli::RunArgs::default().max_parents,
+            max_iter: cli::RunArgs::default().max_iter,
+            min_consecutive: cli::RunArgs::default().min_consecutive,
+            min_length: cli::RunArgs::default().min_length,
+            min_subs: cli::RunArgs::default().min_subs,
+            unbiased: cli::RunArgs::default().unbiased,
+        }
     }
 }
 
@@ -30,7 +44,12 @@ impl EdgeCase {
     pub fn new() -> Self {
         EdgeCase {
             population: String::new(),
-            args: cli::RunArgs::new(),
+            max_parents: 0,
+            max_iter: 0,
+            min_consecutive: 0,
+            min_length: 0,
+            min_subs: 0,
+            unbiased: false,
         }
     }
 }

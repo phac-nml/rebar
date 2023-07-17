@@ -1,5 +1,5 @@
 use crate::cli::RunArgs;
-use crate::dataset::{Dataset, SearchResult};
+use crate::dataset::{edge_cases::EdgeCase, Dataset, SearchResult};
 use crate::recombination::{detect_recombination, Recombination};
 use crate::sequence::Sequence;
 use color_eyre::eyre::{eyre, Report, Result};
@@ -11,6 +11,7 @@ use std::collections::BTreeMap;
 // Structs
 // ----------------------------------------------------------------------------
 
+#[derive(Clone, Debug)]
 pub struct Args<'data, 'seq, 'best> {
     pub dataset: &'data Dataset,
     pub sequence: &'seq Sequence,
@@ -42,6 +43,17 @@ impl<'data, 'seq, 'best, 'args> Args<'data, 'seq, 'best> {
             unbiased: args.unbiased,
         }
     }
+
+    pub fn apply_edge_case(&mut self, edge_case: &EdgeCase) -> Result<(), Report> {
+        self.max_parents = edge_case.max_parents;
+        self.max_iter = edge_case.max_iter;
+        self.min_consecutive = edge_case.min_consecutive;
+        self.min_length = edge_case.min_length;
+        self.min_subs = edge_case.min_subs;
+        self.unbiased = edge_case.unbiased;
+
+        Ok(())
+    }
 }
 
 // ----------------------------------------------------------------------------
@@ -49,7 +61,7 @@ impl<'data, 'seq, 'best, 'args> Args<'data, 'seq, 'best> {
 // ----------------------------------------------------------------------------
 
 // Search for all parents (primary and secondary recombination).
-pub fn search_all<'seq>(
+pub fn all_parents<'seq>(
     args: &mut Args<'_, 'seq, '_>,
 ) -> Result<(Vec<SearchResult>, Recombination<'seq>), Report> {
     if args.max_parents == 0 {
@@ -66,6 +78,7 @@ pub fn search_all<'seq>(
 
     // For known recombinants
     let recombinant = &args.best_match.recombinant;
+
     // Running a biased search
     if !args.unbiased {
         if let Some(recombinant) = recombinant {
@@ -73,38 +86,51 @@ pub fn search_all<'seq>(
             include_populations = args.dataset.phylogeny.get_parents(recombinant)?;
             debug!("Prioritizing designated parents: {include_populations:?}");
 
-            // relax search parameters for maximum sensitivity
-            debug!(
-                "Relaxing parameters for sensitive detection of a designated recombinant"
-            );
-            debug!(
-                "\tFrom --min-consecutive {} to --min-consecutive 1",
-                args.min_consecutive
-            );
-            args.min_consecutive = 1;
-            debug!("\tFrom --min-length {} to --min-length 1", args.min_length);
-            args.min_length = 1;
-            debug!("\tFrom --min-subs {} to --min-subs 1", args.min_subs);
-            args.min_subs = 1;
-
             // apply edge cases
+            let edge_case = args
+                .dataset
+                .edge_cases
+                .iter()
+                .find(|edge_case| edge_case.population == *recombinant);
+
+            // Option 1: Matching edge case found, override search args
+            if let Some(edge_case) = edge_case {
+                debug!("Applying edge case: {edge_case:?}");
+                args.apply_edge_case(edge_case)?;
+            }
+            // Option 2: No matching edge case was found, do a general
+            // relaxation of search parameters for maximum sensitivity
+            else {
+                debug!(
+                    "Relaxing parameters for sensitive detection of a designated recombinant"
+                );
+                debug!(
+                    "\tFrom --min-consecutive {} to --min-consecutive 1",
+                    args.min_consecutive
+                );
+                args.min_consecutive = 1;
+                debug!("\tFrom --min-length {} to --min-length 1", args.min_length);
+                args.min_length = 1;
+                debug!("\tFrom --min-subs {} to --min-subs 1", args.min_subs);
+                args.min_subs = 1;
+            }
         }
     }
 
     // Primary parent
     let parent_primary =
-        search_primary(args, &mut include_populations, &mut exclude_populations)?;
+        primary_parent(args, &mut include_populations, &mut exclude_populations)?;
     parents.push(parent_primary);
 
     // Secondary parents ( 2 : max_parents)
     // this function consumes `parents`, modifies it, then returns it
-    let (parents, recombination) = search_secondary(parents, args)?;
+    let (parents, recombination) = secondary_parents(parents, args)?;
 
     Ok((parents, recombination))
 }
 
 // Search for the primary parent.
-pub fn search_primary(
+pub fn primary_parent(
     args: &Args,
     include_populations: &mut Vec<String>,
     exclude_populations: &mut Vec<String>,
@@ -145,7 +171,7 @@ pub fn search_primary(
 }
 
 // Search for the secondary recombination parent(s).
-pub fn search_secondary<'seq>(
+pub fn secondary_parents<'seq>(
     mut parents: Vec<SearchResult>,
     args: &Args<'_, 'seq, '_>,
 ) -> Result<(Vec<SearchResult>, Recombination<'seq>), Report> {

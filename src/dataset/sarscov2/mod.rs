@@ -1,4 +1,3 @@
-use crate::cli;
 use crate::dataset::attributes::Annotations;
 use crate::dataset::edge_cases::EdgeCase;
 use crate::utils;
@@ -287,22 +286,24 @@ pub fn create_edge_cases() -> Result<Vec<EdgeCase>, Report> {
     info!("Creating SARS-CoV-2 edge cases.");
     let mut edge_cases: Vec<EdgeCase> = Vec::new();
 
-    // default args to share between all recombinants
-    let default_args = cli::RunArgs::default();
-
     // --------------------------------------------------------------------
     // XCF
     // XCF is XBB and FE.1 (XBB.1.18.1) with no unique subs from XBB
 
-    debug!("Creating XCF edge case.");
-    let mut xcf = EdgeCase {
+    debug!("Creating edge case: XCF");
+    let xcf = EdgeCase {
         population: "XCF".to_string(),
-        args: default_args,
+        max_parents: 2,
+        max_iter: 1,
+        min_consecutive: 1,
+        min_length: 1,
+        min_subs: 0,
+        unbiased: false,
     };
-    xcf.args.min_subs = 0;
-    xcf.args.min_length = 1;
-    xcf.args.min_consecutive = 1;
     edge_cases.push(xcf);
+
+    // --------------------------------------------------------------------
+    // Finish
 
     Ok(edge_cases)
 }

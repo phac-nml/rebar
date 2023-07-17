@@ -114,27 +114,27 @@ pub struct RunArgs {
     pub dataset_dir: PathBuf,
 
     /// Number of bases to mask at the 5' and 3' ends.
-    #[arg(short = 'm', long, default_value_t = 200)]
+    #[arg(short = 'm', long, default_value_t = RunArgs::default().mask)]
     pub mask: usize,
 
     /// Maximum number of parents.
-    #[arg(short = 'p', long, default_value_t = 2)]
+    #[arg(short = 'p', long, default_value_t = RunArgs::default().max_parents)]
     pub max_parents: usize,
 
     /// Maximum number of search iterations to find each parent.
-    #[arg(short = 'i', long, default_value_t = 3)]
+    #[arg(short = 'i', long, default_value_t = RunArgs::default().max_iter)]
     pub max_iter: usize,
 
     /// Minimum number of consecutive bases in a parental region.
-    #[arg(short = 'c', long, default_value_t = 3)]
+    #[arg(short = 'c', long, default_value_t = RunArgs::default().min_consecutive)]
     pub min_consecutive: usize,
 
     /// Minimum length of a parental region.
-    #[arg(short = 'l', long, default_value_t = 500)]
+    #[arg(short = 'l', long, default_value_t = RunArgs::default().min_length)]
     pub min_length: usize,
 
     /// Minimum number of substitutions in a parental region.
-    #[arg(short = 's', long, default_value_t = 1)]
+    #[arg(short = 's', long, default_value_t = RunArgs::default().min_subs)]
     pub min_subs: usize,
 
     /// Output directory.
@@ -144,11 +144,11 @@ pub struct RunArgs {
     pub output_dir: PathBuf,
 
     /// Number of CPU threads to use.
-    #[clap(short = 't', long, default_value_t = 1)]
+    #[clap(short = 't', long, default_value_t = RunArgs::default().threads)]
     pub threads: usize,
 
     /// Run an unbiased search, which does not use information about designated recombinant parents.
-    #[arg(short = 'u', long, default_value_t = false)]
+    #[arg(short = 'u', long, default_value_t = RunArgs::default().unbiased)]
     pub unbiased: bool,
 }
 
