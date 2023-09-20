@@ -1,7 +1,9 @@
+// This module was inspired by @J-Cake's custom implementation of text rendering
+// Source: https://gist.github.com/J-Cake/ddccf99d3f7d6fc947fc60204aa41e09#file-text-rs
+
 use color_eyre::eyre::{eyre, Report, Result, WrapErr};
 use image::{imageops, ImageBuffer, Rgba};
 use itertools::Itertools;
-//use log::debug;
 use std::path::Path;
 
 #[derive(Debug)]

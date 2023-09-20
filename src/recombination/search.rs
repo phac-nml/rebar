@@ -79,6 +79,9 @@ pub fn all_parents<'seq>(
     // For known recombinants
     let recombinant = &args.best_match.recombinant;
 
+    // keep track if this is a edge case
+    let mut edge_case = false;
+
     // Running a biased search
     if !args.unbiased {
         if let Some(recombinant) = recombinant {
@@ -87,32 +90,33 @@ pub fn all_parents<'seq>(
             debug!("Prioritizing designated parents: {include_populations:?}");
 
             // apply edge cases
-            let edge_case = args
+            let edge_case_args = args
                 .dataset
                 .edge_cases
                 .iter()
-                .find(|edge_case| edge_case.population == *recombinant);
+                .find(|e| e.population == *recombinant);
 
             // Option 1: Matching edge case found, override search args
-            if let Some(edge_case) = edge_case {
-                debug!("Applying edge case: {edge_case:?}");
-                args.apply_edge_case(edge_case)?;
+            if let Some(edge_case_args) = edge_case_args {
+                debug!("Applying edge case: {edge_case_args:?}");
+                args.apply_edge_case(edge_case_args)?;
+                edge_case = true;
             }
             // Option 2: No matching edge case was found, do a general
             // relaxation of search parameters for maximum sensitivity
             else {
-                debug!(
-                    "Relaxing parameters for sensitive detection of a designated recombinant"
-                );
-                debug!(
-                    "\tFrom --min-consecutive {} to --min-consecutive 1",
-                    args.min_consecutive
-                );
-                args.min_consecutive = 1;
-                debug!("\tFrom --min-length {} to --min-length 1", args.min_length);
-                args.min_length = 1;
-                debug!("\tFrom --min-subs {} to --min-subs 1", args.min_subs);
-                args.min_subs = 1;
+                // debug!(
+                //     "Relaxing parameters for sensitive detection of a designated recombinant"
+                // );
+                // debug!(
+                //     "\tFrom --min-consecutive {} to --min-consecutive 1",
+                //     args.min_consecutive
+                // );
+                // args.min_consecutive = 1;
+                // debug!("\tFrom --min-length {} to --min-length 1", args.min_length);
+                // args.min_length = 1;
+                // debug!("\tFrom --min-subs {} to --min-subs 1", args.min_subs);
+                // args.min_subs = 1;
             }
         }
     }
@@ -124,7 +128,10 @@ pub fn all_parents<'seq>(
 
     // Secondary parents ( 2 : max_parents)
     // this function consumes `parents`, modifies it, then returns it
-    let (parents, recombination) = secondary_parents(parents, args)?;
+    let (parents, mut recombination) = secondary_parents(parents, args)?;
+
+    // add edge case annotation
+    recombination.edge_case = edge_case;
 
     Ok((parents, recombination))
 }

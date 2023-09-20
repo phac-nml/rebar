@@ -42,7 +42,7 @@ Download the `rebar` dataset.
 rebar dataset \
   --name sars-cov-2 \
   --tag latest \
-  --outdir dataset/sars-cov-2-latest
+  --output-dir dataset/sars-cov-2-latest
 ```
 
 ### Example 1
@@ -51,14 +51,21 @@ Detect recombination in user-specified lineages.
 
 ```bash
 rebar run \
-  --dataset dataset/sars-cov-2-latest \
-  --lineages AY.4,BA.5.2,XD,XBB.1.5.1,XBL \
-  --output-all \
-  --outdir example1
+  --dataset-dir dataset/sars-cov-2/latest \
+  --populations AY.4,BA.5.2,XD,XBB.1.5.1,XBL \
+  --output-dir example1
 ```
 
-- The `--lineages` can include any designated lineage found in the dataset `alignment.fasta`.
+- The `--populations` can include any designated lineage found in the dataset `alignment.fasta`.
 - The "\*" character can also be used to include descendants. For example `--lineages XBB.1.16*` will include `XBB.1.16`, `XBB.1.16.1`, `FU.1`, `XBB.1.16.2`, etc.
+
+```bash
+rebar plot \
+  --linelist example1/linelist.tsv \
+  --barcodes-dir example1/barcodes \
+  --annotations dataset/sars-cov-2/latest/annotations.tsv \
+  --output-dir example1/plots
+```
 
 ### Example 2
 
@@ -66,10 +73,9 @@ Detect recombination from an input alignment.
 
 ```bash
 rebar run \
-  --dataset dataset/sars-cov-2-latest \
+  --dataset dataset/sars-cov-2/latest \
   --alignment test/alignment.fasta \
-  --output-all \
-  --outdir example2
+  --output-dir example2
 ```
 
 The `--alignment` must be aligned to the same reference as in the dataset `reference.fasta` (we strongly recommend [nextclade](https://github.com/nextstrain/nextclade)).

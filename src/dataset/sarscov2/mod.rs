@@ -3,7 +3,7 @@ use crate::dataset::edge_cases::EdgeCase;
 use crate::utils;
 use color_eyre::eyre::{eyre, Report, Result, WrapErr};
 use itertools::Itertools;
-use log::{debug, info};
+use log::debug;
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
@@ -283,7 +283,6 @@ pub fn create_annotations() -> Result<Annotations, Report> {
 
 /// Create SARS-CoV-2 recombinant edge cases.
 pub fn create_edge_cases() -> Result<Vec<EdgeCase>, Report> {
-    info!("Creating SARS-CoV-2 edge cases.");
     let mut edge_cases: Vec<EdgeCase> = Vec::new();
 
     // --------------------------------------------------------------------
@@ -295,12 +294,28 @@ pub fn create_edge_cases() -> Result<Vec<EdgeCase>, Report> {
         population: "XCF".to_string(),
         max_parents: 2,
         max_iter: 1,
-        min_consecutive: 1,
-        min_length: 1,
+        min_consecutive: 2,
+        min_length: 500,
         min_subs: 0,
         unbiased: false,
     };
     edge_cases.push(xcf);
+
+    // --------------------------------------------------------------------
+    // XCG
+    // XCG is BA.5.2 and XBB.1 with only 2 consecutive bases
+
+    debug!("Creating edge case: XCG");
+    let xcg = EdgeCase {
+        population: "XCG".to_string(),
+        max_parents: 2,
+        max_iter: 1,
+        min_consecutive: 2,
+        min_length: 500,
+        min_subs: 1,
+        unbiased: false,
+    };
+    edge_cases.push(xcg);
 
     // --------------------------------------------------------------------
     // Finish

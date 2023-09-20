@@ -40,9 +40,11 @@ pub fn create(
     // Import Data
     // ------------------------------------------------------------------------
 
-    // find system font, TBD
+    // find system fonts, TBD!!
     let font_path =
         std::path::PathBuf::from("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf");
+    let font_bold_path =
+        std::path::PathBuf::from("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf");
 
     // mandatory import data
     let mut linelist = utils::read_table(linelist_path)?;
@@ -255,6 +257,7 @@ pub fn create(
     let mut args = text::DrawRaqoteArgs::from_canvas(&mut canvas);
     args.text = "Regions".to_string();
     args.font_size = constants::FONT_SIZE;
+    args.font_path = font_bold_path.clone();
     args.x = section_x - label_gap;
     args.y = section_y + (constants::X_INC * 1.5);
     args.horizontal_alignment = text::HorizontalAlignment::Right;
@@ -367,6 +370,7 @@ pub fn create(
     let mut args = text::DrawRaqoteArgs::from_canvas(&mut canvas);
     args.text = "Genome".to_string();
     args.font_size = constants::FONT_SIZE;
+    args.font_path = font_bold_path.clone();
     args.x = section_x - label_gap;
     args.y = section_y + (constants::X_INC * 1.5);
     args.horizontal_alignment = text::HorizontalAlignment::Right;
@@ -583,6 +587,7 @@ pub fn create(
     let mut args = text::DrawRaqoteArgs::from_canvas(&mut canvas);
     args.text = "Breakpoints".to_string();
     args.font_size = constants::FONT_SIZE;
+    args.font_path = font_bold_path.clone();
     args.x = section_x - label_gap;
     args.y = section_y + (constants::X_INC * 1.5);
     args.horizontal_alignment = text::HorizontalAlignment::Right;
@@ -803,10 +808,25 @@ pub fn create(
             }
             // otherwise, it's a sequence
             else {
-                // color by origin
-                let parent_i = parents.iter().position(|p| *p == origin).unwrap();
-                let [r, g, b, a] = get_base_rgba(&pop_base, &ref_base, parent_i);
-                pop_color = Source::Solid(SolidSource { r, g, b, a });
+                // identify parental origin(s)
+                let mut origins = vec![];
+                for (parent_i, parent) in parents.iter().enumerate() {
+                    let parent_header_i = barcodes.header_position(parent)?;
+                    let parent_base = barcodes.rows[coord_i][parent_header_i].to_string();
+                    if parent_base == pop_base {
+                        origins.push(parent_i)
+                    }
+                }
+                // color by origin if exact
+                if origins.len() == 1 {
+                    let parent_i = origins[0];
+                    let [r, g, b, a] = get_base_rgba(&pop_base, &ref_base, parent_i);
+                    pop_color = Source::Solid(SolidSource { r, g, b, a });
+                }
+                // otherwise, just make it white
+                else {
+                    pop_color = constants::WHITE;
+                }
             }
 
             polygon::draw_raqote(
@@ -870,8 +890,9 @@ pub fn create(
 
     // draw section label
     let mut args = text::DrawRaqoteArgs::from_canvas(&mut canvas);
-    args.text = "Legend".to_string();
+    args.text = "Mutation Legend".to_string();
     args.font_size = constants::FONT_SIZE;
+    args.font_path = font_bold_path;
     args.x = section_x - label_gap;
     args.y = section_y + (legend_height / 2.0);
     args.horizontal_alignment = text::HorizontalAlignment::Right;

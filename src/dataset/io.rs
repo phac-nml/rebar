@@ -7,7 +7,8 @@ use crate::sequence::{read_reference, Sequence, Substitution};
 use crate::utils;
 use bio::io::fasta;
 use color_eyre::eyre::{eyre, Report, Result};
-use log::{info, warn};
+use indicatif::{style::ProgressStyle, ProgressBar};
+use log::{debug, info, warn};
 use std::collections::BTreeMap;
 use std::fs::{create_dir_all, File};
 use std::path::Path;
@@ -18,42 +19,48 @@ use std::str::FromStr;
 // ----------------------------------------------------------------------------
 
 /// Download a remote dataset
-pub async fn download_dataset(
-    name: &Name,
-    tag: &Tag,
-    output_dir: &Path,
-) -> Result<(), Report> {
+pub async fn download_dataset(args: &cli::DatasetDownloadArgs) -> Result<(), Report> {
     // Create the output directory if it doesn't exist
-    if !output_dir.exists() {
-        create_dir_all(output_dir)?;
-        info!("Creating output directory: {:?}", output_dir);
+    if !args.output_dir.exists() {
+        create_dir_all(&args.output_dir)?;
+        info!("Creating output directory: {:?}", args.output_dir);
     }
 
     // --------------------------------------------------------------------
     // Download Reference
 
-    let url = match name {
+    let url = match args.name {
         Name::SarsCov2 => sarscov2::REFERENCE_URL.to_string(),
-        _ => return Err(eyre!("Reference download for {name} is not implemented.")),
+        _ => {
+            return Err(eyre!(
+                "Reference download for {} is not implemented.",
+                args.name
+            ))
+        }
     };
     let ext = utils::path_to_ext(Path::new(&url))?;
     let mut decompress = false;
     if ext != "fasta" && ext != "fa" {
         decompress = true;
     }
-    let reference_path = output_dir.join("reference.fasta");
+    let reference_path = args.output_dir.join("reference.fasta");
     info!("Downloading reference: {} to {:?}", url, reference_path);
     utils::download_file(&url, &reference_path, decompress).await?;
 
     // --------------------------------------------------------------------
     // Create Annotations
 
-    let annotations_path = output_dir.join("annotations.tsv");
+    let annotations_path = args.output_dir.join("annotations.tsv");
     info!("Downloading annotations to {:?}", annotations_path);
 
-    let annotations = match name {
+    let annotations = match args.name {
         Name::SarsCov2 => sarscov2::create_annotations()?,
-        _ => return Err(eyre!("Annotations for {name} dataset is not implemented.")),
+        _ => {
+            return Err(eyre!(
+                "Annotations for {} dataset is not implemented.",
+                args.name
+            ))
+        }
     };
     let annotations_table = annotations.to_table()?;
     annotations_table.write(&annotations_path)?;
@@ -61,66 +68,79 @@ pub async fn download_dataset(
     // --------------------------------------------------------------------
     // Download Populations
 
-    let url = match name {
+    let url = match args.name {
         Name::SarsCov2 => sarscov2::POPULATIONS_URL.to_string(),
-        _ => return Err(eyre!("Population download for {name} is not implemented.")),
+        _ => {
+            return Err(eyre!(
+                "Population download for {} is not implemented.",
+                args.name
+            ))
+        }
     };
     let ext = utils::path_to_ext(Path::new(&url))?;
     let mut decompress = false;
     if ext != "fasta" && ext != "fa" {
         decompress = true;
     }
-    let populations_path = output_dir.join("populations.fasta");
+    let populations_path = args.output_dir.join("populations.fasta");
     info!("Downloading populations: {} to {:?}", url, populations_path);
     utils::download_file(&url, &populations_path, decompress).await?;
 
     // --------------------------------------------------------------------
     // Create Phylogeny
 
-    let phylogeny_path = output_dir.join("phylogeny.dot");
+    let phylogeny_path = args.output_dir.join("phylogeny.json");
     info!("Creating phylogeny: {:?}", phylogeny_path);
 
     let mut phylogeny = Phylogeny::new();
-    phylogeny.build_graph(name, output_dir).await?;
-    phylogeny.export(output_dir, PhylogenyExportFormat::Dot)?;
-    phylogeny.export(output_dir, PhylogenyExportFormat::Json)?;
+    phylogeny.build_graph(&args.name, &args.output_dir).await?;
+    phylogeny.export(&args.output_dir, PhylogenyExportFormat::Dot)?;
+    phylogeny.export(&args.output_dir, PhylogenyExportFormat::Json)?;
 
     // --------------------------------------------------------------------
     // Identify Diagnostic Mutations
     //
     // This is painfully slow, need to rethink!
 
-    // let diagnostic_path = output_dir.join("diagnostic_mutations.tsv");
-    // info!("Identifying diagnostic mutations: {:?}", diagnostic_path);
+    if args.diagnostic {
+        let diagnostic_path = args.output_dir.join("diagnostic_mutations.tsv");
+        info!("Identifying diagnostic mutations: {:?}", diagnostic_path);
 
-    // let mask = 0;
-    // let (_populations, mutations) = parse_populations(&populations_path, &reference_path, mask)?;
-    // let diagnostic_table = identify_diagnostic_mutations(&mutations, &phylogeny)?;
-    // diagnostic_table.write(&diagnostic_path)?;
+        let mask = 0;
+        let (_populations, mutations) =
+            parse_populations(&populations_path, &reference_path, mask)?;
+        let diagnostic_table = get_diagnostic_mutations(&mutations, &phylogeny)?;
+        diagnostic_table.write(&diagnostic_path)?;
+    }
 
     // --------------------------------------------------------------------
     // Create Edge Cases
 
-    let edge_cases_path = output_dir.join("edge_cases.json");
+    let edge_cases_path = args.output_dir.join("edge_cases.json");
     info!("Creating edge cases: {:?}", edge_cases_path);
 
-    let edge_cases = match name {
+    let edge_cases = match args.name {
         Name::SarsCov2 => sarscov2::create_edge_cases()?,
-        _ => return Err(eyre!("Edge cases for {name} dataset is not implemented.")),
+        _ => {
+            return Err(eyre!(
+                "Edge cases for {} dataset is not implemented.",
+                args.name
+            ))
+        }
     };
-    edge_cases::export(&edge_cases, output_dir, EdgeCaseExportFormat::Json)?;
+    edge_cases::export(&edge_cases, &args.output_dir, EdgeCaseExportFormat::Json)?;
 
     // --------------------------------------------------------------------
     // Create Summary
 
-    let output_path = output_dir.join("summary.json");
+    let output_path = args.output_dir.join("summary.json");
     info!("Creating info summary: {:?}", output_path);
 
     let summary = Summary {
-        name: *name,
-        tag: tag.clone(),
+        name: args.name,
+        tag: args.tag.clone(),
     };
-    summary.export(output_dir, SummaryExportFormat::Json)?;
+    summary.export(&args.output_dir, SummaryExportFormat::Json)?;
 
     // --------------------------------------------------------------------
     // Finish
@@ -263,7 +283,7 @@ pub fn parse_populations(
     Ok((populations, mutations))
 }
 
-pub fn identify_diagnostic_mutations(
+pub fn get_diagnostic_mutations(
     mutations: &BTreeMap<Substitution, Vec<String>>,
     phylogeny: &Phylogeny,
 ) -> Result<utils::table::Table, Report> {
@@ -273,22 +293,25 @@ pub fn identify_diagnostic_mutations(
         .map(String::from)
         .collect::<Vec<_>>();
 
+    // configure progress bar style
+    let progress_bar_style = ProgressStyle::with_template(
+        "{bar:40} {pos}/{len} ({percent}%) | Mutations / Second: {per_sec} | Elapsed: {elapsed_precise} | ETA: {eta_precise}"
+    ).unwrap();
+    let progress_bar = ProgressBar::new(mutations.len() as u64);
+    progress_bar.set_style(progress_bar_style);
+
     for (mutation, populations) in mutations {
-        info!("mutation: {mutation:?}");
-
+        progress_bar.inc(1);
         let mut population = populations[0].clone();
-
+        debug!("{mutation:?}");
+        debug!("\tpopulations: {}", populations.len());
         let mut is_diagnostic = false;
         let mut include_descendants = false;
 
         // A mutation found in only 1 population is obviously diagnostic
         if populations.len() == 1 {
             is_diagnostic = true;
-        }
-        // Otherwise with the phylogeny, a diagnostic mutation is monophyletic
-        // but may not include all descendants
-        // Note: I'm not 100% sure of this logic at the moment
-        else if !phylogeny.is_empty() {
+        } else if !phylogeny.is_empty() {
             let common_ancestor = phylogeny.get_common_ancestor(populations)?;
             if populations.contains(&common_ancestor) {
                 is_diagnostic = true;
@@ -306,6 +329,8 @@ pub fn identify_diagnostic_mutations(
             table.rows.push(row);
         }
     }
+
+    progress_bar.inc(1);
 
     Ok(table)
 }

@@ -1,6 +1,7 @@
 use clap::Parser; // CLI argument parsing
 use color_eyre::eyre::{Report, Result}; // colorized logging and error handling
 use rebar::cli::{Cli, Command, DatasetCommand};
+use rebar::dataset;
 
 #[tokio::main]
 async fn main() -> Result<(), Report> {
@@ -25,7 +26,9 @@ async fn main() -> Result<(), Report> {
         // Dataset
         Command::Dataset(dataset_args) => match dataset_args.command {
             DatasetCommand::List(_) => todo!(),
-            DatasetCommand::Download(args) => rebar::dataset_download(args).await?,
+            DatasetCommand::Download(args) => {
+                dataset::io::download_dataset(&args).await?
+            }
         },
         // --------------------------------------------------------------------
         // Run

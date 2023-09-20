@@ -73,6 +73,11 @@ pub struct DatasetDownloadArgs {
     #[clap(default_value_t=dataset::attributes::Tag::default())]
     pub tag: dataset::attributes::Tag,
 
+    /// Calculate diagnostic mutations (slow).
+    #[clap(short = 'd', long)]
+    #[clap(default_value_t = false)]
+    pub diagnostic: bool,
+
     /// Output directory.
     ///
     /// If the directory does not exist, it will be created.

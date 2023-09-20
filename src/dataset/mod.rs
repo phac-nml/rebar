@@ -475,12 +475,9 @@ impl Dataset {
         }
 
         // Check if the consensus population is a known recombinant or descendant of one
-        for recombinant in self.phylogeny.recombinants.iter() {
-            let recombinant_descendants = self.phylogeny.get_descendants(recombinant)?;
-            if recombinant_descendants.contains(&search_result.consensus_population) {
-                search_result.recombinant = Some(recombinant.to_owned());
-            }
-        }
+        search_result.recombinant = self
+            .phylogeny
+            .get_recombinant_ancestor(&search_result.consensus_population)?;
 
         // set consensus population subs
         search_result.substitutions = self.populations

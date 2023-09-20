@@ -1,54 +1,8 @@
 use crate::dataset::{Dataset, SearchResult};
-use crate::recombination;
 use crate::utils;
+use crate::{recombination, recombination::validate};
 use color_eyre::eyre::{eyre, Report, Result};
 use itertools::Itertools;
-use serde::{Deserialize, Serialize};
-use std::fmt;
-use std::str::FromStr;
-
-// ----------------------------------------------------------------------------
-// Validate
-
-#[derive(Clone, Debug, Deserialize, Serialize)]
-pub enum Validate {
-    // population status
-    CorrectPopulation,
-    IncorrectPopulation,
-    // // recombinant status
-    // PositiveRecombinant,
-    // NegativeRecombinant,
-    // FalsePositiveRecombinant,
-    // FalseNegativeRecombinant,
-    // // parents status
-    // CorrectParents,
-    // IncorrectParents,
-}
-
-impl FromStr for Validate {
-    type Err = Report;
-
-    fn from_str(result: &str) -> Result<Self, Report> {
-        let validate = match result {
-            "correct_population" => Validate::CorrectPopulation,
-            "incorrect_population" => Validate::IncorrectPopulation,
-            _ => return Err(eyre!("Unknown validation result: {result}")),
-        };
-
-        Ok(validate)
-    }
-}
-
-impl fmt::Display for Validate {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let validate = match self {
-            Validate::CorrectPopulation => "correct_population",
-            Validate::IncorrectPopulation => "incorrect_population",
-        };
-
-        write!(f, "{}", validate)
-    }
-}
 
 // ----------------------------------------------------------------------------
 // LineList
@@ -69,11 +23,13 @@ pub fn linelist(
 
     table.headers = vec![
         "strain",
+        "validate",
+        "validate_details",
         "population",
         "recombinant",
         "parents",
         "breakpoints",
-        "validate",
+        "edge_case",
         "unique_key",
         "regions",
         "private",
@@ -123,6 +79,18 @@ pub fn linelist(
         let breakpoints = recombination.breakpoints.iter().join(",").to_string();
         row[table.header_position("breakpoints")?] = breakpoints;
 
+        // edge_case
+        let edge_case = recombination.edge_case.to_string();
+        row[table.header_position("edge_case")?] = edge_case;
+
+        // validate
+        let validate = validate::validate(dataset, best_match, recombination)?;
+        if let Some(validate) = validate {
+            row[table.header_position("validate")?] = validate.status.to_string();
+            row[table.header_position("validate_details")?] =
+                validate.details.iter().join(";");
+        }
+
         // unique_key
         let unique_key = recombination.unique_key.to_string();
         row[table.header_position("unique_key")?] = unique_key;
@@ -144,26 +112,6 @@ pub fn linelist(
 
         // dataset tag
         row[table.header_position("dataset_tag")?] = dataset.tag.to_string();
-
-        // --------------------------------------------------------------------
-        // Validate
-
-        let mut validate = Vec::new();
-
-        let strain = strain.replace("query_", "");
-
-        if dataset.populations.contains_key(&strain) {
-            // Population status
-            if strain == population {
-                validate.push(Validate::CorrectPopulation);
-            } else {
-                validate.push(Validate::IncorrectPopulation);
-            }
-            // Recombinant status
-            // Parent status
-        }
-
-        row[table.header_position("validate")?] = validate.iter().join(",").to_string();
 
         table.rows.push(row);
     }

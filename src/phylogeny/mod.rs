@@ -93,7 +93,7 @@ impl Phylogeny {
         self.lookup.len() == 0
     }
 
-    pub fn is_recombinant(&self, name: &String) -> Result<bool, Report> {
+    pub fn is_recombinant(&self, name: &str) -> Result<bool, Report> {
         let node = self.get_node(name).unwrap();
         let mut edges = self
             .graph
@@ -238,7 +238,7 @@ impl Phylogeny {
         Ok(())
     }
 
-    pub fn get_descendants(&self, name: &String) -> Result<Vec<String>, Report> {
+    pub fn get_descendants(&self, name: &str) -> Result<Vec<String>, Report> {
         let mut descendants = Vec::new();
 
         // Find the node that matches the name
@@ -258,7 +258,7 @@ impl Phylogeny {
     }
 
     /// Get parent names of node
-    pub fn get_parents(&self, name: &String) -> Result<Vec<String>, Report> {
+    pub fn get_parents(&self, name: &str) -> Result<Vec<String>, Report> {
         let mut parents = Vec::new();
 
         let node = self.get_node(name)?;
@@ -279,8 +279,8 @@ impl Phylogeny {
     /// petgraph must have this already implemented, but I can't find it in docs
     pub fn get_paths(
         &self,
-        origin: &String,
-        dest: &String,
+        origin: &str,
+        dest: &str,
         direction: petgraph::Direction,
     ) -> Result<Vec<Vec<String>>, Report> {
         // container to hold the paths we've found, is a vector of vectors
@@ -293,7 +293,7 @@ impl Phylogeny {
 
         // Check if we've reached the destination
         if origin == dest {
-            paths.push(vec![origin.clone()]);
+            paths.push(vec![origin.to_string()]);
         }
         // Otherwise, continue the search!
         else {
@@ -311,7 +311,7 @@ impl Phylogeny {
                 // prepend the origin to the paths
                 parent_paths
                     .iter_mut()
-                    .for_each(|p| p.insert(0, origin.clone()));
+                    .for_each(|p| p.insert(0, origin.to_string()));
 
                 // update the paths container to return at end of function
                 for p in parent_paths {
@@ -324,8 +324,8 @@ impl Phylogeny {
     }
 
     /// NOTE: Don't think this will work with 3+ parents yet, to be tested.
-    pub fn get_ancestors(&self, name: &String) -> Result<Vec<Vec<String>>, Report> {
-        let mut paths = self.get_paths(name, &"root".to_string(), petgraph::Incoming)?;
+    pub fn get_ancestors(&self, name: &str) -> Result<Vec<Vec<String>>, Report> {
+        let mut paths = self.get_paths(name, "root", petgraph::Incoming)?;
 
         // remove self name (first element) from paths, and then reverse order
         // so that it's ['root'.... name]
@@ -354,8 +354,7 @@ impl Phylogeny {
             // get_ancestors removes the self node name from the list,
             // but some datasets have named internal nodes, so a listed
             // node could be a common ancestor!
-            let ancestor_paths =
-                self.get_paths(&"root".to_string(), name, petgraph::Outgoing)?;
+            let ancestor_paths = self.get_paths("root", name, petgraph::Outgoing)?;
 
             for ancestor_path in ancestor_paths {
                 for (depth, ancestor) in ancestor_path.iter().enumerate() {
@@ -398,7 +397,28 @@ impl Phylogeny {
         Ok(common_ancestor)
     }
 
-    pub fn get_node(&self, name: &String) -> Result<NodeIndex, Report> {
+    /// Identify the most recent ancestor that is a recombinant.
+    pub fn get_recombinant_ancestor(&self, name: &str) -> Result<Option<String>, Report> {
+        let mut recombinant: Option<String> = None;
+
+        let ancestor_paths = self.get_paths(name, "root", petgraph::Incoming)?;
+
+        for path in ancestor_paths {
+            for name in path {
+                if self.recombinants.contains(&name) {
+                    recombinant = Some(name.to_string());
+                    break;
+                }
+            }
+            if recombinant.is_some() {
+                break;
+            }
+        }
+
+        Ok(recombinant)
+    }
+
+    pub fn get_node(&self, name: &str) -> Result<NodeIndex, Report> {
         if self.lookup.contains_key(name) {
             let node = self.lookup[name];
             Ok(node)

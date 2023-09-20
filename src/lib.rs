@@ -17,13 +17,6 @@ use log::{debug, info, warn};
 use rayon::prelude::*;
 use std::fs::create_dir_all;
 
-/// Download rebar dataset.
-pub async fn dataset_download(args: cli::DatasetDownloadArgs) -> Result<(), Report> {
-    dataset::io::download_dataset(&args.name, &args.tag, &args.output_dir).await?;
-
-    Ok(())
-}
-
 /// Run rebar on input alignment and/or dataset population
 pub fn run(args: cli::RunArgs) -> Result<(), Report> {
     // check how many threads are available on the system
@@ -88,11 +81,11 @@ pub fn run(args: cli::RunArgs) -> Result<(), Report> {
 
         for population in populations {
             // if population is '*', use all populations in dataset
-            // if population == "*" {
-            //     //search_populations = dataset.populations.keys().cloned().collect_vec();
-            //     // break from loop, we're using all populations
-            //     break
-            // }
+            if population == "*" {
+                search_populations = dataset.populations.keys().cloned().collect_vec();
+                // break from loop, we're using all populations
+                break;
+            }
             // if population ends in '*', use phylogenetically aware mode
             // to search for it and all descendants
             if population.ends_with('*') {
@@ -117,8 +110,8 @@ pub fn run(args: cli::RunArgs) -> Result<(), Report> {
             // check if population is in dataset
             if dataset.populations.contains_key(&population) {
                 let mut sequence = dataset.populations[&population].clone();
-                // add prefix 'query_' to differentiate from dataset
-                sequence.id = format!("query_{}", sequence.id).to_string();
+                // add prefix 'population_' to differentiate from dataset itself
+                sequence.id = format!("population_{}", sequence.id).to_string();
                 ids_seen.push(sequence.id.clone());
                 sequences.push(sequence);
                 debug!("Added population {population} to query sequences.");
