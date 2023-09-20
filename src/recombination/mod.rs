@@ -1,4 +1,5 @@
 pub mod search;
+pub mod validate;
 
 use crate::dataset::SearchResult;
 use crate::sequence::{Sequence, Substitution};
@@ -70,6 +71,7 @@ pub struct Recombination<'seq> {
     pub breakpoints: Vec<Breakpoint>,
     pub regions: BTreeMap<usize, Region>,
     pub genome_length: usize,
+    pub edge_case: bool,
     #[serde(skip_serializing)]
     pub table: utils::table::Table,
 }
@@ -84,7 +86,8 @@ impl<'seq> Recombination<'seq> {
             breakpoints: Vec::new(),
             regions: BTreeMap::new(),
             table: utils::table::Table::new(),
-            genome_length: 0,
+            genome_length: sequence.genome_length,
+            edge_case: false,
         }
     }
 }
@@ -100,8 +103,8 @@ pub fn detect_recombination<'seq>(
 ) -> Result<Recombination<'seq>, Report> {
     let mut recombination = Recombination::new(args.sequence);
 
-    recombination.sequence = args.sequence;
-    recombination.genome_length = args.sequence.genome_length;
+    //recombination.sequence = args.sequence;
+    //recombination.genome_length = args.sequence.genome_length;
 
     // if no search_result was provided, just use first parent
     let search_result_default = &parents[0];
