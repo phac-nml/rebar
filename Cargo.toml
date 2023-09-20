@@ -33,3 +33,12 @@ opt-level = 1
 # Enable high optimizations for dependencies (incl. Bevy), but not for our code:
 [profile.dev.package."*"]
 opt-level = 3
+
+[profile.release]
+# Binary size reduction tips from: https://github.com/johnthagen/min-sized-rust
+strip         = true  # Strip Symbols from Binary
+opt-level     = "z"  # OOptimize For Size
+lto           = true # Enable Link Time Optimization (LTO)
+codegen-units = 1 # Reduce Parallel Code Generation Units to Increase Optimization
+
+# https://github.com/upx/upx/releases/download/v4.1.0/upx-4.1.0-amd64_linux.tar.xz

@@ -46,3 +46,17 @@ jobs:
 
       - name: build
         run: cargo build --release --all-features --target ${{ matrix.arch }}
+
+      - name: compress with upx
+        uses: crazy-max/ghaction-upx@v3
+        with:
+          version: 3.0.0
+          files: |
+            target/${{ matrix.arch }}/release/rebar
+          args: --best --lzma
+
+      - name: upload binary
+        uses: actions/upload-artifact@v3
+        with:
+          name: rebar-${{ matrix.arch }}
+          path: target/${{ matrix.arch }}/release/rebar
