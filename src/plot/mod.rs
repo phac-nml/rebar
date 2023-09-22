@@ -46,9 +46,19 @@ pub fn create(
     let font_bold_path =
         std::path::PathBuf::from("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf");
 
-    // mandatory import data
-    let mut linelist = utils::read_table(linelist_path)?;
+    // the name of the barcodes file will be the unique_key
     let barcodes = utils::read_table(barcodes_path)?;
+    let unique_key = barcodes_path.file_stem().unwrap().to_str().unwrap();
+
+    // filter the linelist to the current key
+    let mut linelist = utils::read_table(linelist_path)?;
+    //linelist = linelist.filter("unique_key", unique_key)?;
+    linelist = linelist.filter("unique_key", unique_key)?;
+    if linelist.rows.is_empty() {
+        return Err(eyre!(
+            "The barcodes unique key was not found in the linelist: {unique_key}"
+        ));
+    }
 
     // optional import data
     let mut annotations = utils::table::Table::new();
@@ -85,9 +95,15 @@ pub fn create(
     let parents = barcodes
         .rows
         .iter()
+        .filter(|row| row[origin_i] != "?")
         .map(|row| row[origin_i].to_string())
         .unique()
         .collect_vec();
+
+    // If multiple parents weren't confidently identified
+    if parents.is_empty() {
+        return Err(eyre!("No parents (origin) were confidently identified in barcodes file: {barcodes_path:?}"));
+    }
 
     if parents.len() > constants::PALETTE_DARK.len() {
         return Err(eyre!("There are more parents than colors in the palette!")
@@ -96,7 +112,7 @@ pub fn create(
                 parents.len()
             ))
             .suggestion(
-                "If so, please contact the developer to expand the color palette options.",
+                "If so, please contact the developer to expand the color palette options :)",
             ));
     }
 
@@ -823,7 +839,7 @@ pub fn create(
                     let [r, g, b, a] = get_base_rgba(&pop_base, &ref_base, parent_i);
                     pop_color = Source::Solid(SolidSource { r, g, b, a });
                 }
-                // otherwise, just make it white
+                // otherwise, just make it white to show ambiguous origins
                 else {
                     pop_color = constants::WHITE;
                 }
@@ -890,7 +906,7 @@ pub fn create(
 
     // draw section label
     let mut args = text::DrawRaqoteArgs::from_canvas(&mut canvas);
-    args.text = "Mutation Legend".to_string();
+    args.text = "Legend".to_string();
     args.font_size = constants::FONT_SIZE;
     args.font_path = font_bold_path;
     args.x = section_x - label_gap;

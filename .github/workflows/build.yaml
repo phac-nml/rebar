@@ -45,18 +45,20 @@ jobs:
         run: rustup target add ${{ matrix.arch }}
 
       - name: build
-        run: cargo build --release --all-features --target ${{ matrix.arch }}
+        run: |
+          cargo build --release --all-features --target ${{ matrix.arch }}
+          cp target/${{ matrix.arch }}/release/rebar .
 
       - name: compress with upx
         uses: crazy-max/ghaction-upx@v3
         with:
           version: 3.0.0
           files: |
-            target/${{ matrix.arch }}/release/rebar
+            rebar
           args: --best --lzma
 
       - name: upload binary
         uses: actions/upload-artifact@v3
         with:
           name: rebar-${{ matrix.arch }}
-          path: target/${{ matrix.arch }}/release/rebar
+          path: rebar

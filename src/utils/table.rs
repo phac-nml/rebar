@@ -40,6 +40,19 @@ impl Table {
         Ok(pos)
     }
 
+    pub fn filter(&self, header: &str, pattern: &str) -> Result<Table, Report> {
+        let mut table = Table::new();
+        let header_i = self.header_position(header)?;
+        table.headers = self.headers.clone();
+        table.rows = self
+            .rows
+            .iter()
+            .filter(|row| row[header_i] == pattern)
+            .cloned()
+            .collect_vec();
+        Ok(table)
+    }
+
     /// write to file
     pub fn write(&self, path: &Path) -> Result<(), Report> {
         let mut file = File::create(path)
@@ -88,7 +101,7 @@ impl Table {
                         }
                     })
                     .max()
-                    .unwrap()
+                    .unwrap_or(header.len() + 2)
             })
             .collect_vec();
 

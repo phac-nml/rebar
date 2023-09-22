@@ -37,7 +37,7 @@ opt-level = 3
 [profile.release]
 # Binary size reduction tips from: https://github.com/johnthagen/min-sized-rust
 strip         = true  # Strip Symbols from Binary
-opt-level     = "z"  # OOptimize For Size
+#opt-level     = "z"  # Optimize For Size
 lto           = true # Enable Link Time Optimization (LTO)
 codegen-units = 1 # Reduce Parallel Code Generation Units to Increase Optimization
 

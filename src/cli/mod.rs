@@ -228,36 +228,26 @@ impl RunInput {
 #[derive(Clone, Debug, Parser)]
 #[clap(verbatim_doc_comment)]
 pub struct PlotArgs {
-    #[command(flatten)]
-    pub barcodes: PlotInput,
+    /// rebar dataset directory.
+    #[clap(short = 'd', long, required = true)]
+    pub dataset_dir: PathBuf,
 
-    /// Input linelist from rebar run.
-    #[clap(short = 'i', long, required = true)]
-    pub linelist: PathBuf,
-
-    /// Dataset annotations TSV
-    #[clap(short = 'a', long, required = false)]
-    pub annotations: Option<PathBuf>,
-
-    /// Output directory.
+    /// Output directory from rebar run.
     ///
-    /// If the directory does not exist, it will be created.
+    /// Will plot all TSV files under barcodes/
     #[clap(short = 'o', long, required = true)]
     pub output_dir: PathBuf,
-}
 
-#[derive(Args, Clone, Debug)]
-#[group(required = true, multiple = true)]
-pub struct PlotInput {
-    /// Input barcodes tsv
-    #[arg(short = 'f', long)]
+    /// A single barcodes TSV file to plot.
+    #[clap(short = 'b', long)]
     pub barcodes_file: Option<PathBuf>,
 
-    /// Input barcodes directory
-    #[arg(short = 'd', long)]
-    pub barcodes_dir: Option<PathBuf>,
+    /// Output directory for plots.
+    ///
+    /// Otherwise will default to 'plots' under the --output-dir
+    #[clap(short = 'p', long)]
+    pub plot_dir: Option<PathBuf>,
 }
-
 // -----------------------------------------------------------------------------
 // Verbosity
 // -----------------------------------------------------------------------------
