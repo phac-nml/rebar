@@ -261,58 +261,85 @@ pub fn run(args: cli::RunArgs) -> Result<(), Report> {
 
 /// Plot rebar output
 pub fn plot(args: cli::PlotArgs) -> Result<(), Report> {
-    // parse mandatory paths
-    let linelist = &args.linelist;
+    // ------------------------------------------------------------------------
+    // Parse Args
+
+    let dataset_dir = &args.dataset_dir;
+    if !dataset_dir.exists() {
+        return Err(eyre!("--dataset-dir {dataset_dir:?} does not exist."));
+    }
     let output_dir = &args.output_dir;
-
-    // parse optional paths
-    let barcodes_file = &args.barcodes.barcodes_file;
-    let barcodes_dir = &args.barcodes.barcodes_dir;
-    // Convert annotations from Option<PathBuf> to Option<&Path> for plot::create
-    let annotations = args.annotations.as_deref();
-
-    // create output directory if it doesn't exist
-    if !args.output_dir.exists() {
-        info!("Creating output directory: {:?}", args.output_dir);
-        create_dir_all(&args.output_dir)?;
+    if !output_dir.exists() {
+        return Err(eyre!("--output-dir {output_dir:?} does not exist."));
     }
 
-    // combine files from single input and directory
+    // ------------------------------------------------------------------------
+    // Check Mandatory Paths
+
+    let linelist = &output_dir.join("linelist.tsv");
+    if !linelist.exists() {
+        return Err(eyre!(
+            "Linelist file {linelist:?} does not exist in --output-dir {output_dir:?}."
+        ));
+    }
+    let barcodes_dir = &output_dir.join("barcodes");
+    if !linelist.exists() {
+        return Err(eyre!("Barcodes directory {barcodes_dir:?} does not exist in --output-dir {output_dir:?}."));
+    }
+    let annotations = &dataset_dir.join("annotations.tsv");
+    if !annotations.exists() {
+        return Err(eyre!(
+            "Annotations {annotations:?} do not exist in --dataset-dir {dataset_dir:?}."
+        ));
+    }
+
+    // create plot directory if it doesn't exist
+    let plot_dir = args.plot_dir.unwrap_or(output_dir.join("plots"));
+    if !plot_dir.exists() {
+        info!("Creating plot directory: {plot_dir:?}");
+        create_dir_all(&plot_dir)?;
+    }
+
+    // ------------------------------------------------------------------------
+    // List of Barcodes Files
+
     let mut barcodes_files: Vec<std::path::PathBuf> = Vec::new();
 
-    // ------------------------------------------------------------------------
     // Input File Specified
-
+    let barcodes_file = &args.barcodes_file;
     if let Some(barcodes_file) = barcodes_file {
+        if !barcodes_file.exists() {
+            return Err(eyre!("Barcodes file {barcodes_file:?} does not exist."));
+        }
         barcodes_files.push(barcodes_file.clone());
     }
-
-    // ------------------------------------------------------------------------
-    // Input Directory Specified
-
-    if let Some(barcodes_dir) = barcodes_dir {
+    // Otherwise, use all files in barcodes_dir
+    else {
         let files = std::fs::read_dir(barcodes_dir)?;
-
         for result in files {
             let file_path = result?.path();
-            // error we're debugging where just a ".tsv" file is produced
-            if file_path == barcodes_dir.join(".tsv") {
-                continue;
-            }
-            let file_ext = file_path.extension().ok_or_else(|| {
-                eyre!("Failed to parse file extension from {file_path:?}")
-            })?;
+            let file_ext = file_path.extension().unwrap_or(std::ffi::OsStr::new(""));
             if file_ext == "tsv" {
                 barcodes_files.push(file_path.clone());
+            } else {
+                warn!("Skipping barcodes file with unknown extension: {file_path:?}")
             }
         }
     }
 
+    // ------------------------------------------------------------------------
+    // Plot Each Barcodes
+
     for barcodes_file in barcodes_files {
         info!("Plotting barcodes file: {:?}", barcodes_file);
         let output_prefix = barcodes_file.file_stem().unwrap().to_str().unwrap();
-        let output_path = output_dir.join(format!("{}.png", output_prefix));
-        plot::create(&barcodes_file, linelist, annotations, &output_path)?;
+        let output_path = plot_dir.join(format!("{}.png", output_prefix));
+        let result =
+            plot::create(&barcodes_file, linelist, Some(annotations), &output_path);
+        match result {
+            Ok(_) => info!("Plotting success."),
+            Err(e) => warn!("Plotting failure. The following error was encountered but ignored: {e:?}"),
+        }
     }
 
     info!("Done.");

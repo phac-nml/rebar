@@ -38,13 +38,22 @@ jobs:
           toolchain: 1.69.0
 
       - name: build
-        run: cargo build --release --all-features
+        run: |
+          cargo build --release --all-features --target ${{ matrix.arch }}
+          cp target/${{ matrix.arch }}/release/rebar .
+
+      - name: compress with upx
+        uses: crazy-max/ghaction-upx@v3
+        with:
+          version: 3.0.0
+          files: |
+            rebar
+          args: --best --lzma
 
       - name: dataset
-        run: target/release/rebar dataset download --output-dir dataset/sars-cov-2/latest --name sars-cov-2 --tag latest
+        run: ./rebar dataset download --output-dir dataset/sars-cov-2/latest --name sars-cov-2 --tag latest
 
-      - name: run
-        run: target/release/rebar run --dataset-dir dataset/sars-cov-2/latest --output-dir output/XBB.1.16 --populations "XBB.1.16,XBB.1.16.1"
-
-      - name: plot
-        run: target/release/rebar plot --linelist output/XBB.1.16/linelist.tsv --barcodes-dir output/XBB.1.16/barcodes --output-dir output/XBB.1.16/plots
+      - name: example 1
+        run: |
+          ./rebar run  --dataset-dir dataset/sars-cov-2/latest --output-dir example1 --populations AY.4,BA.5.2,XD,XBB.1.5.1,XBL
+          ./rebar plot --dataset-dir dataset/sars-cov-2/latest --output-dir example1

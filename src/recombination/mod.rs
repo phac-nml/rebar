@@ -655,6 +655,10 @@ pub fn combine_tables(
         let ref_base = reference.seq[coord - 1].to_string();
         row[ref_output_i] = ref_base.to_string();
 
+        // it's possible origins will be ambiguous, if mutation occurred after recombintation
+        // in that case, code as '?'
+        let mut origins = vec![];
+
         // iterate through recombinants, identifying ref, parents, seq bases
         for recombination in recombinations {
             // get sequence base directly from sequence
@@ -675,20 +679,18 @@ pub fn combine_tables(
             // get table index of these coords
             let row_input_i = rec_coords.iter().position(|c| c == coord);
 
-            // get table index of origin
-            let origin_input_i = recombination.table.header_position("origin")?;
-
             // if this sample has the coord
             if let Some(row_input_i) = row_input_i {
-                // if it's the first sample encountered add the coord, origin,
+                // get origin of the particular sample's base
+                let origin_input_i = recombination.table.header_position("origin")?;
+                let origin = &recombination.table.rows[row_input_i][origin_input_i];
+                origins.push(origin.to_string());
+
+                // if it's the first sample encountered add the coord,
                 // Reference base and parent bases
                 if row[coord_output_i] == String::new() {
                     // Add the coord to the output table
                     row[coord_output_i] = coord.to_string();
-
-                    // add the origin to the output table
-                    let origin = &recombination.table.rows[row_input_i][origin_input_i];
-                    row[origin_output_i] = origin.to_string();
 
                     // Add parents bases to the output table
                     for parent in parents {
@@ -703,6 +705,13 @@ pub fn combine_tables(
             }
         }
 
+        // Dedup, and summarise the origins, code as "?" if ambiguous
+        let origins = origins.into_iter().unique().collect_vec();
+        if origins.len() > 1 {
+            row[origin_output_i] = "?".to_string()
+        } else {
+            row[origin_output_i] = origins[0].clone();
+        }
         // Add processed row to table
         combine_table.rows.push(row);
     }

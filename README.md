@@ -39,10 +39,10 @@
 Download the `rebar` dataset.
 
 ```bash
-rebar dataset \
+rebar dataset download \
   --name sars-cov-2 \
   --tag latest \
-  --output-dir dataset/sars-cov-2-latest
+  --output-dir dataset/sars-cov-2/latest
 ```
 
 ### Example 1
