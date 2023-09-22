@@ -22,15 +22,7 @@
 
 ## Install
 
-1. Git
-
-    ```bash
-    git clone https://github.com/phac-nml/rebar.git
-    cd rebar
-    pip install .
-    ```
-
-1. PyPI: \*\*Coming Soon\*\*
+1. Binary: \*\*Coming Soon\*\*
 
 1. Conda: \*\*Coming Soon\*\*
 
@@ -39,10 +31,7 @@
 Download the `rebar` dataset.
 
 ```bash
-rebar dataset download \
-  --name sars-cov-2 \
-  --tag latest \
-  --output-dir dataset/sars-cov-2/latest
+rebar dataset download --name sars-cov-2 -tag latest --output-dir dataset/sars-cov-2/latest
 ```
 
 ### Example 1
@@ -50,21 +39,15 @@ rebar dataset download \
 Detect recombination in user-specified lineages.
 
 ```bash
-rebar run \
-  --dataset-dir dataset/sars-cov-2/latest \
-  --populations AY.4,BA.5.2,XD,XBB.1.5.1,XBL \
-  --output-dir example1
+rebar run --dataset-dir dataset/sars-cov-2/latest  --output-dir example1 --populations AY.4,BA.5.2,XD,XBB.1.5.1,XBL
 ```
 
 - The `--populations` can include any designated lineage found in the dataset `alignment.fasta`.
-- The "\*" character can also be used to include descendants. For example `--lineages XBB.1.16*` will include `XBB.1.16`, `XBB.1.16.1`, `FU.1`, `XBB.1.16.2`, etc.
+- The "\*" character can also be used to include descendants. For example `--lineages "XBB.1.16*"` will include `XBB.1.16`, `XBB.1.16.1`, `FU.1`, `XBB.1.16.2`, etc.
+- **NOTE**: If using "\*", make sure to use quotes (ex. `--lineages "XBC*,XBB.1.16*"`)!
 
 ```bash
-rebar plot \
-  --linelist example1/linelist.tsv \
-  --barcodes-dir example1/barcodes \
-  --annotations dataset/sars-cov-2/latest/annotations.tsv \
-  --output-dir example1/plots
+rebar plot --dataset-dir dataset/sars-cov-2/latest  --output-dir example1
 ```
 
 ### Example 2
@@ -87,7 +70,7 @@ Run `rebar` on all designated lineages, and validate against the expected result
 ```bash
 rebar run \
   --dataset dataset/sars-cov-2-latest \
-  --alignment dataset/sars-cov-2-latest/alignment.fasta \
+  --populations "*" \
   --validate \
   --threads 8 \
   --output-all \
