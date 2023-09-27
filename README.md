@@ -69,12 +69,10 @@ Run `rebar` on all designated lineages, and validate against the expected result
 
 ```bash
 rebar run \
-  --dataset dataset/sars-cov-2-latest \
+  --dataset-dir dataset/sars-cov-2/latest \
+  --output-dir validate \
   --populations "*" \
-  --validate \
-  --threads 8 \
-  --output-all \
-  --outdir validate
+  --threads 8
 ```
 
 ## Output

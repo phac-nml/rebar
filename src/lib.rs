@@ -174,7 +174,7 @@ pub fn run(args: cli::RunArgs) -> Result<(), Report> {
             // initialize with default results, regardless of whether our
             // searches "succeed", we're going to return standardized data
             // structures to build our exports upon (ex. linelist columns)
-            let mut best_match = SearchResult::default();
+            let mut best_match = SearchResult::new(sequence);
             let mut recombination = Recombination::new(sequence);
 
             // search for the best match in the dataset to this sequence

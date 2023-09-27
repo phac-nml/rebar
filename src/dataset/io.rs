@@ -26,11 +26,22 @@ pub async fn download_dataset(args: &cli::DatasetDownloadArgs) -> Result<(), Rep
         info!("Creating output directory: {:?}", args.output_dir);
     }
 
+    // Validate Tag
+    match args.name {
+        Name::SarsCov2 => sarscov2::validate_tag(&args.tag)?,
+        _ => {
+            return Err(eyre!(
+                "Tag validation for {} is not implemented.",
+                args.name
+            ))
+        }
+    }
+
     // --------------------------------------------------------------------
     // Download Reference
 
-    let url = match args.name {
-        Name::SarsCov2 => sarscov2::REFERENCE_URL.to_string(),
+    let reference_remote = match args.name {
+        Name::SarsCov2 => sarscov2::download_reference(&args.output_dir).await?,
         _ => {
             return Err(eyre!(
                 "Reference download for {} is not implemented.",
@@ -38,14 +49,21 @@ pub async fn download_dataset(args: &cli::DatasetDownloadArgs) -> Result<(), Rep
             ))
         }
     };
-    let ext = utils::path_to_ext(Path::new(&url))?;
-    let mut decompress = false;
-    if ext != "fasta" && ext != "fa" {
-        decompress = true;
-    }
-    let reference_path = args.output_dir.join("reference.fasta");
-    info!("Downloading reference: {} to {:?}", url, reference_path);
-    utils::download_file(&url, &reference_path, decompress).await?;
+
+    // --------------------------------------------------------------------
+    // Download Populations
+
+    let populations_remote = match args.name {
+        Name::SarsCov2 => {
+            sarscov2::download_populations(&args.tag, &args.output_dir).await?
+        }
+        _ => {
+            return Err(eyre!(
+                "Populations download for {} is not implemented.",
+                args.name
+            ))
+        }
+    };
 
     // --------------------------------------------------------------------
     // Create Annotations
@@ -64,27 +82,6 @@ pub async fn download_dataset(args: &cli::DatasetDownloadArgs) -> Result<(), Rep
     };
     let annotations_table = annotations.to_table()?;
     annotations_table.write(&annotations_path)?;
-
-    // --------------------------------------------------------------------
-    // Download Populations
-
-    let url = match args.name {
-        Name::SarsCov2 => sarscov2::POPULATIONS_URL.to_string(),
-        _ => {
-            return Err(eyre!(
-                "Population download for {} is not implemented.",
-                args.name
-            ))
-        }
-    };
-    let ext = utils::path_to_ext(Path::new(&url))?;
-    let mut decompress = false;
-    if ext != "fasta" && ext != "fa" {
-        decompress = true;
-    }
-    let populations_path = args.output_dir.join("populations.fasta");
-    info!("Downloading populations: {} to {:?}", url, populations_path);
-    utils::download_file(&url, &populations_path, decompress).await?;
 
     // --------------------------------------------------------------------
     // Create Phylogeny
@@ -107,8 +104,11 @@ pub async fn download_dataset(args: &cli::DatasetDownloadArgs) -> Result<(), Rep
         info!("Identifying diagnostic mutations: {:?}", diagnostic_path);
 
         let mask = 0;
-        let (_populations, mutations) =
-            parse_populations(&populations_path, &reference_path, mask)?;
+        let (_populations, mutations) = parse_populations(
+            &populations_remote.local_path,
+            &reference_remote.local_path,
+            mask,
+        )?;
         let diagnostic_table = get_diagnostic_mutations(&mutations, &phylogeny)?;
         diagnostic_table.write(&diagnostic_path)?;
     }
@@ -139,6 +139,8 @@ pub async fn download_dataset(args: &cli::DatasetDownloadArgs) -> Result<(), Rep
     let summary = Summary {
         name: args.name,
         tag: args.tag.clone(),
+        reference: reference_remote,
+        populations: populations_remote,
     };
     summary.export(&args.output_dir, SummaryExportFormat::Json)?;
 

@@ -1,4 +1,4 @@
-use crate::utils;
+use crate::{utils, utils::remote_file::RemoteFile};
 use color_eyre::eyre::{eyre, Report, Result, WrapErr};
 use color_eyre::Help;
 use itertools::Itertools;
@@ -59,7 +59,7 @@ impl FromStr for Name {
 pub enum Tag {
     #[default]
     Latest,
-    Nightly,
+    //Nightly,
     Archive(String),
     Unknown,
 }
@@ -68,7 +68,7 @@ impl fmt::Display for Tag {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let tag = match self {
             Tag::Latest => String::from("latest"),
-            Tag::Nightly => String::from("nightly"),
+            //Tag::Nightly => String::from("nightly"),
             Tag::Archive(tag) => tag.to_owned(),
             Tag::Unknown => String::from("unknown"),
         };
@@ -83,7 +83,7 @@ impl FromStr for Tag {
     fn from_str(tag: &str) -> Result<Tag, Report> {
         let tag = match tag {
             "latest" => Tag::Latest,
-            "nightly" => Tag::Nightly,
+            //"nightly" => Tag::Nightly,
             "unknown" => Tag::Unknown,
             _ => Tag::Archive(String::from(tag)),
         };
@@ -99,6 +99,8 @@ impl FromStr for Tag {
 pub struct Summary {
     pub tag: Tag,
     pub name: Name,
+    pub reference: RemoteFile,
+    pub populations: RemoteFile,
 }
 
 impl Summary {
