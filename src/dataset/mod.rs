@@ -65,9 +65,9 @@ pub struct SearchResult {
 }
 
 impl SearchResult {
-    pub fn new() -> Self {
+    pub fn new(sequence: &Sequence) -> Self {
         SearchResult {
-            sequence_id: String::new(),
+            sequence_id: sequence.id.clone(),
             consensus_population: String::new(),
             top_populations: Vec::new(),
             diagnostic: Vec::new(),
@@ -164,12 +164,6 @@ private:\n  {}",
             conflict_alt_order.join("\n  "),
             private_order,
         )
-    }
-}
-
-impl Default for SearchResult {
-    fn default() -> Self {
-        Self::new()
     }
 }
 
@@ -283,8 +277,7 @@ impl Dataset {
         coordinates: Option<&Vec<usize>>,
     ) -> Result<SearchResult, Report> {
         // initialize an empty result, this will be the final product of this function
-        let mut search_result = SearchResult::new();
-        search_result.sequence_id = sequence.id.clone();
+        let mut search_result = SearchResult::new(sequence);
 
         // check if we are restricting the population search
         //   otherwise use all populations in the dataset

@@ -1,3 +1,4 @@
+pub mod remote_file;
 pub mod table;
 
 use crate::utils::table::Table;
