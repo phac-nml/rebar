@@ -41,7 +41,9 @@ pub async fn download_dataset(args: &cli::DatasetDownloadArgs) -> Result<(), Rep
     // Download Reference
 
     let reference_remote = match args.name {
-        Name::SarsCov2 => sarscov2::download_reference(&args.output_dir).await?,
+        Name::SarsCov2 => {
+            sarscov2::download_reference(&args.tag, &args.output_dir).await?
+        }
         _ => {
             return Err(eyre!(
                 "Reference download for {} is not implemented.",
