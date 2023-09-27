@@ -92,6 +92,11 @@ impl FromStr for Tag {
     }
 }
 
+// pub enum ArchiveDateDirection {
+//     Since,
+//     Until,
+// }
+
 // ----------------------------------------------------------------------------
 // Dataset Summary
 

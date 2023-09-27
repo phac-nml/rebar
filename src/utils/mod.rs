@@ -1,11 +1,16 @@
 pub mod remote_file;
 pub mod table;
 
+use crate::dataset::attributes::Tag;
+use crate::utils::remote_file::RemoteFile;
 use crate::utils::table::Table;
+use chrono::prelude::*;
 use color_eyre::eyre::{eyre, Report, Result, WrapErr};
 use color_eyre::Help;
 use itertools::Itertools;
-use log::warn;
+use log::{debug, info, warn};
+use reqwest::header::{ACCESS_CONTROL_EXPOSE_HEADERS, USER_AGENT};
+use std::collections::BTreeMap;
 use std::fs::{remove_file, write, File};
 use std::io::{self, BufRead, Read};
 use std::path::{Path, PathBuf};
@@ -43,6 +48,113 @@ pub async fn download_file(
     }
 
     Ok(())
+}
+
+/// Query and download files using the GitHub API
+pub async fn download_github(
+    repo: &str,
+    tag: &Tag,
+    remote_path: &str,
+    output_path: &PathBuf,
+) -> Result<RemoteFile, Report> {
+    let query_url = format!(
+        "https://api.github.com/repos/{repo}/commits?per_page=1&path={remote_path}"
+    );
+    let download_url = format!(
+        "https://raw.githubusercontent.com/{repo}/{sha}/{remote_path}",
+        sha = "{sha}"
+    );
+
+    let client = reqwest::Client::new();
+    let user_agent = format!("{} {}", env!("CARGO_PKG_NAME"), env!("CARGO_PKG_VERSION"));
+
+    // --------------------------------------------------------------------------
+    // STEP 1: Commit SHA
+
+    let query_url = match tag {
+        // For Unknown tag, error out
+        Tag::Unknown => {
+            return Err(eyre!("GitHub download for tag {tag:?} is not implemented."))
+        }
+        // For the latest tag, just use query_url plainly
+        Tag::Latest => query_url,
+        // For archive, we need to deal with query pagination of historical commits
+        Tag::Archive(_) => {
+            let tag_date: DateTime<Utc> =
+                DateTime::parse_from_rfc3339(&tag.to_string())?.into();
+            let mut min_date_query_url =
+                format!("{query_url}&since={}", tag_date.format("%Y-%m-%d"));
+            let response = client
+                .get(&min_date_query_url)
+                .header(USER_AGENT, &user_agent)
+                .header(ACCESS_CONTROL_EXPOSE_HEADERS, "Link")
+                .send()
+                .await?;
+            let headers = response.headers();
+
+            // extract the "last" page url, to get the oldest commit on or after tag date
+            // link might not be present if no pagination was needed (only 1 result)
+            if headers.contains_key("link") {
+                let link = headers["link"].to_str()?;
+                // link format:
+                //  [0] "<https://api.github.com/repositories/538600532/commits?since=2023-08-17&per_page=1&page=2>;"
+                //  [1]: rel=\"next\",
+                //  [2] <https://api.github.com/repositories/538600532/commits?since=2023-08-17&per_page=1&page=99>;
+                //  [3] <rel=\"last\""
+                let link_parts = link.split(' ').map(|s| s.to_string()).collect_vec();
+                min_date_query_url = link_parts[2].replace(['<', '>', ';', ' '], "");
+                min_date_query_url
+            } else {
+                query_url
+            }
+        }
+    };
+
+    let response = client
+        .get(&query_url)
+        .header(USER_AGENT, &user_agent)
+        .send()
+        .await?;
+
+    // extract the "sha" and "date" key from the json body
+    let body: Vec<BTreeMap<String, serde_json::Value>> = response.json().await?;
+    if body.is_empty() {
+        return Err(
+            eyre!("No GitHub commits were found for the following query.")
+                .suggestion(format!("GitHub API query: {query_url}")),
+        );
+    }
+
+    let sha = body[0]["sha"].to_string().replace('"', "");
+    let commit_date = body[0]["commit"]["author"]["date"]
+        .to_string()
+        .replace('"', "");
+    let date_created: DateTime<Utc> = DateTime::parse_from_rfc3339(&commit_date)?.into();
+
+    // --------------------------------------------------------------------------
+    // STEP 2: DOWNLOAD
+
+    let download_url = download_url.replace("{sha}", &sha);
+
+    // Identify decompression mode
+    let ext = path_to_ext(Path::new(&download_url))?;
+    let decompress = ext != "fasta" && ext != "fa";
+
+    // Download the file
+    info!("Downloading file: {download_url} to {output_path:?}");
+    download_file(&download_url, output_path, decompress).await?;
+
+    // Store all the information about the remote file for the dataset summary
+    let remote_file = RemoteFile {
+        url: download_url,
+        sha,
+        local_path: output_path.clone(),
+        date_created,
+        date_downloaded: Utc::now(),
+    };
+    debug!("Downloaded file: {remote_file:?}");
+
+    Ok(remote_file)
 }
 
 /// Decompress file, optionally inplace

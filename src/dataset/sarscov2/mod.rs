@@ -2,13 +2,12 @@ use crate::dataset::attributes::{Annotations, Tag};
 use crate::dataset::edge_cases::EdgeCase;
 use crate::utils;
 use crate::utils::remote_file::RemoteFile;
-use chrono::prelude::*;
+//use chrono::prelude::*;
 use color_eyre::eyre::{eyre, Report, Result, WrapErr};
 use color_eyre::Help;
 use itertools::Itertools;
-use log::{debug, info};
+use log::debug;
 use regex::Regex;
-use reqwest::header::{ACCESS_CONTROL_EXPOSE_HEADERS, USER_AGENT};
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
@@ -60,60 +59,29 @@ pub fn validate_tag(tag: &Tag) -> Result<(), Report> {
     }
 }
 
+// pub fn tag_to_date(tag: &Tag) -> Result<DateTime<Utc>, Report> {
+//     let tag_date = DateTime::parse_from_rfc3339(&tag.to_string())
+//         .ok_or_else(|| {
+//             eyre!("sars-cov-2 tag has invalid date format: {tag:?}")
+//             .suggestion("Example of a valid sars-cov-2 tag: 2023-08-17T12:00:00Z")
+//         })?;
+
+//     Ok(tag_date.into());
+// }
+
 // ----------------------------------------------------------------------------
 // Downloaders
 // ----------------------------------------------------------------------------
 
-pub async fn download_reference(output_dir: &Path) -> Result<RemoteFile, Report> {
-    // --------------------------------------------------------------------------
-    // STEP 1: Commit SHA
-
-    let client = reqwest::Client::new();
-    let user_agent = format!("{} {}", env!("CARGO_PKG_NAME"), env!("CARGO_PKG_VERSION"));
-    let response = client
-        .get(REFERENCE_QUERY_URL)
-        .header(USER_AGENT, &user_agent)
-        .send()
-        .await?;
-
-    // extract the "sha" and "date" key from the json body
-    let body: Vec<BTreeMap<String, serde_json::Value>> = response.json().await?;
-    if body.is_empty() {
-        return Err(
-            eyre!("No GitHub commits were found.").suggestion("GitHub API query: {url}")
-        );
-    }
-
-    let sha = body[0]["sha"].to_string().replace('"', "");
-    let commit_date = body[0]["commit"]["author"]["date"]
-        .to_string()
-        .replace('"', "");
-    let date_created: DateTime<Utc> = DateTime::parse_from_rfc3339(&commit_date)?.into();
-
-    // --------------------------------------------------------------------------
-    // STEP 2: DOWNLOAD
-
-    let download_url = REFERENCE_DOWNLOAD_URL.replace("{sha}", &sha);
-
-    // Identify decompression mode
-    let ext = utils::path_to_ext(Path::new(&download_url))?;
-    let decompress = ext != "fasta" && ext != "fa";
-
-    // Download the file
-    let reference_path = output_dir.join("reference.fasta");
-    info!("Downloading reference: {download_url} to {reference_path:?}");
-    utils::download_file(&download_url, &reference_path, decompress).await?;
-
-    // Store all the information about the remote file for the dataset summary
-    let remote_file = RemoteFile {
-        url: download_url,
-        sha,
-        local_path: reference_path,
-        date_created,
-        date_downloaded: Utc::now(),
-    };
-    debug!("Downloaded reference: {remote_file:?}");
-
+pub async fn download_reference(
+    tag: &Tag,
+    output_dir: &Path,
+) -> Result<RemoteFile, Report> {
+    let repo = "nextstrain/ncov";
+    let remote_path = "data/references_sequences.fasta";
+    let output_path = output_dir.join("reference.fasta");
+    let remote_file =
+        utils::download_github(repo, tag, remote_path, &output_path).await?;
     Ok(remote_file)
 }
 
@@ -121,95 +89,11 @@ pub async fn download_populations(
     tag: &Tag,
     output_dir: &Path,
 ) -> Result<RemoteFile, Report> {
-    let client = reqwest::Client::new();
-    let user_agent = format!("{} {}", env!("CARGO_PKG_NAME"), env!("CARGO_PKG_VERSION"));
-
-    // --------------------------------------------------------------------------
-    // STEP 1: Commit SHA
-
-    let query_url = match tag {
-        Tag::Unknown => {
-            return Err(eyre!(
-                "Population download for tag {tag:?} is not implemented."
-            ))
-        }
-        Tag::Latest => POPULATIONS_QUERY_URL.to_string(),
-        Tag::Archive(_) => {
-            // identify the first commit on or after the tag date
-            let tag_date: DateTime<Utc> =
-                DateTime::parse_from_rfc3339(&tag.to_string())?.into();
-            let mut query_url = format!(
-                "{POPULATIONS_QUERY_URL}&since={}",
-                tag_date.format("%Y-%m-%d")
-            );
-            let response = client
-                .get(&query_url)
-                .header(USER_AGENT, &user_agent)
-                .header(ACCESS_CONTROL_EXPOSE_HEADERS, "Link")
-                .send()
-                .await?;
-            let headers = response.headers();
-
-            // extract the "last" page url, to get the oldest commit on or after tag date
-            // link might not be present if no pagination was needed (only 1 result)
-            if headers.contains_key("link") {
-                let link = headers["link"].to_str()?;
-                // link format:
-                //  [0] "<https://api.github.com/repositories/538600532/commits?since=2023-08-17&per_page=1&page=2>;"
-                //  [1]: rel=\"next\",
-                //  [2] <https://api.github.com/repositories/538600532/commits?since=2023-08-17&per_page=1&page=99>;
-                //  [3] <rel=\"last\""
-                let link_parts = link.split(' ').map(|s| s.to_string()).collect_vec();
-                query_url = link_parts[2].replace(['<', '>', ';', ' '], "");
-            }
-            query_url
-        }
-    };
-
-    let response = client
-        .get(query_url)
-        .header(USER_AGENT, &user_agent)
-        .send()
-        .await?;
-
-    // extract the "sha" and "date" key from the json body
-    let body: Vec<BTreeMap<String, serde_json::Value>> = response.json().await?;
-    if body.is_empty() {
-        return Err(
-            eyre!("No GitHub commits were found.").suggestion("GitHub API query: {url}")
-        );
-    }
-
-    let sha = body[0]["sha"].to_string().replace('"', "");
-    let commit_date = body[0]["commit"]["author"]["date"]
-        .to_string()
-        .replace('"', "");
-    let date_created: DateTime<Utc> = DateTime::parse_from_rfc3339(&commit_date)?.into();
-
-    // --------------------------------------------------------------------------
-    // STEP 2: Download
-
-    let download_url = POPULATIONS_DOWNLOAD_URL.replace("{sha}", &sha);
-
-    // Identify decompression mode
-    let ext = utils::path_to_ext(Path::new(&download_url))?;
-    let decompress = ext != "fasta" && ext != "fa";
-
-    // Download the file
-    let populations_path = output_dir.join("populations.fasta");
-    info!("Downloading populations: {download_url} to {populations_path:?}");
-    utils::download_file(&download_url, &populations_path, decompress).await?;
-
-    // Store all the information about the remote file for the dataset summary
-    let remote_file = RemoteFile {
-        url: download_url,
-        sha,
-        local_path: populations_path,
-        date_created,
-        date_downloaded: Utc::now(),
-    };
-    debug!("Downloaded populations: {remote_file:?}");
-
+    let repo = "corneliusroemer/pango-sequences";
+    let remote_path = "data/pango-consensus-sequences_genome-nuc.fasta.zst";
+    let output_path = output_dir.join("populations.fasta");
+    let remote_file =
+        utils::download_github(repo, tag, remote_path, &output_path).await?;
     Ok(remote_file)
 }
 
