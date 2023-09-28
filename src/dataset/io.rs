@@ -28,7 +28,7 @@ pub async fn download_dataset(args: &cli::DatasetDownloadArgs) -> Result<(), Rep
 
     // Create dataset summary, add notes as we download files
     let mut summary = Summary::new();
-    summary.name = args.name.clone();
+    summary.name = args.name;
     summary.tag = args.tag.clone();
 
     // --------------------------------------------------------------------
@@ -38,8 +38,8 @@ pub async fn download_dataset(args: &cli::DatasetDownloadArgs) -> Result<(), Rep
         Name::SarsCov2 => sarscov2::download_reference(args).await?,
         _ => {
             return Err(eyre!(
-                "Reference download for {} is not implemented.",
-                &args.name
+                "Reference download for {name} is not implemented.",
+                name = &args.name
             ))
         }
     };
@@ -79,6 +79,7 @@ pub async fn download_dataset(args: &cli::DatasetDownloadArgs) -> Result<(), Rep
     // --------------------------------------------------------------------
     // Download miscellaneous files (dataset-specific)
 
+    #[allow(clippy::single_match)]
     match args.name {
         Name::SarsCov2 => {
             let lineage_notes_remote = sarscov2::download_lineage_notes(args).await?;
