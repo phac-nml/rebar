@@ -1,99 +1,74 @@
-use crate::dataset::attributes::{Annotations, Tag};
+use crate::cli;
 use crate::dataset::edge_cases::EdgeCase;
 use crate::utils;
-use crate::utils::remote_file::RemoteFile;
-//use chrono::prelude::*;
+use crate::utils::{remote_file::RemoteFile, table::Table};
+use bio::io::fasta;
 use color_eyre::eyre::{eyre, Report, Result, WrapErr};
-use color_eyre::Help;
 use itertools::Itertools;
-use log::debug;
-use regex::Regex;
+use log::{debug, info, warn};
 use std::collections::BTreeMap;
-use std::path::{Path, PathBuf};
-
-// ----------------------------------------------------------------------------
-// URLs
-// ----------------------------------------------------------------------------
-
-pub const POPULATIONS_QUERY_URL: &str = "https://api.github.com/repos/corneliusroemer/pango-sequences/commits?per_page=1&path=data/pango-consensus-sequences_genome-nuc.fasta.zst";
-pub const POPULATIONS_DOWNLOAD_URL: &str   = "https://raw.githubusercontent.com/corneliusroemer/pango-sequences/{sha}/data/pango-consensus-sequences_genome-nuc.fasta.zst";
-
-pub const REFERENCE_QUERY_URL: &str = "https://api.github.com/repos/nextstrain/ncov/commits?per_page=1&path=data/references_sequences.fasta";
-pub const REFERENCE_DOWNLOAD_URL: &str   = "https://raw.githubusercontent.com/nextstrain/ncov/{sha}/data/references_sequences.fasta";
-
-pub const ALIAS_KEY_URL: &str = "https://raw.githubusercontent.com/cov-lineages/pango-designation/master/pango_designation/alias_key.json";
-pub const LINEAGE_NOTES_URL: &str = "https://raw.githubusercontent.com/cov-lineages/pango-designation/master/lineage_notes.txt";
-
-// ----------------------------------------------------------------------------
-// Validate
-// ----------------------------------------------------------------------------
-
-/// Raises error if tag is invalid
-///
-/// # Arguments
-///
-/// * `tag` - A dataset Tag.
-///
-/// # Examples
-///
-/// ```
-/// use crate::dataset::attributes::Tag;
-/// let tag = Tag::from_str("2023-08-17T12:00:00Z")
-/// let result = validate_tag(&tag);
-/// ```
-// Example: 2023-08-17T12:00:00Z
-pub fn validate_tag(tag: &Tag) -> Result<(), Report> {
-    match tag {
-        Tag::Latest => Ok(()),
-        Tag::Unknown => Ok(()),
-        Tag::Archive(tag) => {
-            let tag_regex =
-                Regex::new(r"[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z")?;
-            let tag = tag.to_string();
-            tag_regex.captures(&tag).ok_or_else(|| {
-                eyre!("sars-cov-2 tag has invalid format: {tag:?}")
-                    .suggestion("Example of a valid sars-cov-2 tag: 2023-08-17T12:00:00Z")
-            })?;
-            Ok(())
-        }
-    }
-}
-
-// pub fn tag_to_date(tag: &Tag) -> Result<DateTime<Utc>, Report> {
-//     let tag_date = DateTime::parse_from_rfc3339(&tag.to_string())
-//         .ok_or_else(|| {
-//             eyre!("sars-cov-2 tag has invalid date format: {tag:?}")
-//             .suggestion("Example of a valid sars-cov-2 tag: 2023-08-17T12:00:00Z")
-//         })?;
-
-//     Ok(tag_date.into());
-// }
+use std::path::Path;
 
 // ----------------------------------------------------------------------------
 // Downloaders
 // ----------------------------------------------------------------------------
 
 pub async fn download_reference(
-    tag: &Tag,
-    output_dir: &Path,
+    args: &cli::DatasetDownloadArgs,
 ) -> Result<RemoteFile, Report> {
+    info!("Downloading sars-cov-2 reference fasta.");
+
     let repo = "nextstrain/ncov";
     let remote_path = "data/references_sequences.fasta";
-    let output_path = output_dir.join("reference.fasta");
-    let remote_file =
-        utils::download_github(repo, tag, remote_path, &output_path).await?;
+    let output_path = args.output_dir.join("reference.fasta");
+    let remote_file = utils::download_github(
+        repo,
+        &args.tag,
+        remote_path,
+        &output_path,
+        &args.reference_sha,
+    )
+    .await
+    .wrap_err_with(|| eyre!("Unable to download sars-cov-2 reference fasta."))?;
+    Ok(remote_file)
+}
+pub async fn download_populations(
+    args: &cli::DatasetDownloadArgs,
+) -> Result<RemoteFile, Report> {
+    info!("Downloading sars-cov-2 populations fasta.");
+
+    let repo = "corneliusroemer/pango-sequences";
+    let remote_path = "data/pango-consensus-sequences_genome-nuc.fasta.zst";
+    let output_path = args.output_dir.join("populations.fasta");
+    let remote_file = utils::download_github(
+        repo,
+        &args.tag,
+        remote_path,
+        &output_path,
+        &args.populations_sha,
+    )
+    .await
+    .wrap_err_with(|| eyre!("Unable to download sars-cov-2 populations fasta."))?;
     Ok(remote_file)
 }
 
-pub async fn download_populations(
-    tag: &Tag,
-    output_dir: &Path,
+/// Download the SARS-CoV-2 alias key.
+///
+/// The alias key is a JSON mapping lineage names to their parents.
+/// Needed to construct the phylogeny and identify known recombinants.
+pub async fn download_alias_key(
+    args: &cli::DatasetDownloadArgs,
 ) -> Result<RemoteFile, Report> {
-    let repo = "corneliusroemer/pango-sequences";
-    let remote_path = "data/pango-consensus-sequences_genome-nuc.fasta.zst";
-    let output_path = output_dir.join("populations.fasta");
+    info!("Downloading sars-cov-2 alias key.");
+
+    let repo = "cov-lineages/pango-designation";
+    let remote_path = "pango_designation/alias_key.json";
+    let output_path = args.output_dir.join("alias_key.json");
+    let sha: Option<String> = None;
     let remote_file =
-        utils::download_github(repo, tag, remote_path, &output_path).await?;
+        utils::download_github(repo, &args.tag, remote_path, &output_path, &sha)
+            .await
+            .wrap_err_with(|| eyre!("Unable to download sars-cov-2 alias key."))?;
     Ok(remote_file)
 }
 
@@ -101,28 +76,20 @@ pub async fn download_populations(
 ///
 /// The lineage notes has two columns: 'Lineage', 'Description'.
 /// We only need the 'Lineage' column, to get the full list of all lineages.
-pub async fn download_lineage_notes(dataset_dir: &Path) -> Result<PathBuf, Report> {
-    let decompress = false;
-    let output_path = dataset_dir.join("lineage_notes.txt");
-    utils::download_file(LINEAGE_NOTES_URL, &output_path, decompress)
-        .await
-        .wrap_err_with(|| eyre!("Unable to download alias lineage notes."))?;
+pub async fn download_lineage_notes(
+    args: &cli::DatasetDownloadArgs,
+) -> Result<RemoteFile, Report> {
+    info!("Downloading sars-cov-2 lineage notes.");
 
-    Ok(output_path)
-}
-
-/// Download the SARS-CoV-2 alias key.
-///
-/// The alias key is a JSON mapping lineage names to their parents.
-/// Needed to construct the phylogeny and identify known recombinants.
-pub async fn download_alias_key(dataset_dir: &Path) -> Result<PathBuf, Report> {
-    let decompress = false;
-    let output_path = dataset_dir.join("alias_key.json");
-    utils::download_file(ALIAS_KEY_URL, &output_path, decompress)
-        .await
-        .wrap_err_with(|| eyre!("Unable to download alias from key."))?;
-
-    Ok(output_path)
+    let repo = "cov-lineages/pango-designation";
+    let remote_path = "lineage_notes.txt";
+    let output_path = args.output_dir.join("lineage_notes.txt");
+    let sha: Option<String> = None;
+    let remote_file =
+        utils::download_github(repo, &args.tag, remote_path, &output_path, &sha)
+            .await
+            .wrap_err_with(|| eyre!("Unable to download sars-cov-2 lineage notes."))?;
+    Ok(remote_file)
 }
 
 // ----------------------------------------------------------------------------
@@ -335,28 +302,32 @@ pub fn decompress_lineage(
 // ----------------------------------------------------------------------------
 
 /// Create SARS-CoV-2 genome annotations.
-pub fn create_annotations() -> Result<Annotations, Report> {
-    let annotations = Annotations {
-        gene: vec![
-            "ORF1a", "ORF1b", "S", "ORF3a", "E", "M", "ORF6", "ORF7a", "ORF7b", "ORF8",
-            "ORF9b",
-        ]
-        .into_iter()
-        .map(String::from)
-        .collect_vec(),
-        abbreviation: vec!["1a", "1b", "S", "3a", "E", "M", "6", "7a", "7b", "8", "9b"]
-            .into_iter()
-            .map(String::from)
-            .collect_vec(),
-        start: vec![
-            266, 13468, 21563, 25393, 26245, 26523, 27202, 27394, 27756, 27894, 28284,
-        ],
-        end: vec![
-            13468, 21555, 25384, 26220, 26472, 27191, 27387, 27759, 27887, 28259, 28577,
-        ],
-    };
+pub fn create_annotations() -> Result<Table, Report> {
+    let mut table = Table::new();
 
-    Ok(annotations)
+    let headers = vec!["gene", "abbreviation", "start", "end"];
+    let rows = vec![
+        vec!["ORF1a", "1a", "266", "13468"],
+        vec!["ORF1b", "1b", "13468", "21555"],
+        vec!["S", "S", "21563", "25384"],
+        vec!["ORF3a", "3a", "25393", "26220"],
+        vec!["E", "E", "26245", "26472"],
+        vec!["M", "M", "26523", "27191"],
+        vec!["ORF6", "6", "27202", "27387"],
+        vec!["ORF7a", "7a", "27394", "27759"],
+        vec!["ORF7b", "7b", "27756", "27887"],
+        vec!["ORF8", "8", "27894", "28259"],
+        vec!["ORF9b", "9b", "28284", "28577"],
+    ];
+
+    // Convert values to String
+    table.headers = headers.into_iter().map(String::from).collect_vec();
+    table.rows = rows
+        .into_iter()
+        .map(|row| row.into_iter().map(String::from).collect_vec())
+        .collect_vec();
+
+    Ok(table)
 }
 
 /// Create SARS-CoV-2 recombinant edge cases.
@@ -411,25 +382,42 @@ pub fn create_edge_cases() -> Result<Vec<EdgeCase>, Report> {
 
 /// Create SARS-CoV-2 phylogeny graph data.
 pub async fn create_graph_data(
-    dataset_dir: &Path,
+    args: &cli::DatasetDownloadArgs,
 ) -> Result<(BTreeMap<String, Vec<String>>, Vec<String>), Report> {
-    // ------------------------------------------------------------------------
-    // Download Data
-
-    // Download the alias key
-    let alias_key_path = download_alias_key(dataset_dir).await?;
-    // Download the lineage notes
-    let lineage_notes_path = download_lineage_notes(dataset_dir).await?;
-
     // ------------------------------------------------------------------------
     // Load Data
 
     // read alias key into Map
+    let alias_key_path = args.output_dir.join("alias_key.json");
     let alias_key = load_alias_key(&alias_key_path)?;
+
     // read lineage notes into Table
+    let lineage_notes_path = args.output_dir.join("lineage_notes.txt");
     let lineage_table = utils::read_table(&lineage_notes_path)?;
     // identify which column is 'Lineage'
     let lineage_col_i = lineage_table.header_position("Lineage")?;
+    // get a list of lineages in the notes
+    let notes_lineages = lineage_table
+        .rows
+        .iter()
+        .filter(|row| !row[lineage_col_i].starts_with('*'))
+        .map(|row| row[lineage_col_i].to_string())
+        .collect_vec();
+
+    // read populations fasta, to check if any lineages are missing in notes
+    let populations_path = args.output_dir.join("populations.fasta");
+    let alignment_reader = fasta::Reader::from_file(&populations_path)
+        .map_err(|e| eyre!(e))
+        .wrap_err("Unable to read populations: {populations_path:?}")?;
+
+    for result in alignment_reader.records() {
+        let record =
+            result.wrap_err(eyre!("Unable to parse alignment: {populations_path:?}"))?;
+        let lineage = record.id().to_string();
+        if !notes_lineages.contains(&lineage) {
+            warn!("Lineage {lineage} is in {populations_path:?} but not in {lineage_notes_path:?}.");
+        }
+    }
 
     // ------------------------------------------------------------------------
     // Map parent-child relationships
@@ -446,7 +434,6 @@ pub async fn create_graph_data(
         }
 
         let parents = get_lineage_parents(&lineage, &alias_key)?;
-
         graph_order.push(lineage.clone());
         graph_data.insert(lineage, parents);
     }

@@ -18,81 +18,90 @@ use std::str::FromStr;
 // Dataset Download
 // ----------------------------------------------------------------------------
 
-/// Download a remote dataset
+/// Download remote dataset
 pub async fn download_dataset(args: &cli::DatasetDownloadArgs) -> Result<(), Report> {
     // Create the output directory if it doesn't exist
     if !args.output_dir.exists() {
         create_dir_all(&args.output_dir)?;
-        info!("Creating output directory: {:?}", args.output_dir);
+        info!("Creating output directory: {:?}", &args.output_dir);
     }
 
-    // Validate Tag
-    match args.name {
-        Name::SarsCov2 => sarscov2::validate_tag(&args.tag)?,
-        _ => {
-            return Err(eyre!(
-                "Tag validation for {} is not implemented.",
-                args.name
-            ))
-        }
-    }
+    // Create dataset summary, add notes as we download files
+    let mut summary = Summary::new();
+    summary.name = args.name.clone();
+    summary.tag = args.tag.clone();
 
     // --------------------------------------------------------------------
     // Download Reference
 
     let reference_remote = match args.name {
-        Name::SarsCov2 => {
-            sarscov2::download_reference(&args.tag, &args.output_dir).await?
-        }
+        Name::SarsCov2 => sarscov2::download_reference(args).await?,
         _ => {
             return Err(eyre!(
                 "Reference download for {} is not implemented.",
-                args.name
+                &args.name
             ))
         }
     };
+    summary.reference = reference_remote.clone();
 
     // --------------------------------------------------------------------
     // Download Populations
 
     let populations_remote = match args.name {
-        Name::SarsCov2 => {
-            sarscov2::download_populations(&args.tag, &args.output_dir).await?
-        }
+        Name::SarsCov2 => sarscov2::download_populations(args).await?,
         _ => {
             return Err(eyre!(
                 "Populations download for {} is not implemented.",
-                args.name
+                &args.name
             ))
         }
     };
+    summary.populations = populations_remote.clone();
 
     // --------------------------------------------------------------------
     // Create Annotations
 
     let annotations_path = args.output_dir.join("annotations.tsv");
-    info!("Downloading annotations to {:?}", annotations_path);
+    info!("Downloading annotations to {:?}", &annotations_path);
 
     let annotations = match args.name {
         Name::SarsCov2 => sarscov2::create_annotations()?,
         _ => {
             return Err(eyre!(
                 "Annotations for {} dataset is not implemented.",
-                args.name
+                &args.name
             ))
         }
     };
-    let annotations_table = annotations.to_table()?;
-    annotations_table.write(&annotations_path)?;
+    annotations.write(&annotations_path)?;
+
+    // --------------------------------------------------------------------
+    // Download miscellaneous files (dataset-specific)
+
+    match args.name {
+        Name::SarsCov2 => {
+            let lineage_notes_remote = sarscov2::download_lineage_notes(args).await?;
+            summary
+                .misc
+                .insert("lineage_notes".to_string(), lineage_notes_remote);
+
+            let alias_key_remote = sarscov2::download_alias_key(args).await?;
+            summary
+                .misc
+                .insert("alias_key".to_string(), alias_key_remote);
+        }
+        _ => (),
+    };
 
     // --------------------------------------------------------------------
     // Create Phylogeny
 
     let phylogeny_path = args.output_dir.join("phylogeny.json");
-    info!("Creating phylogeny: {:?}", phylogeny_path);
+    info!("Creating phylogeny: {:?}", &phylogeny_path);
 
     let mut phylogeny = Phylogeny::new();
-    phylogeny.build_graph(&args.name, &args.output_dir).await?;
+    phylogeny.build_graph(args).await?;
     phylogeny.export(&args.output_dir, PhylogenyExportFormat::Dot)?;
     phylogeny.export(&args.output_dir, PhylogenyExportFormat::Json)?;
 
@@ -103,7 +112,7 @@ pub async fn download_dataset(args: &cli::DatasetDownloadArgs) -> Result<(), Rep
 
     if args.diagnostic {
         let diagnostic_path = args.output_dir.join("diagnostic_mutations.tsv");
-        info!("Identifying diagnostic mutations: {:?}", diagnostic_path);
+        info!("Identifying diagnostic mutations: {:?}", &diagnostic_path);
 
         let mask = 0;
         let (_populations, mutations) = parse_populations(
@@ -119,31 +128,24 @@ pub async fn download_dataset(args: &cli::DatasetDownloadArgs) -> Result<(), Rep
     // Create Edge Cases
 
     let edge_cases_path = args.output_dir.join("edge_cases.json");
-    info!("Creating edge cases: {:?}", edge_cases_path);
+    info!("Creating edge cases: {edge_cases_path:?}");
 
     let edge_cases = match args.name {
         Name::SarsCov2 => sarscov2::create_edge_cases()?,
         _ => {
             return Err(eyre!(
                 "Edge cases for {} dataset is not implemented.",
-                args.name
+                &args.name
             ))
         }
     };
     edge_cases::export(&edge_cases, &args.output_dir, EdgeCaseExportFormat::Json)?;
 
     // --------------------------------------------------------------------
-    // Create Summary
+    // Export Summary
 
     let output_path = args.output_dir.join("summary.json");
-    info!("Creating info summary: {:?}", output_path);
-
-    let summary = Summary {
-        name: args.name,
-        tag: args.tag.clone(),
-        reference: reference_remote,
-        populations: populations_remote,
-    };
+    info!("Exporting info summary: {output_path:?}");
     summary.export(&args.output_dir, SummaryExportFormat::Json)?;
 
     // --------------------------------------------------------------------
@@ -180,6 +182,9 @@ pub fn load_dataset(args: &cli::RunArgs) -> Result<Dataset, Report> {
     // ------------------------------------------------------------------------
     // Load Attributes/Summary (optional)
 
+    dataset.tag = Tag::Unknown;
+    dataset.name = Name::Unknown;
+
     let summary_path = args.dataset_dir.join("summary.json");
     if summary_path.exists() {
         info!("Loading summary: {:?}", summary_path);
@@ -187,10 +192,6 @@ pub fn load_dataset(args: &cli::RunArgs) -> Result<Dataset, Report> {
         let summary: Summary = serde_json::from_reader(&reader)?;
         dataset.name = summary.name;
         dataset.tag = summary.tag;
-    } else {
-        warn!("Optional summary file was not found: {summary_path:?}");
-        dataset.tag = Tag::Unknown;
-        dataset.name = Name::Unknown;
     }
 
     // ------------------------------------------------------------------------

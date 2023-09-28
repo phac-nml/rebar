@@ -18,6 +18,12 @@ use rayon::prelude::*;
 use std::fs::create_dir_all;
 
 /// Run rebar on input alignment and/or dataset population
+pub async fn download_dataset(args: &cli::DatasetDownloadArgs) -> Result<(), Report> {
+    dataset::io::download_dataset(args).await?;
+    Ok(())
+}
+
+/// Run rebar on input alignment and/or dataset population
 pub fn run(args: cli::RunArgs) -> Result<(), Report> {
     // check how many threads are available on the system
     let default_thread_pool = rayon::ThreadPoolBuilder::new().build().unwrap();

@@ -1,9 +1,10 @@
-use crate::{utils, utils::remote_file::RemoteFile};
+use crate::utils::remote_file::RemoteFile;
+use chrono::prelude::*;
 use color_eyre::eyre::{eyre, Report, Result, WrapErr};
 use color_eyre::Help;
-use itertools::Itertools;
 use log::info;
 use serde::{Deserialize, Serialize};
+use std::collections::BTreeMap;
 use std::fmt;
 use std::fs::File;
 use std::io::Write;
@@ -15,10 +16,10 @@ use std::str::FromStr;
 
 #[derive(Clone, Copy, Debug, Default, Serialize, Deserialize, PartialEq)]
 pub enum Name {
-    #[default]
     SarsCov2,
     RsvA,
     RsvB,
+    #[default]
     Unknown,
 }
 
@@ -57,19 +58,19 @@ impl FromStr for Name {
 
 #[derive(Clone, Debug, Default, Deserialize, Serialize, PartialEq)]
 pub enum Tag {
-    #[default]
     Latest,
-    //Nightly,
     Archive(String),
+    #[default]
     Unknown,
+    Custom,
 }
 
 impl fmt::Display for Tag {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let tag = match self {
             Tag::Latest => String::from("latest"),
-            //Tag::Nightly => String::from("nightly"),
             Tag::Archive(tag) => tag.to_owned(),
+            Tag::Custom => String::from("custom"),
             Tag::Unknown => String::from("unknown"),
         };
 
@@ -83,32 +84,46 @@ impl FromStr for Tag {
     fn from_str(tag: &str) -> Result<Tag, Report> {
         let tag = match tag {
             "latest" => Tag::Latest,
-            //"nightly" => Tag::Nightly,
             "unknown" => Tag::Unknown,
-            _ => Tag::Archive(String::from(tag)),
+            "custom" => Tag::Custom,
+            _ => {
+                // check if it's an archival date string
+                let tag_date = DateTime::parse_from_rfc3339(&tag)
+                    .wrap_err_with(|| eyre!("Archive tag date has invalid format: {tag:?}. Example of a valid Archive tag: 2023-08-17T12:00:00Z"))?;
+                let tag_utc: DateTime<Utc> = tag_date.into();
+                let tag_reformat = tag_utc.to_rfc3339_opts(SecondsFormat::Secs, true);
+                Tag::Archive(tag_reformat)
+            }
         };
 
         Ok(tag)
     }
 }
 
-// pub enum ArchiveDateDirection {
-//     Since,
-//     Until,
-// }
-
 // ----------------------------------------------------------------------------
 // Dataset Summary
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct Summary {
+    pub version: String,
     pub tag: Tag,
     pub name: Name,
     pub reference: RemoteFile,
     pub populations: RemoteFile,
+    pub misc: BTreeMap<String, RemoteFile>,
 }
 
 impl Summary {
+    pub fn new() -> Self {
+        Summary {
+            version: format!("{} {}", env!("CARGO_PKG_NAME"), env!("CARGO_PKG_VERSION")),
+            tag: Tag::Unknown,
+            name: Name::Unknown,
+            reference: RemoteFile::new(),
+            populations: RemoteFile::new(),
+            misc: BTreeMap::new(),
+        }
+    }
     /// import summary from specified format
     pub fn import(
         dataset_dir: &Path,
@@ -202,44 +217,5 @@ impl std::fmt::Display for SummaryImportFormat {
         match self {
             SummaryImportFormat::Json => write!(f, "json"),
         }
-    }
-}
-
-// ----------------------------------------------------------------------------
-// Dataset Annotations
-
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct Annotations {
-    pub gene: Vec<String>,
-    pub abbreviation: Vec<String>,
-    pub start: Vec<usize>,
-    pub end: Vec<usize>,
-}
-
-impl Annotations {
-    pub fn to_table(&self) -> Result<utils::table::Table, Report> {
-        let mut table = utils::table::Table::new();
-
-        // headers
-        table.headers = vec!["gene", "abbreviation", "start", "end"]
-            .into_iter()
-            .map(String::from)
-            .collect_vec();
-
-        // rows
-        let mut rows = Vec::new();
-        for i in 0..(self.gene.len()) {
-            let row = vec![
-                self.gene[i].clone(),
-                self.abbreviation[i].clone(),
-                self.start[i].to_string(),
-                self.end[i].to_string(),
-            ];
-            rows.push(row);
-        }
-
-        table.rows = rows;
-
-        Ok(table)
     }
 }
