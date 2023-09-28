@@ -1,3 +1,4 @@
+use crate::cli;
 use crate::dataset::{attributes::Name, sarscov2};
 use color_eyre::eyre::{eyre, Report, Result};
 use log::{debug, info};
@@ -129,12 +130,16 @@ impl Phylogeny {
 
     pub async fn build_graph(
         &mut self,
-        dataset_name: &Name,
-        dataset_dir: &Path,
+        args: &cli::DatasetDownloadArgs,
     ) -> Result<(), Report> {
-        let (graph_data, order) = match dataset_name {
-            &Name::SarsCov2 => sarscov2::create_graph_data(dataset_dir).await?,
-            _ => return Ok(()),
+        let (graph_data, order) = match &args.name {
+            &Name::SarsCov2 => sarscov2::create_graph_data(args).await?,
+            _ => {
+                return Err(eyre!(
+                    "Building graph for {} is not implemented.",
+                    &args.name
+                ))
+            }
         };
 
         self.order = order;

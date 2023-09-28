@@ -83,6 +83,14 @@ pub struct DatasetDownloadArgs {
     /// If the directory does not exist, it will be created.
     #[clap(short = 'o', long, required = true)]
     pub output_dir: PathBuf,
+
+    /// Reference GitHub Commit SHA.
+    #[clap(long)]
+    pub reference_sha: Option<String>,
+
+    /// Populations GitHub Commit SHA.
+    #[clap(long)]
+    pub populations_sha: Option<String>,
 }
 
 // -----------------------------------------------------------------------------
@@ -93,14 +101,14 @@ pub struct DatasetDownloadArgs {
 #[group(id = "outputs", required = true, multiple = false)]
 /// Download available Rebar dataset.
 pub struct DatasetListArgs {
-    /// List Rebar datasets with this name.
-    #[clap(short = 'n', long)]
-    pub name: Option<String>,
+    /// Dataset name.
+    #[clap(short = 'r', long, required = true)]
+    pub name: dataset::attributes::Name,
 
-    /// List Rebar datasets with this tag.
+    /// Dataset tag.
     #[clap(short = 't', long)]
-    #[clap(default_value = "latest")]
-    pub tag: String,
+    #[clap(default_value_t=dataset::attributes::Tag::default())]
+    pub tag: dataset::attributes::Tag,
 }
 
 // -----------------------------------------------------------------------------
