@@ -1,6 +1,7 @@
 use crate::cli;
 use crate::dataset::{attributes::Name, sarscov2};
 use color_eyre::eyre::{eyre, Report, Result};
+use color_eyre::Help;
 use log::{debug, info};
 use petgraph::dot::{Config, Dot};
 use petgraph::graph::{Graph, NodeIndex};
@@ -152,6 +153,8 @@ impl Phylogeny {
         let id = self.graph.add_node(name.clone());
         self.lookup.insert(name, id);
 
+        // todo!() Do this twice? in case lineages are accidentally out of order?
+
         // Add descendants
         for name in &self.order {
             let id = self.graph.add_node(name.clone());
@@ -165,6 +168,13 @@ impl Phylogeny {
                 self.recombinants.push(name.clone());
             }
             for parent in parents {
+                if !self.lookup.contains_key(parent) {
+                    return Err(eyre!("Parental lineage {parent} is not in the graph.")
+                        .suggestion(
+                            "Are the alias_key.json and lineage_notes.txt out of sync?",
+                        )
+                        .suggestion("Please check if {parent} is in the alias key."));
+                }
                 let parent_id = self.lookup[&parent.clone()];
                 self.graph.add_edge(parent_id, id, 1);
             }

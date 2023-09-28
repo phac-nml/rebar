@@ -114,7 +114,7 @@ pub async fn download_github(
     let client = reqwest::Client::new();
 
     // GitHub API Query
-    let mut query = vec![("per_page", "1"), ("path", remote_path)];
+    let mut query = vec![("per_page", "1"), ("path", remote_path), ("page", "1")];
     // if manual SHA was specified
     if let Some(sha) = sha {
         query.push(("sha", sha));
@@ -132,78 +132,14 @@ pub async fn download_github(
     // --------------------------------------------------------------------------
     // STEP 1: Archive Pagination
 
-    // For archival tag, we need to deal with pagination of historical commits
+    // Use the Archive Tag as a maximum date filter (&until=...)
     if matches!(tag, Tag::Archive(_)) {
         // Convert tag to DateTime object
         let tag_date: DateTime<Utc> =
             DateTime::parse_from_rfc3339(&tag.to_string())?.into();
         let tag_date = tag_date.format("%Y-%m-%d").to_string();
 
-        let mut query_since = query.clone();
-        query_since.push(("since".to_string(), tag_date));
-
-        // Look for commits based on a minimum date filter
-        let request = client
-            .get(format!("https://api.github.com/repos/{repo}/commits"))
-            .query(&query_since)
-            .header(USER_AGENT, &user_agent)
-            .header(ACCESS_CONTROL_EXPOSE_HEADERS, "Link")
-            .header("X-GitHub-Api-Version", github_api_version)
-            .basic_auth(&github_username, github_token.clone());
-
-        let response = request.query(&query).send().await?;
-        check_github_response(&response)?;
-
-        let headers = response.headers().clone();
-
-        // Check that there is actually commits since the requested date
-        let body: Vec<BTreeMap<String, serde_json::Value>> = response.json().await?;
-        if !body.is_empty() {
-            // update the query to use the minimum date filter
-            query = query_since;
-
-            // extract the "last" page url, to get the oldest commit on or after tag date
-            // link might not be present if no pagination was needed (only 1 page of results)
-            if headers.contains_key("link") {
-                let link = headers["link"].to_str()?;
-                // link format:
-                //  [0] "<https://api.github.com/repositories/538600532/commits?since=2023-08-17&per_page=1&page=2>;"
-                //  [1]: rel=\"next\",
-                //  [2] <https://api.github.com/repositories/538600532/commits?since=2023-08-17&per_page=1&page=99>;
-                //  [3] <rel=\"last\""
-
-                let link_parts = link.split(' ').map(|s| s.to_string()).collect_vec();
-                let last_page_url = link_parts[2].replace(['<', '>', ';', ' '], "");
-                let last_page: u32 = last_page_url.split("&page=").collect_vec()[1]
-                    .parse()
-                    .unwrap();
-
-                // Handle a weird error where the last page is just empty results
-                for page in vec![last_page, last_page - 1] {
-                    let mut query_last_page = query.clone();
-                    query_last_page.push(("page".to_string(), page.to_string()));
-
-                    let request = client
-                        .get(format!("https://api.github.com/repos/{repo}/commits"))
-                        .query(&query_last_page)
-                        .header(USER_AGENT, &user_agent)
-                        .header(ACCESS_CONTROL_EXPOSE_HEADERS, "Link")
-                        .header("X-GitHub-Api-Version", github_api_version)
-                        .basic_auth(&github_username, github_token.clone());
-
-                    let response = request.send().await?;
-                    check_github_response(&response)?;
-
-                    // if this page does not have empty results, this is the one!!
-                    let body: Vec<BTreeMap<String, serde_json::Value>> =
-                        response.json().await?;
-                    if !body.is_empty() {
-                        query = query_last_page;
-                        break;
-                    }
-                }
-            }
-        }
+        query.push(("until".to_string(), tag_date));
     }
 
     let request = client

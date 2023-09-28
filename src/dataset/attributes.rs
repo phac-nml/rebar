@@ -5,6 +5,7 @@ use color_eyre::Help;
 use log::info;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
+use std::default::Default;
 use std::fmt;
 use std::fs::File;
 use std::io::Write;
@@ -88,7 +89,7 @@ impl FromStr for Tag {
             "custom" => Tag::Custom,
             _ => {
                 // check if it's an archival date string
-                let tag_date = DateTime::parse_from_rfc3339(&tag)
+                let tag_date = DateTime::parse_from_rfc3339(tag)
                     .wrap_err_with(|| eyre!("Archive tag date has invalid format: {tag:?}. Example of a valid Archive tag: 2023-08-17T12:00:00Z"))?;
                 let tag_utc: DateTime<Utc> = tag_date.into();
                 let tag_reformat = tag_utc.to_rfc3339_opts(SecondsFormat::Secs, true);
@@ -113,6 +114,11 @@ pub struct Summary {
     pub misc: BTreeMap<String, RemoteFile>,
 }
 
+impl Default for Summary {
+    fn default() -> Self {
+        Self::new()
+    }
+}
 impl Summary {
     pub fn new() -> Self {
         Summary {
