@@ -17,9 +17,15 @@ use log::{debug, info, warn};
 use rayon::prelude::*;
 use std::fs::create_dir_all;
 
-/// Run rebar on input alignment and/or dataset population
-pub async fn download_dataset(args: &cli::DatasetDownloadArgs) -> Result<(), Report> {
+/// Download rebar dataset
+pub async fn download_dataset(args: &mut cli::DatasetDownloadArgs) -> Result<(), Report> {
     dataset::io::download_dataset(args).await?;
+    Ok(())
+}
+
+/// List rebar datasets
+pub async fn list_datasets(args: &cli::DatasetListArgs) -> Result<(), Report> {
+    dataset::io::list_datasets(args).await?;
     Ok(())
 }
 
@@ -81,7 +87,7 @@ pub fn run(args: cli::RunArgs) -> Result<(), Report> {
     if let Some(populations) = populations {
         info!("Loading query populations: {populations}");
         // split population into csv (,) parts
-        let populations = populations.split(',').collect::<Vec<_>>();
+        let populations = populations.split(',').collect_vec();
         // intermediate container to hold additional populations (like descendants)
         let mut search_populations = Vec::new();
 

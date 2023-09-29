@@ -39,28 +39,28 @@ pub enum Command {
 // Dataset
 // -----------------------------------------------------------------------------
 
-/// Rebar CLI dataset arguments
+/// Dataset arguments
 #[derive(Parser, Debug)]
 pub struct DatasetArgs {
     #[clap(subcommand)]
     pub command: DatasetCommand,
 }
 
-/// Rebar CLI dataset command (download, list)
+/// Dataset commands (download, list)
 #[derive(Subcommand, Debug)]
 #[clap(verbatim_doc_comment)]
 pub enum DatasetCommand {
-    /// List available Rebar datasets.
+    /// List datasets.
     List(DatasetListArgs),
 
-    /// Download available Rebar datasets.
+    /// Download dataset.
     Download(DatasetDownloadArgs),
 }
 
 // -----------------------------------------------------------------------------
 // Dataset Get
 
-/// Download available Rebar datasets.
+/// Download dataset.
 #[derive(Parser, Debug)]
 #[clap(verbatim_doc_comment)]
 pub struct DatasetDownloadArgs {
@@ -84,38 +84,32 @@ pub struct DatasetDownloadArgs {
     #[clap(short = 'o', long, required = true)]
     pub output_dir: PathBuf,
 
-    /// Reference GitHub Commit SHA.
-    #[clap(long)]
-    pub reference_sha: Option<String>,
-
-    /// Populations GitHub Commit SHA.
-    #[clap(long)]
-    pub populations_sha: Option<String>,
+    /// Download dataset from a summary.json snapshot.
+    #[clap(short = 's', long)]
+    pub summary: Option<PathBuf>,
 }
 
 // -----------------------------------------------------------------------------
 // Dataset List
 
+/// List datasets.
 #[derive(Parser, Debug)]
 #[clap(verbatim_doc_comment)]
-#[group(id = "outputs", required = true, multiple = false)]
-/// Download available Rebar dataset.
 pub struct DatasetListArgs {
     /// Dataset name.
-    #[clap(short = 'r', long, required = true)]
-    pub name: dataset::attributes::Name,
+    #[clap(short = 'n', long)]
+    pub name: Option<dataset::attributes::Name>,
 
     /// Dataset tag.
     #[clap(short = 't', long)]
-    #[clap(default_value_t=dataset::attributes::Tag::default())]
-    pub tag: dataset::attributes::Tag,
+    pub tag: Option<dataset::attributes::Tag>,
 }
 
 // -----------------------------------------------------------------------------
 // Run
 // -----------------------------------------------------------------------------
 
-/// Run Rebar on input alignment or dataset population.
+/// Run on input alignment or dataset population.
 #[derive(Clone, Debug, Deserialize, Parser, Serialize)]
 #[clap(verbatim_doc_comment)]
 pub struct RunArgs {

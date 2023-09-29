@@ -34,6 +34,7 @@ pub fn linelist(
         "regions",
         "private",
         "genome_length",
+        "cli_version",
         "dataset_name",
         "dataset_tag",
     ]
@@ -106,6 +107,10 @@ pub fn linelist(
         // genome_length
         let genome_length = recombination.genome_length.to_string();
         row[table.header_position("genome_length")?] = genome_length;
+
+        // cli version
+        row[table.header_position("cli_version")?] =
+            env!("CARGO_PKG_VERSION").to_string();
 
         // dataset name
         row[table.header_position("dataset_name")?] = dataset.name.to_string();

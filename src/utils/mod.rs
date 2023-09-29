@@ -114,11 +114,12 @@ pub async fn download_github(
     let client = reqwest::Client::new();
 
     // GitHub API Query
-    let mut query = vec![("per_page", "1"), ("path", remote_path), ("page", "1")];
+    let mut query = vec![("path", remote_path), ("per_page", "1"), ("page", "1")];
     // if manual SHA was specified
     if let Some(sha) = sha {
         query.push(("sha", sha));
     }
+
     // convert to string
     let mut query = query
         .into_iter()
@@ -149,7 +150,7 @@ pub async fn download_github(
         .header(ACCESS_CONTROL_EXPOSE_HEADERS, "Link")
         .header("X-GitHub-Api-Version", github_api_version)
         .basic_auth(&github_username, github_token.clone());
-    let response = request.query(&query).send().await?;
+    let response = request.send().await?;
     check_github_response(&response)?;
 
     let url = response.url().to_string();
@@ -157,7 +158,13 @@ pub async fn download_github(
     // extract the "sha" and "date" key from the json body
     let body: Vec<BTreeMap<String, serde_json::Value>> = response.json().await?;
     if body.is_empty() {
-        return Err(eyre!("No GitHub commits were found for: {}", url));
+        return Err(eyre!("No GitHub commits were found for: {}", url)
+            .suggestion(format!(
+                "Does your dataset tag ({tag}) predate the creation of this file?"
+            ))
+            .suggestion(format!(
+                "Repository: https://github.com/{repo}, File: {remote_path:?}"
+            )));
     }
 
     let sha = body[0]["sha"].to_string().replace('"', "");
@@ -281,7 +288,18 @@ pub fn path_to_delim(path: &Path) -> Result<char, Report> {
     let ext = path_to_ext(path)?;
 
     // convert extension to the expected delimiter
-    let delim = ext_to_delim(&ext)?;
+    let delim = match ext.as_str() {
+        "tsv" => '\t',
+        "csv" => ',',
+        "txt" => {
+            warn!("File extension .txt is assumed to be tab-delimited: {path:?}");
+            '\t'
+        }
+        _ => {
+            return Err(eyre!("Unknown file extension: {ext:?}")
+                .suggestion("Options are tsv or csv."))
+        }
+    };
 
     Ok(delim)
 }

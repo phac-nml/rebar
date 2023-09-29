@@ -2,7 +2,9 @@ use crate::utils::remote_file::RemoteFile;
 use chrono::prelude::*;
 use color_eyre::eyre::{eyre, Report, Result, WrapErr};
 use color_eyre::Help;
-use log::info;
+use indoc::formatdoc;
+use log::debug;
+use semver::{Version, VersionReq};
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 use std::default::Default;
@@ -11,17 +13,42 @@ use std::fs::File;
 use std::io::Write;
 use std::path::Path;
 use std::str::FromStr;
+use strum::{EnumIter, EnumProperty};
 
 // ----------------------------------------------------------------------------
 // Dataset Name
 
-#[derive(Clone, Copy, Debug, Default, Serialize, Deserialize, PartialEq)]
+#[derive(
+    Clone, Copy, Debug, Default, EnumIter, EnumProperty, Serialize, Deserialize, PartialEq,
+)]
 pub enum Name {
+    #[serde(rename = "sars-cov-2")]
+    #[strum(props(list = "true"))]
     SarsCov2,
+    #[serde(rename = "rsv-a")]
+    #[strum(props(list = "false"))]
     RsvA,
+    #[serde(rename = "rsv-b")]
+    #[strum(props(ilist = "false"))]
     RsvB,
     #[default]
+    #[strum(props(list = "false"))]
     Unknown,
+}
+
+impl Name {
+    pub fn compatibility(&self) -> Result<Compatibility, Report> {
+        let mut compatibility = Compatibility::new();
+        #[allow(clippy::single_match)]
+        match self {
+            Name::SarsCov2 => {
+                compatibility.dataset.min_date =
+                    Some(DateTime::parse_from_rfc3339("2023-02-09T12:00:00Z")?.into());
+            }
+            _ => (),
+        }
+        Ok(compatibility)
+    }
 }
 
 impl fmt::Display for Name {
@@ -102,6 +129,119 @@ impl FromStr for Tag {
 }
 
 // ----------------------------------------------------------------------------
+// Dataset Compatibility
+
+pub fn check_compatibility(name: &Name, tag: &Tag) -> Result<(), Report> {
+    let compatibility = name.compatibility()?;
+
+    // Check CLI Version
+    if let Some(cli_version) = compatibility.cli.version {
+        let current_version = Version::parse(env!("CARGO_PKG_VERSION"))?;
+        let required_version = VersionReq::parse(&cli_version)?;
+        if !required_version.matches(&current_version) {
+            return Err(eyre!(formatdoc!(
+                "CLI version incompatibility.
+                Current version {current_version} does not satisfy the {name} dataset requirement {required_version}",
+                current_version=current_version.to_string()
+                )));
+        }
+    }
+    // Check Tag Dates
+    if matches!(tag, Tag::Archive(_)) {
+        let tag_date: DateTime<Utc> =
+            DateTime::parse_from_rfc3339(&tag.to_string())?.into();
+
+        // Minimum Date
+        if let Some(min_date) = compatibility.dataset.min_date {
+            if tag_date < min_date {
+                return Err(eyre!(formatdoc!(
+                    "Date incompatibility.
+                    Tag {tag_date:?} does not satisfy the {name} dataset minimum date {min_date:?}"
+                )));
+            }
+        }
+        // Maximum Date
+        if let Some(max_date) = compatibility.dataset.max_date {
+            if tag_date > max_date {
+                return Err(eyre!(formatdoc!(
+                    "Date incompatibility.
+                    Tag {tag_date:?} does not satisfy the {name} dataset maximum date {max_date:?}"
+                )));
+            }
+        }
+    }
+
+    Ok(())
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct Compatibility {
+    pub dataset: DateCompatibility,
+    pub cli: CliCompatibility,
+}
+
+impl Default for Compatibility {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl Compatibility {
+    pub fn new() -> Self {
+        Compatibility {
+            dataset: DateCompatibility::new(),
+            cli: CliCompatibility::new(),
+        }
+    }
+}
+
+// ----------------------------------------------------------------------------
+// Date Compatibility
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct DateCompatibility {
+    pub min_date: Option<DateTime<Utc>>,
+    pub max_date: Option<DateTime<Utc>>,
+}
+
+impl Default for DateCompatibility {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl DateCompatibility {
+    pub fn new() -> Self {
+        DateCompatibility {
+            min_date: None,
+            max_date: None,
+        }
+    }
+}
+
+// ----------------------------------------------------------------------------
+// CLI Compatibility
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct CliCompatibility {
+    pub version: Option<String>,
+}
+
+impl Default for CliCompatibility {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl CliCompatibility {
+    pub fn new() -> Self {
+        CliCompatibility {
+            version: Some(">=0.1.0".to_string()),
+        }
+    }
+}
+
+// ----------------------------------------------------------------------------
 // Dataset Summary
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -159,7 +299,7 @@ impl Summary {
         // output path
         let mut output_path = dataset_dir.join("summary");
         output_path.set_extension(format.extension());
-        info!("Exporting summary to {format}: {output_path:?}");
+        debug!("Exporting summary to {format}: {output_path:?}");
 
         // format conversion
         let output = match format {

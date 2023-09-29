@@ -2,7 +2,7 @@ use crate::cli;
 use crate::dataset::{attributes::Name, sarscov2};
 use color_eyre::eyre::{eyre, Report, Result};
 use color_eyre::Help;
-use log::{debug, info};
+use log::debug;
 use petgraph::dot::{Config, Dot};
 use petgraph::graph::{Graph, NodeIndex};
 use petgraph::visit::Dfs;
@@ -213,7 +213,7 @@ impl Phylogeny {
         let mut output_path = dataset_dir.join("phylogeny");
         output_path.set_extension(format.extension());
 
-        info!("Exporting phylogeny to {format}: {output_path:?}");
+        debug!("Exporting phylogeny to {format}: {output_path:?}");
 
         // format conversion
         let output = match format {
