@@ -69,6 +69,8 @@ pub struct DatasetDownloadArgs {
     pub name: dataset::attributes::Name,
 
     /// Dataset tag.
+    ///
+    /// can be 'latest' or a date in RFC 3339 format (2023-09-01T12:00:00T)
     #[clap(short = 't', long)]
     #[clap(default_value_t=dataset::attributes::Tag::default())]
     pub tag: dataset::attributes::Tag,
@@ -99,10 +101,6 @@ pub struct DatasetListArgs {
     /// Dataset name.
     #[clap(short = 'n', long)]
     pub name: Option<dataset::attributes::Name>,
-
-    /// Dataset tag.
-    #[clap(short = 't', long)]
-    pub tag: Option<dataset::attributes::Tag>,
 }
 
 // -----------------------------------------------------------------------------
