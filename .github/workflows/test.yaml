@@ -53,5 +53,5 @@ jobs:
       - name: example 1
         run: |
           ./rebar dataset download --name sars-cov-2 --tag 2023-09-21T12:00:00Z --output-dir dataset/sars-cov-2/2023-09-21T12:00:00Z
-          ./rebar run  --dataset-dir dataset/sars-cov-2/2023-09-21T12:00:00Z --output-dir example1 --populations AY.4,BA.5.2,XD,XBB.1.5.1,XBL
+          ./rebar run  --dataset-dir dataset/sars-cov-2/2023-09-21T12:00:00Z --output-dir example1 --populations "AY.4.2*,BA.5.2,XBC*,XBB.1.5.1,XBL"
           ./rebar plot --dataset-dir dataset/sars-cov-2/2023-09-21T12:00:00Z --output-dir example1 --plot-dir
