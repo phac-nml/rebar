@@ -44,12 +44,12 @@
   ```bash
   rebar run \
     --dataset-dir dataset/sars-cov-2/2023-09-21T12:00:00Z  \
-    --populations "AY.4.2*,BA.5.2,XD,XBB.1.5.1,XBL" \
+    --populations "AY.4.2*,BA.5.2,XBC*,XBB.1.5.1,XBL" \
     --output-dir example1
   ```
 
 - `--populations` can include any sequence name found in the dataset `populations.fasta`. For sars-cov-2, sequence names are the designated lineages.
-- The wildcard character ("\*") will include descendants. For example `--lineages "XBB.1.16.*"` will include `XBB.1.16`, `XBB.1.16.1`, `FU.1`, `XBB.1.16.2`, etc.
+- The wildcard character ("\*") will include the lineage and all its descendants.
 - **NOTE**: If using "\*", make sure to use quotes (ex. `--lineages "XBC*,XBB.1.16*"`)!
 
 1. Visualize breakpoints and parental regions.
