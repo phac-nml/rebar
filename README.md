@@ -39,6 +39,8 @@
     --output-dir dataset/sars-cov-2/2023-09-21T12:00:00Z
   ```
 
+- `--tag` can be `latest` or a date in [RFC 3339 format](https://utcc.utoronto.ca/~cks/space/blog/unix/GNUDateAndRFC3339).
+
 1. Detect recombination in user-specified populations.
 
   ```bash
@@ -76,7 +78,7 @@ The `--alignment` must be aligned to the same reference as in the dataset `refer
 
 ## Validate
 
-Run `rebar` on all designated lineages, and validate against the expected results.
+Run `rebar` on all populations in the dataset, and validate against the expected results.
 
 ```bash
 rebar run \
