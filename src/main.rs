@@ -24,8 +24,10 @@ async fn main() -> Result<(), Report> {
         // --------------------------------------------------------------------
         // Dataset
         Command::Dataset(args) => match args.command {
-            DatasetCommand::List(_) => todo!(),
-            DatasetCommand::Download(args) => rebar::download_dataset(&args).await?,
+            DatasetCommand::List(args) => rebar::list_datasets(&args).await?,
+            DatasetCommand::Download(mut args) => {
+                rebar::download_dataset(&mut args).await?
+            }
         },
         // --------------------------------------------------------------------
         // Run

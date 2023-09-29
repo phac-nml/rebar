@@ -5,7 +5,7 @@ use crate::utils::{remote_file::RemoteFile, table::Table};
 use bio::io::fasta;
 use color_eyre::eyre::{eyre, Report, Result, WrapErr};
 use itertools::Itertools;
-use log::{debug, info, warn};
+use log::{debug, warn};
 use std::collections::BTreeMap;
 use std::path::Path;
 
@@ -16,39 +16,29 @@ use std::path::Path;
 pub async fn download_reference(
     args: &cli::DatasetDownloadArgs,
 ) -> Result<RemoteFile, Report> {
-    info!("Downloading sars-cov-2 reference fasta.");
-
     let repo = "nextstrain/ncov";
     let remote_path = "data/references_sequences.fasta";
     let output_path = args.output_dir.join("reference.fasta");
-    let remote_file = utils::download_github(
-        repo,
-        &args.tag,
-        remote_path,
-        &output_path,
-        &args.reference_sha,
-    )
-    .await
-    .wrap_err_with(|| eyre!("Unable to download sars-cov-2 reference fasta."))?;
+    let sha: Option<String> = None;
+    let remote_file =
+        utils::download_github(repo, &args.tag, remote_path, &output_path, &sha)
+            .await
+            .wrap_err_with(|| eyre!("Unable to download sars-cov-2 reference fasta."))?;
     Ok(remote_file)
 }
 pub async fn download_populations(
     args: &cli::DatasetDownloadArgs,
 ) -> Result<RemoteFile, Report> {
-    info!("Downloading sars-cov-2 populations fasta.");
-
     let repo = "corneliusroemer/pango-sequences";
     let remote_path = "data/pango-consensus-sequences_genome-nuc.fasta.zst";
     let output_path = args.output_dir.join("populations.fasta");
-    let remote_file = utils::download_github(
-        repo,
-        &args.tag,
-        remote_path,
-        &output_path,
-        &args.populations_sha,
-    )
-    .await
-    .wrap_err_with(|| eyre!("Unable to download sars-cov-2 populations fasta."))?;
+    let sha: Option<String> = None;
+    let remote_file =
+        utils::download_github(repo, &args.tag, remote_path, &output_path, &sha)
+            .await
+            .wrap_err_with(|| {
+                eyre!("Unable to download sars-cov-2 populations fasta.")
+            })?;
     Ok(remote_file)
 }
 
@@ -59,8 +49,6 @@ pub async fn download_populations(
 pub async fn download_alias_key(
     args: &cli::DatasetDownloadArgs,
 ) -> Result<RemoteFile, Report> {
-    info!("Downloading sars-cov-2 alias key.");
-
     let repo = "cov-lineages/pango-designation";
     let remote_path = "pango_designation/alias_key.json";
     let output_path = args.output_dir.join("alias_key.json");
@@ -79,8 +67,6 @@ pub async fn download_alias_key(
 pub async fn download_lineage_notes(
     args: &cli::DatasetDownloadArgs,
 ) -> Result<RemoteFile, Report> {
-    info!("Downloading sars-cov-2 lineage notes.");
-
     let repo = "cov-lineages/pango-designation";
     let remote_path = "lineage_notes.txt";
     let output_path = args.output_dir.join("lineage_notes.txt");

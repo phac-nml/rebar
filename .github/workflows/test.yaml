@@ -50,10 +50,8 @@ jobs:
             rebar
           args: --best --lzma
 
-      - name: dataset
-        run: ./rebar dataset download --output-dir dataset/sars-cov-2/latest --name sars-cov-2 --tag latest
-
       - name: example 1
         run: |
-          ./rebar run  --dataset-dir dataset/sars-cov-2/latest --output-dir example1 --populations AY.4,BA.5.2,XD,XBB.1.5.1,XBL
-          ./rebar plot --dataset-dir dataset/sars-cov-2/latest --output-dir example1
+          ./rebar dataset download --name sars-cov-2 --tag 2023-09-21T12:00:00Z --output-dir dataset/sars-cov-2/2023-09-21T12:00:00Z
+          ./rebar run  --dataset-dir dataset/sars-cov-2/2023-09-21T12:00:00Z --output-dir example1 --populations AY.4,BA.5.2,XD,XBB.1.5.1,XBL
+          ./rebar plot --dataset-dir dataset/sars-cov-2/2023-09-21T12:00:00Z --output-dir example1 --plot-dir

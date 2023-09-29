@@ -1,6 +1,6 @@
 use crate::cli;
 use color_eyre::eyre::{Report, Result, WrapErr};
-use log::info;
+use log::debug;
 use serde::{Deserialize, Serialize};
 use std::default::Default;
 use std::fs::File;
@@ -133,7 +133,7 @@ pub fn export(
     // output path
     let mut output_path = dataset_dir.join("edge_cases");
     output_path.set_extension(format.extension());
-    info!("Exporting edge cases to {format}: {output_path:?}");
+    debug!("Exporting edge cases to {format}: {output_path:?}");
 
     // format conversion
     let output = match format {

@@ -1,69 +1,198 @@
 use crate::cli;
-use crate::dataset::attributes::{Name, Summary, SummaryExportFormat, Tag};
+use crate::dataset::attributes::{
+    check_compatibility, Name, Summary, SummaryExportFormat, Tag,
+};
 use crate::dataset::edge_cases::{EdgeCaseExportFormat, EdgeCaseImportFormat};
 use crate::dataset::{edge_cases, sarscov2, Dataset};
 use crate::phylogeny::{Phylogeny, PhylogenyExportFormat, PhylogenyImportFormat};
 use crate::sequence::{read_reference, Sequence, Substitution};
 use crate::utils;
 use bio::io::fasta;
-use color_eyre::eyre::{eyre, Report, Result};
+use chrono::SecondsFormat;
+use color_eyre::eyre::{eyre, Report, Result, WrapErr};
 use indicatif::{style::ProgressStyle, ProgressBar};
+use itertools::Itertools;
 use log::{debug, info, warn};
 use std::collections::BTreeMap;
 use std::fs::{create_dir_all, File};
 use std::path::Path;
 use std::str::FromStr;
+use strum::{EnumProperty, IntoEnumIterator};
 
 // ----------------------------------------------------------------------------
 // Dataset Download
 // ----------------------------------------------------------------------------
 
-/// Download remote dataset
-pub async fn download_dataset(args: &cli::DatasetDownloadArgs) -> Result<(), Report> {
-    // Create the output directory if it doesn't exist
-    if !args.output_dir.exists() {
-        create_dir_all(&args.output_dir)?;
-        info!("Creating output directory: {:?}", &args.output_dir);
+/// List datasets
+pub async fn list_datasets(args: &cli::DatasetListArgs) -> Result<(), Report> {
+    // table of name, tag, cli_version
+    let mut table = utils::table::Table::new();
+    table.headers = vec![
+        "Name",
+        "CLI Version",
+        "Minimum Tag Date",
+        "Maximum Tag Date",
+    ]
+    .into_iter()
+    .map(String::from)
+    .collect_vec();
+
+    for name in Name::iter() {
+        // Check if this was not the name requested by CLI args
+        if let Some(args_name) = &args.name {
+            if &name != args_name {
+                continue;
+            }
+        }
+
+        // check if this enum should be listed
+        if name.get_str("list").unwrap_or("false") != "true" {
+            continue;
+        }
+
+        // Extract compatibility attributes
+        let compatibility = name.compatibility()?;
+
+        let cli_version = compatibility.cli.version.unwrap_or(String::new());
+        let min_date = if let Some(min_date) = compatibility.dataset.min_date {
+            min_date
+                .to_rfc3339_opts(SecondsFormat::Secs, true)
+                .to_string()
+        } else {
+            String::new()
+        };
+        let max_date = if let Some(max_date) = compatibility.dataset.max_date {
+            max_date
+                .to_rfc3339_opts(SecondsFormat::Secs, true)
+                .to_string()
+        } else {
+            "latest".to_string()
+        };
+
+        // Add to row
+        let row = vec![
+            name.to_string(),
+            cli_version.to_string(),
+            min_date.to_string(),
+            max_date.to_string(),
+        ];
+        table.rows.push(row);
     }
 
-    // Create dataset summary, add notes as we download files
-    let mut summary = Summary::new();
-    summary.name = args.name;
-    summary.tag = args.tag.clone();
+    println!("\n{}", table.to_markdown()?);
+
+    Ok(())
+}
+
+// ----------------------------------------------------------------------------
+// Dataset Download
+// ----------------------------------------------------------------------------
+
+/// Download dataset
+pub async fn download_dataset(args: &mut cli::DatasetDownloadArgs) -> Result<(), Report> {
+    // Create the output directory if it doesn't exist
+    if !args.output_dir.exists() {
+        info!("Creating output directory: {:?}", &args.output_dir);
+        create_dir_all(&args.output_dir)?;
+    }
+
+    // --------------------------------------------------------------------
+    // Compatibility
+
+    check_compatibility(&args.name, &args.tag)?;
+
+    // --------------------------------------------------------------------
+    // Optional Input Summary Snapshot
+
+    let mut summary: Summary = if let Some(summary_path) = &args.summary {
+        // Read in the summary file
+        let reader = File::open(summary_path)
+            .wrap_err_with(|| eyre!("Failed to open input summary: {summary_path:?}"))?;
+        let summary: Summary = serde_json::from_reader(&reader)
+            .wrap_err_with(|| eyre!("Failed to parse input summary: {summary_path:?}"))?;
+
+        // Warn if summary conflicts with any CLI args
+        if summary.name != args.name || summary.tag != args.tag {
+            warn!(
+                "Dataset has been changed by summary to: {} {}",
+                &summary.name, &summary.tag
+            );
+        }
+        summary
+    } else {
+        let mut summary = Summary::new();
+        summary.name = args.name;
+        summary.tag = args.tag.clone();
+        summary
+    };
 
     // --------------------------------------------------------------------
     // Download Reference
 
-    let reference_remote = match args.name {
-        Name::SarsCov2 => sarscov2::download_reference(args).await?,
-        _ => {
-            return Err(eyre!(
-                "Reference download for {name} is not implemented.",
-                name = &args.name
-            ))
-        }
-    };
-    summary.reference = reference_remote.clone();
+    info!("Downloading {} {} reference fasta.", &args.name, &args.tag);
+
+    // Option #1: From Summary Snapshot
+    if args.summary.is_some() {
+        let ext = utils::path_to_ext(Path::new(&summary.reference.url))?;
+        let decompress = ext == "zst";
+        summary.reference.local_path = args.output_dir.join("reference.fasta");
+        utils::download_file(
+            &summary.reference.url,
+            &summary.reference.local_path,
+            decompress,
+        )
+        .await?;
+    }
+    // Option #2: From Dataset Tag
+    else {
+        summary.reference = match args.name {
+            Name::SarsCov2 => sarscov2::download_reference(args).await?,
+            _ => {
+                return Err(eyre!(
+                    "Reference download for {name} is not implemented.",
+                    name = &args.name
+                ))
+            }
+        };
+    }
 
     // --------------------------------------------------------------------
     // Download Populations
 
-    let populations_remote = match args.name {
-        Name::SarsCov2 => sarscov2::download_populations(args).await?,
-        _ => {
-            return Err(eyre!(
-                "Populations download for {} is not implemented.",
-                &args.name
-            ))
-        }
-    };
-    summary.populations = populations_remote.clone();
+    info!(
+        "Downloading {} {} populations fasta.",
+        &args.name, &args.tag
+    );
+
+    // Option #1: From Summary Snapshot
+    if args.summary.is_some() {
+        let ext = utils::path_to_ext(Path::new(&summary.populations.url))?;
+        let decompress = ext == "zst";
+        summary.populations.local_path = args.output_dir.join("populations.fasta");
+        utils::download_file(
+            &summary.populations.url,
+            &summary.populations.local_path,
+            decompress,
+        )
+        .await?;
+    }
+    // Option #2: From Dataset Tag
+    else {
+        summary.populations = match args.name {
+            Name::SarsCov2 => sarscov2::download_populations(args).await?,
+            _ => {
+                return Err(eyre!(
+                    "Populations download for {} is not implemented.",
+                    &args.name
+                ))
+            }
+        };
+    }
 
     // --------------------------------------------------------------------
     // Create Annotations
 
-    let annotations_path = args.output_dir.join("annotations.tsv");
-    info!("Downloading annotations to {:?}", &annotations_path);
+    info!("Creating {} {} annotations.", &args.name, &args.tag);
 
     let annotations = match args.name {
         Name::SarsCov2 => sarscov2::create_annotations()?,
@@ -74,6 +203,8 @@ pub async fn download_dataset(args: &cli::DatasetDownloadArgs) -> Result<(), Rep
             ))
         }
     };
+
+    let annotations_path = args.output_dir.join("annotations.tsv");
     annotations.write(&annotations_path)?;
 
     // --------------------------------------------------------------------
@@ -82,15 +213,67 @@ pub async fn download_dataset(args: &cli::DatasetDownloadArgs) -> Result<(), Rep
     #[allow(clippy::single_match)]
     match args.name {
         Name::SarsCov2 => {
-            let lineage_notes_remote = sarscov2::download_lineage_notes(args).await?;
-            summary
-                .misc
-                .insert("lineage_notes".to_string(), lineage_notes_remote);
+            // ----------------------------------------------------------------
+            // Lineage Notes
 
-            let alias_key_remote = sarscov2::download_alias_key(args).await?;
-            summary
-                .misc
-                .insert("alias_key".to_string(), alias_key_remote);
+            info!("Downloading {} {} lineage notes.", &args.name, &args.tag);
+            // Option #1: From Summary Snapshot
+            if summary.misc.contains_key("lineage_notes") {
+                // Check for zst decompression
+                let ext =
+                    utils::path_to_ext(Path::new(&summary.misc["lineage_notes"].url))?;
+                let decompress = ext == "zst";
+
+                // Update the local path in the summary
+                let mut lineage_notes_remote = summary.misc["lineage_notes"].clone();
+                lineage_notes_remote.local_path =
+                    args.output_dir.join("lineage_notes.txt");
+                *summary.misc.get_mut("lineage_notes").unwrap() = lineage_notes_remote;
+
+                utils::download_file(
+                    &summary.misc["lineage_notes"].url,
+                    &summary.misc["lineage_notes"].local_path,
+                    decompress,
+                )
+                .await?;
+            }
+            // Option #2: From Dataset Tag
+            else {
+                let lineage_notes_remote = sarscov2::download_lineage_notes(args).await?;
+                summary
+                    .misc
+                    .insert("lineage_notes".to_string(), lineage_notes_remote);
+            }
+
+            // ----------------------------------------------------------------
+            // Alias Key
+
+            info!("Downloading {} {} alias key.", &args.name, &args.tag);
+
+            // Option #1: From Summary Snapshot
+            if summary.misc.contains_key("alias_key") {
+                let ext = utils::path_to_ext(Path::new(&summary.misc["alias_key"].url))?;
+                let decompress = ext == "zst";
+
+                // Update the local path in the summary
+                let mut alias_key_remote = summary.misc["alias_key"].clone();
+                alias_key_remote.local_path = args.output_dir.join("alias_key.json");
+                *summary.misc.get_mut("alias_key").unwrap() = alias_key_remote;
+
+                utils::download_file(
+                    &summary.misc["alias_key"].url,
+                    &summary.misc["alias_key"].local_path,
+                    decompress,
+                )
+                .await?;
+            }
+            // Option #2: From Dataset Tag
+            else {
+                let alias_key_remote = sarscov2::download_alias_key(args).await?;
+                summary
+                    .misc
+                    .insert("alias_key".to_string(), alias_key_remote);
+            }
         }
         _ => (),
     };
@@ -98,8 +281,7 @@ pub async fn download_dataset(args: &cli::DatasetDownloadArgs) -> Result<(), Rep
     // --------------------------------------------------------------------
     // Create Phylogeny
 
-    let phylogeny_path = args.output_dir.join("phylogeny.json");
-    info!("Creating phylogeny: {:?}", &phylogeny_path);
+    info!("Creating {} {} phylogeny.", &args.name, &args.tag);
 
     let mut phylogeny = Phylogeny::new();
     phylogeny.build_graph(args).await?;
@@ -113,12 +295,15 @@ pub async fn download_dataset(args: &cli::DatasetDownloadArgs) -> Result<(), Rep
 
     if args.diagnostic {
         let diagnostic_path = args.output_dir.join("diagnostic_mutations.tsv");
-        info!("Identifying diagnostic mutations: {:?}", &diagnostic_path);
+        info!(
+            "Identifying {} {} diagnostic mutations.",
+            &args.name, &args.tag
+        );
 
         let mask = 0;
         let (_populations, mutations) = parse_populations(
-            &populations_remote.local_path,
-            &reference_remote.local_path,
+            &summary.populations.local_path,
+            &summary.reference.local_path,
             mask,
         )?;
         let diagnostic_table = get_diagnostic_mutations(&mutations, &phylogeny)?;
@@ -128,8 +313,7 @@ pub async fn download_dataset(args: &cli::DatasetDownloadArgs) -> Result<(), Rep
     // --------------------------------------------------------------------
     // Create Edge Cases
 
-    let edge_cases_path = args.output_dir.join("edge_cases.json");
-    info!("Creating edge cases: {edge_cases_path:?}");
+    info!("Creating {} {} edge cases.", &args.name, &args.tag);
 
     let edge_cases = match args.name {
         Name::SarsCov2 => sarscov2::create_edge_cases()?,
@@ -145,8 +329,7 @@ pub async fn download_dataset(args: &cli::DatasetDownloadArgs) -> Result<(), Rep
     // --------------------------------------------------------------------
     // Export Summary
 
-    let output_path = args.output_dir.join("summary.json");
-    info!("Exporting info summary: {output_path:?}");
+    info!("Exporting {} {} summary.", &args.name, &args.tag);
     summary.export(&args.output_dir, SummaryExportFormat::Json)?;
 
     // --------------------------------------------------------------------
@@ -297,7 +480,7 @@ pub fn get_diagnostic_mutations(
     table.headers = vec!["mutation", "population", "include_descendants"]
         .into_iter()
         .map(String::from)
-        .collect::<Vec<_>>();
+        .collect_vec();
 
     // configure progress bar style
     let progress_bar_style = ProgressStyle::with_template(

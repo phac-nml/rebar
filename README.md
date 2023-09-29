@@ -10,15 +10,15 @@
 [![Examples CI](https://github.com/phac-nml/rebar/actions/workflows/examples.yaml/badge.svg)](https://github.com/phac-nml/rebar/actions/workflows/examples.yaml)
 [![Validate CI](https://github.com/phac-nml/rebar/actions/workflows/validate.yaml/badge.svg)](https://github.com/phac-nml/rebar/actions/workflows/validate.yaml)
 
-**RE**combination **BAR**code detector for SARS-CoV-2.
+**RE**combination **BAR**code detector.
 
 ## Why rebar?
 
-`rebar` is a command-line application that _detects_ and _visualizes_ recombination between SARS-CoV-2 lineages. It follows the [PHA4GE Guidance for Detecting and Characterizing SARS-CoV-2 Recombinants](https://github.com/pha4ge/pipeline-resources/blob/main/docs/sc2-recombinants.md) which outlines three steps:
+`rebar` is a command-line application that _detects_ and _visualizes_ recombination between sequences. It follows the [PHA4GE Guidance for Detecting and Characterizing SARS-CoV-2 Recombinants](https://github.com/pha4ge/pipeline-resources/blob/main/docs/sc2-recombinants.md) which outlines three steps:
 
 1. Assess the genomic evidence for recombination.
-1. Classify sequences as _designated_ or _novel_ recombinant lineages.
 1. Identify the breakpoint coordinates and parental regions.
+1. Classify sequences as _designated_ or _novel_ recombinant lineages.
 
 ## Install
 
@@ -28,27 +28,38 @@
 
 ## Usage
 
-Download the `rebar` dataset.
-
-```bash
-rebar dataset download --name sars-cov-2 -tag latest --output-dir dataset/sars-cov-2/latest
-```
-
 ### Example 1
 
-Detect recombination in user-specified lineages.
+1. Download the sars-cov-2 dataset snapshotted to the date 2023-09-21.
 
-```bash
-rebar run --dataset-dir dataset/sars-cov-2/latest  --output-dir example1 --populations AY.4,BA.5.2,XD,XBB.1.5.1,XBL
-```
+  ```bash
+  rebar dataset download \
+    --name sars-cov-2 \
+    --tag 2023-09-21T12:00:00Z \
+    --output-dir dataset/sars-cov-2/2023-09-21T12:00:00Z
+  ```
 
-- The `--populations` can include any designated lineage found in the dataset `alignment.fasta`.
-- The "\*" character can also be used to include descendants. For example `--lineages "XBB.1.16*"` will include `XBB.1.16`, `XBB.1.16.1`, `FU.1`, `XBB.1.16.2`, etc.
+1. Detect recombination in user-specified populations.
+
+  ```bash
+  rebar run \
+    --dataset-dir dataset/sars-cov-2/2023-09-21T12:00:00Z  \
+    --populations "AY.4.2*,BA.5.2,XD,XBB.1.5.1,XBL" \
+    --output-dir example1
+  ```
+
+- `--populations` can include any sequence name found in the dataset `populations.fasta`. For sars-cov-2, sequence names are the designated lineages.
+- The wildcard character ("\*") will include descendants. For example `--lineages "XBB.1.16.*"` will include `XBB.1.16`, `XBB.1.16.1`, `FU.1`, `XBB.1.16.2`, etc.
 - **NOTE**: If using "\*", make sure to use quotes (ex. `--lineages "XBC*,XBB.1.16*"`)!
 
-```bash
-rebar plot --dataset-dir dataset/sars-cov-2/latest  --output-dir example1
-```
+1. Visualize breakpoints and parental regions.
+
+  ```bash
+  rebar plot \
+    --dataset-dir dataset/sars-cov-2/latest \
+    --output-dir example1 \
+    --plot-dir example1/plots
+  ```
 
 ### Example 2
 
