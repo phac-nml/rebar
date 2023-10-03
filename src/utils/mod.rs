@@ -3,7 +3,6 @@ pub mod table;
 
 use crate::dataset::attributes::Tag;
 use crate::utils::remote_file::RemoteFile;
-use crate::utils::table::Table;
 use chrono::prelude::*;
 use color_eyre::eyre::{eyre, Report, Result, WrapErr};
 use color_eyre::Help;
@@ -12,7 +11,7 @@ use log::{debug, warn};
 use reqwest::header::{ACCESS_CONTROL_EXPOSE_HEADERS, USER_AGENT};
 use std::collections::BTreeMap;
 use std::fs::{remove_file, write, File};
-use std::io::{self, BufRead, Read};
+use std::io::Read;
 use std::path::{Path, PathBuf};
 use tempfile::TempDir;
 use zstd::stream::read::Decoder;
@@ -20,7 +19,7 @@ use zstd::stream::read::Decoder;
 /// Download file from url to path, with optional decompression.
 pub async fn download_file(
     url: &str,
-    output_path: &PathBuf,
+    output_path: &Path,
     decompress: bool,
 ) -> Result<(), Report> {
     let ext = Path::new(&url).extension().unwrap().to_str().unwrap();
@@ -103,7 +102,7 @@ pub async fn download_github(
     repo: &str,
     tag: &Tag,
     remote_path: &str,
-    output_path: &PathBuf,
+    output_path: &Path,
     sha: &Option<String>,
 ) -> Result<RemoteFile, Report> {
     // GitHub API Setup
@@ -192,7 +191,7 @@ pub async fn download_github(
     let remote_file = RemoteFile {
         url: download_url,
         sha,
-        local_path: output_path.clone(),
+        local_path: output_path.to_path_buf(),
         date_created,
         date_downloaded: Utc::now(),
     };
@@ -224,46 +223,6 @@ pub fn decompress_file(input: &Path, output: &Path, inplace: bool) -> Result<(),
     };
 
     Ok(())
-}
-
-// The output is wrapped in a Result to allow matching on errors
-// Returns an Iterator to the Reader of the lines of the file.
-/// Source: https://doc.rust-lang.org/rust-by-example/std_misc/file/read_lines.html
-pub fn read_lines(path: &Path) -> Result<io::Lines<io::BufReader<File>>, Report> {
-    // attempt to open the file path
-    let file = File::open(path)
-        .wrap_err_with(|| format!("Failed to open table at: {path:?}"))?;
-    // read in the lines
-    let lines = io::BufReader::new(file).lines();
-    Ok(lines)
-}
-
-pub fn read_table(path: &Path) -> Result<Table, Report> {
-    let mut table = Table::new();
-
-    // lookup delimiter from file extension
-    let delim = path_to_delim(path)?;
-
-    for line in (read_lines(path)?).flatten() {
-        let row = line
-            .split(delim)
-            .collect_vec()
-            .into_iter()
-            .map(String::from)
-            .collect_vec();
-        // if headers are empty, this is the first line, write headers
-        if table.headers.is_empty() {
-            table.headers = row;
-        }
-        // otherwise regular row
-        else {
-            table.rows.push(row);
-        }
-    }
-
-    table.path = path.to_path_buf();
-
-    Ok(table)
 }
 
 pub fn ext_to_delim(ext: &str) -> Result<char, Report> {

@@ -7,6 +7,7 @@ pub mod recombination;
 pub mod sequence;
 pub mod utils;
 
+use crate::dataset::attributes::Name;
 use crate::dataset::SearchResult;
 use crate::recombination::{search, Recombination};
 use bio::io::fasta;
@@ -18,19 +19,19 @@ use rayon::prelude::*;
 use std::fs::create_dir_all;
 
 /// Download rebar dataset
-pub async fn download_dataset(args: &mut cli::DatasetDownloadArgs) -> Result<(), Report> {
-    dataset::io::download_dataset(args).await?;
+pub async fn download_dataset(args: &mut cli::dataset::download::Args) -> Result<(), Report> {
+    dataset::download::dataset(args).await?;
     Ok(())
 }
 
 /// List rebar datasets
-pub async fn list_datasets(args: &cli::DatasetListArgs) -> Result<(), Report> {
-    dataset::io::list_datasets(args).await?;
+pub async fn list_datasets(args: &cli::dataset::list::Args) -> Result<(), Report> {
+    dataset::list::datasets(args).await?;
     Ok(())
 }
 
 /// Run rebar on input alignment and/or dataset population
-pub fn run(args: cli::RunArgs) -> Result<(), Report> {
+pub fn run(args: cli::run::Args) -> Result<(), Report> {
     // check how many threads are available on the system
     let default_thread_pool = rayon::ThreadPoolBuilder::new().build().unwrap();
     info!(
@@ -70,7 +71,7 @@ pub fn run(args: cli::RunArgs) -> Result<(), Report> {
     // Collect files in dataset_dir into a dataset object
     // This mainly includes parent populations sequences
     //   and optionally a phylogenetic representation.
-    let dataset = dataset::io::load_dataset(&args)?;
+    let dataset = dataset::load::dataset(&args)?;
 
     // init a container to hold query sequences, dataset
     // populations and/or sequences from an input alignment
@@ -83,11 +84,8 @@ pub fn run(args: cli::RunArgs) -> Result<(), Report> {
 
     // this step is pretty fast, don't really need a progress bar here
 
-    let populations = &args.input.populations;
-    if let Some(populations) = populations {
-        info!("Loading query populations: {populations}");
-        // split population into csv (,) parts
-        let populations = populations.split(',').collect_vec();
+    if let Some(populations) = &args.input.populations {
+        info!("Loading query populations: {populations:?}");
         // intermediate container to hold additional populations (like descendants)
         let mut search_populations = Vec::new();
 
@@ -128,7 +126,7 @@ pub fn run(args: cli::RunArgs) -> Result<(), Report> {
                 sequences.push(sequence);
                 debug!("Added population {population} to query sequences.");
             } else {
-                warn!("Population {population} was not found in the dataset.");
+                warn!("{population} is present in the phylogeny but not in the populations fasta.");
                 continue;
             }
         }
@@ -191,6 +189,7 @@ pub fn run(args: cli::RunArgs) -> Result<(), Report> {
 
             // search for the best match in the dataset to this sequence
             let search_result = dataset.search(sequence, None, None);
+
             if let Ok(search_result) = search_result {
                 // use the successful search as the best_match
                 best_match = search_result;
@@ -201,6 +200,15 @@ pub fn run(args: cli::RunArgs) -> Result<(), Report> {
                 // if the search was successful, unzip the results
                 if let Ok(parent_search) = parent_search {
                     (_, recombination) = parent_search;
+                }
+            } 
+            // what to do if not a single population matched?
+            else {
+                // temporary handling for root population B             
+                if dataset.name == Name::SarsCov2 {
+                    if sequence.id == "population_B".to_string() {
+                        best_match.consensus_population = "B".to_string();
+                    }
                 }
             }
 
@@ -248,7 +256,7 @@ pub fn run(args: cli::RunArgs) -> Result<(), Report> {
         .collect_vec();
 
     if unique_keys.is_empty() {
-        warn!("No recombination detected, no barcodes will be output");
+        warn!("No recombination detected, no barcodes will be outputted.");
     } else {
         info!("Exporting recombination barcodes: {outdir_barcodes:?}");
     }
@@ -272,7 +280,7 @@ pub fn run(args: cli::RunArgs) -> Result<(), Report> {
 }
 
 /// Plot rebar output
-pub fn plot(args: cli::PlotArgs) -> Result<(), Report> {
+pub fn plot(args: cli::plot::Args) -> Result<(), Report> {
     // ------------------------------------------------------------------------
     // Parse Args
 

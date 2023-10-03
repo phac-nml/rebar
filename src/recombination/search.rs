@@ -1,5 +1,5 @@
-use crate::cli::RunArgs;
-use crate::dataset::{edge_cases::EdgeCase, Dataset, SearchResult};
+use crate::cli::run;
+use crate::dataset::{Dataset, SearchResult};
 use crate::recombination::{detect_recombination, Recombination};
 use crate::sequence::Sequence;
 use color_eyre::eyre::{eyre, Report, Result};
@@ -29,7 +29,7 @@ impl<'data, 'seq, 'best, 'args> Args<'data, 'seq, 'best> {
         dataset: &'data Dataset,
         sequence: &'seq Sequence,
         best_match: &'best SearchResult,
-        args: &'args RunArgs,
+        args: &'args run::Args,
     ) -> Self {
         Args {
             dataset,
@@ -44,7 +44,7 @@ impl<'data, 'seq, 'best, 'args> Args<'data, 'seq, 'best> {
         }
     }
 
-    pub fn apply_edge_case(&mut self, edge_case: &EdgeCase) -> Result<(), Report> {
+    pub fn apply_edge_case(&mut self, edge_case: &run::Args) -> Result<(), Report> {
         self.max_parents = edge_case.max_parents;
         self.max_iter = edge_case.max_iter;
         self.min_consecutive = edge_case.min_consecutive;
@@ -60,64 +60,67 @@ impl<'data, 'seq, 'best, 'args> Args<'data, 'seq, 'best> {
 // Functions
 // ----------------------------------------------------------------------------
 
-// Search for all parents (primary and secondary recombination).
+// Search for all parents (primary and secondary parents).
 pub fn all_parents<'seq>(
     args: &mut Args<'_, 'seq, '_>,
 ) -> Result<(Vec<SearchResult>, Recombination<'seq>), Report> {
+
+    // This is not a good place to check this argument, should be further upstream?
     if args.max_parents == 0 {
         return Err(eyre!("Parameter max_parents is set to 0."));
     }
 
     // initialize parents to return
-    let mut parents = Vec::new();
+    let mut parents = vec![];
 
     // don't restrict which populations are excluded/included
     // by default, dataset.search will look through all populations
-    let mut exclude_populations = Vec::new();
-    let mut include_populations = Vec::new();
-
-    // For known recombinants
-    let recombinant = &args.best_match.recombinant;
+    let mut exclude_populations = vec![];
+    let mut include_populations = vec![];
 
     // keep track if this is a edge case
     let mut edge_case = false;
 
-    // Running a biased search
+    // If running a biased search, prioritize designated parents and apply edge cases
     if !args.unbiased {
-        if let Some(recombinant) = recombinant {
+        if let Some(recombinant) = &args.best_match.recombinant {
             // prioritize designated parents
             include_populations = args.dataset.phylogeny.get_parents(recombinant)?;
-            debug!("Prioritizing designated parents: {include_populations:?}");
 
-            // apply edge cases
+            // check for an edge case that matches this recombination
             let edge_case_args = args
                 .dataset
                 .edge_cases
                 .iter()
-                .find(|e| e.population == *recombinant);
+                .find(|e| e.population == Some(recombinant.to_string()));
 
-            // Option 1: Matching edge case found, override search args
+
+            // apply edge_case to override search args
             if let Some(edge_case_args) = edge_case_args {
-                debug!("Applying edge case: {edge_case_args:?}");
-                args.apply_edge_case(edge_case_args)?;
+                debug!("Applying edge case: {recombinant:?}");
                 edge_case = true;
+                if let Some(parents) = edge_case_args.parents {
+                    include_populations = parents.clone();
+                    exclude_populations = args
+                        .dataset
+                        .populations
+                        .iter()
+                        .filter(|p| !parents.contains(p))
+                        .collect_vec();              
+                }
+                //args = args.apply_edge_case(edge_case_args)?;
             }
-            // Option 2: No matching edge case was found, do a general
-            // relaxation of search parameters for maximum sensitivity
-            else {
-                // debug!(
-                //     "Relaxing parameters for sensitive detection of a designated recombinant"
-                // );
-                // debug!(
-                //     "\tFrom --min-consecutive {} to --min-consecutive 1",
-                //     args.min_consecutive
-                // );
-                // args.min_consecutive = 1;
-                // debug!("\tFrom --min-length {} to --min-length 1", args.min_length);
-                // args.min_length = 1;
-                // debug!("\tFrom --min-subs {} to --min-subs 1", args.min_subs);
-                // args.min_subs = 1;
-            }
+
+            // // // Apply the edge_case parents to the include/exclude list
+            // if !edge_case_args.parents.is_empty() {
+            //     include_populations = edge_case_args.parents.clone();
+            //     exclude_populations = args
+            //         .dataset
+            //         .populations
+            //         .iter()
+            //         .filter(|p| !edge_case_args.parents.contains(p))
+            //         .collect_vec();                
+            // }
         }
     }
 
@@ -128,7 +131,32 @@ pub fn all_parents<'seq>(
 
     // Secondary parents ( 2 : max_parents)
     // this function consumes `parents`, modifies it, then returns it
-    let (parents, mut recombination) = secondary_parents(parents, args)?;
+    // We might still need the parents for a fallback search, so just clone
+    let result = secondary_parents(parents.clone(), args);
+    let (parents, mut recombination) = result?;
+    // // If the recombination search failed for a designated recombinant,
+    // // Try a fall-back using extremely sensitive parameters.
+    // // Reminder, this only applies to a biased search
+    // let (parents, mut recombination) =  if result.is_err() && args.best_match.recombinant.is_some() && !args.unbiased {
+    //     debug!("Recombination search failed for a designated recombinant. Relaxing parameters for more sensitive detection.");
+        
+    //     // Apply super-sensitive parameters
+    //     debug!("\tFrom --min-consecutive {} to --min-consecutive 1", args.min_consecutive);
+    //     args.min_consecutive = 1;
+    //     debug!("\tFrom --min-length {} to --min-length 1", args.min_length);
+    //     args.min_length = 1;
+    //     debug!("\tFrom --min-subs {} to --min-subs 1", args.min_subs);
+    //     args.min_subs = 1;
+
+    //     edge_case = true;
+
+    //     // Attempt secondary parent search again
+    //     secondary_parents(parents, args)?
+    // }
+    // Otherwise, just unwrap the result, may be Ok or informative Err
+    // else {
+    //     result?
+    // };
 
     // add edge case annotation
     recombination.edge_case = edge_case;
@@ -187,14 +215,16 @@ pub fn secondary_parents<'seq>(
     let mut num_parents = 1;
 
     let mut exclude_populations: Vec<String> = Vec::new();
-
-    let recombinant = &args.best_match.recombinant;
     let mut designated_parents = Vec::new();
 
     // running a biased search, prioritize designated parents
     if !args.unbiased {
-        if let Some(recombinant) = recombinant {
+        if let Some(recombinant) = &args.best_match.recombinant {
             designated_parents = args.dataset.phylogeny.get_parents(recombinant)?;
+            // exclude self and descendants from secondary parent
+            // ex. XR might try to test against itself as a parent
+            let descendants = args.dataset.phylogeny.get_descendants(recombinant)?;
+            exclude_populations.extend(descendants)
         }
     }
 
@@ -217,7 +247,9 @@ pub fn secondary_parents<'seq>(
             }
             // If we didn't find parents, this is a failure
             else {
-                return Err(eyre!("Maximum iterations reached ({num_iter}) with no secondary parent found."));
+                let message = format!("Maximum iterations reached ({num_iter}) with no secondary parent found.");
+                debug!("{}", &message);
+                return Err(eyre!(message));
             }
         }
         num_iter += 1;

@@ -33,6 +33,7 @@ pub fn linelist(
         "unique_key",
         "regions",
         "private",
+        "diagnostic",
         "genome_length",
         "cli_version",
         "dataset_name",
@@ -103,6 +104,15 @@ pub fn linelist(
         // private mutations
         let private = best_match.private.iter().join(",").to_string();
         row[table.header_position("private")?] = private;
+
+        // diagnostic mutations
+        // mark this as "NA" if diagnostic mutations were not run for the dataset
+        let diagnostic = if dataset.diagnostic.is_empty() {
+            "NA".to_string()
+        } else {
+            best_match.diagnostic.iter().join(",").to_string()
+        };
+        row[table.header_position("diagnostic")?] = diagnostic;        
 
         // genome_length
         let genome_length = recombination.genome_length.to_string();

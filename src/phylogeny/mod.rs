@@ -1,8 +1,6 @@
-use crate::cli;
-use crate::dataset::{attributes::Name, sarscov2};
-use color_eyre::eyre::{eyre, Report, Result};
+use color_eyre::eyre::{eyre, Report, Result, WrapErr};
 use color_eyre::Help;
-use log::debug;
+use crate::utils;
 use petgraph::dot::{Config, Dot};
 use petgraph::graph::{Graph, NodeIndex};
 use petgraph::visit::Dfs;
@@ -14,55 +12,6 @@ use std::fs::File;
 use std::io::Write;
 use std::path::Path;
 use std::string::ToString;
-
-// ----------------------------------------------------------------------------
-// Phylogeny Export Format
-
-pub enum PhylogenyExportFormat {
-    Dot,
-    Json,
-}
-
-impl PhylogenyExportFormat {
-    pub fn extension(&self) -> String {
-        match self {
-            PhylogenyExportFormat::Dot => String::from("dot"),
-            PhylogenyExportFormat::Json => String::from("json"),
-        }
-    }
-}
-
-impl std::fmt::Display for PhylogenyExportFormat {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        match self {
-            PhylogenyExportFormat::Dot => write!(f, "dot"),
-            PhylogenyExportFormat::Json => write!(f, "json"),
-        }
-    }
-}
-
-pub enum PhylogenyImportFormat {
-    Json,
-}
-
-// ----------------------------------------------------------------------------
-// Phylogeny Import Format
-
-impl PhylogenyImportFormat {
-    pub fn extension(&self) -> String {
-        match self {
-            PhylogenyImportFormat::Json => String::from("json"),
-        }
-    }
-}
-
-impl std::fmt::Display for PhylogenyImportFormat {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        match self {
-            PhylogenyImportFormat::Json => write!(f, "json"),
-        }
-    }
-}
 
 // ----------------------------------------------------------------------------
 // Phylogeny
@@ -129,95 +78,33 @@ impl Phylogeny {
         Ok(recombinants)
     }
 
-    pub async fn build_graph(
-        &mut self,
-        args: &cli::DatasetDownloadArgs,
-    ) -> Result<(), Report> {
-        let (graph_data, order) = match &args.name {
-            &Name::SarsCov2 => sarscov2::create_graph_data(args).await?,
-            _ => {
-                return Err(eyre!(
-                    "Building graph for {} is not implemented.",
-                    &args.name
-                ))
-            }
-        };
+    /// Read phylogeny from file.
+    pub fn read(path: &Path) -> Result<Phylogeny, Report> {
 
-        self.order = order;
-
-        // ------------------------------------------------------------------------
-        // Construct Graph
-
-        // Add root node
-        let name = "root".to_string();
-        let id = self.graph.add_node(name.clone());
-        self.lookup.insert(name, id);
-
-        // todo!() Do this twice? in case lineages are accidentally out of order?
-
-        // Add descendants
-        for name in &self.order {
-            let id = self.graph.add_node(name.clone());
-            self.lookup.insert(name.clone(), id);
-            let parents = &graph_data[&name.clone()];
-
-            debug!("Population: {name}; Parents: {parents:?}");
-
-            // If multiple parents add this to recombinants list
-            if parents.len() > 1 {
-                self.recombinants.push(name.clone());
-            }
-            for parent in parents {
-                if !self.lookup.contains_key(parent) {
-                    return Err(eyre!("Parental lineage {parent} is not in the graph.")
-                        .suggestion(
-                            "Are the alias_key.json and lineage_notes.txt out of sync?",
-                        )
-                        .suggestion("Please check if {parent} is in the alias key."));
-                }
-                let parent_id = self.lookup[&parent.clone()];
-                self.graph.add_edge(parent_id, id, 1);
-            }
-        }
-
-        Ok(())
-    }
-
-    /// import phylogeny from specified format
-    pub fn import(
-        dataset_dir: &Path,
-        format: PhylogenyImportFormat,
-    ) -> Result<Phylogeny, Report> {
-        //  import path
-        let mut import_path = dataset_dir.join("phylogeny");
-        import_path.set_extension(format.extension());
-
-        let phylogeny: Phylogeny = match format {
-            PhylogenyImportFormat::Json => {
-                let phylogeny = std::fs::read_to_string(import_path)
-                    .expect("Couldn't read phylogeny {import_path:?}.");
-                serde_json::from_str(&phylogeny)?
-            } // ... space for more enum options for import, like Auspice perhaps
-        };
+        let phylogeny = std::fs::read_to_string(path)
+            .wrap_err_with(|| "Failed to read file: {path:?}.")?;
+        let phylogeny = serde_json::from_str(&phylogeny)
+            .wrap_err_with(|| "Failed to parse file: {path:?}.")?;
 
         Ok(phylogeny)
     }
 
-    /// export phylogeny to specified format
-    pub fn export(
-        &self,
-        dataset_dir: &Path,
-        format: PhylogenyExportFormat,
-    ) -> Result<(), Report> {
-        // output path
-        let mut output_path = dataset_dir.join("phylogeny");
-        output_path.set_extension(format.extension());
+    /// Write phylogeny to file.
+    pub fn write(&self, output_path: &Path) -> Result<(), Report> {
 
-        debug!("Exporting phylogeny to {format}: {output_path:?}");
+        // Create output file
+        let mut file = File::create(&output_path)?;
+        
+        // .unwrap_or_else(|_| {
+        //     return Err(eyre!("Failed to create file: {:?}.", &output_path))
+        // });
+        let ext = utils::path_to_ext(Path::new(output_path))?;
 
         // format conversion
-        let output = match format {
-            PhylogenyExportFormat::Dot => {
+        let output = match ext.as_str() {
+            // ----------------------------------------------------------------
+            // DOT file for graphviz
+            "dot" => {
                 let mut output =
                     format!("{}", Dot::with_config(&self.graph, &[Config::EdgeNoLabel]));
                 // set graph id (for cytoscape)
@@ -227,32 +114,25 @@ impl Phylogeny {
                     str::replace(&output, "digraph {", "digraph {\n    rankdir=\"LR\";");
                 output
             }
-            PhylogenyExportFormat::Json => serde_json::to_string_pretty(&self)
-                .unwrap_or_else(|_| panic!("Failed to export phylogeny to {format}.")),
+            // ----------------------------------------------------------------
+            // JSON for rebar          
+            "json" => serde_json::to_string_pretty(&self)
+                .unwrap_or_else(|_| panic!("Failed to parse: {self:?}")),
+            _ => return Err(
+                eyre!("Phylogeny write for extension .{ext} is not supported.")
+                .suggestion("Please try .json or .dot instead.")
+            )
         };
 
         // Write to file
-        let mut file = File::create(&output_path).unwrap_or_else(|_| {
-            panic!("Failed to access output phylogeny path {:?}.", &output_path)
-        });
         file.write_all(output.as_bytes()).unwrap_or_else(|_| {
-            panic!("Failed to write phylogeny to {:?}.", &output_path)
+            panic!("Failed to write file: {:?}.", &output_path)
         });
 
         Ok(())
     }
 
-    pub fn export_json(&self, dataset_dir: &Path) -> Result<(), Report> {
-        let output_path = dataset_dir.join("phylogeny.json");
-        let output =
-            serde_json::to_string(&self).expect("Failed to export phylogeny to json.");
-
-        let mut file = File::create(output_path).unwrap();
-        file.write_all(output.as_bytes())
-            .expect("Failed to export phylogeny as json.");
-        Ok(())
-    }
-
+    // Reminder, this function will also include name (the parent)
     pub fn get_descendants(&self, name: &str) -> Result<Vec<String>, Report> {
         let mut descendants = Vec::new();
 

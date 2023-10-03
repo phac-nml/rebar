@@ -14,6 +14,41 @@ use std::collections::BTreeMap;
 // Structs
 // ----------------------------------------------------------------------------
 
+
+// ----------------------------------------------------------------------------
+// Recombination
+
+#[derive(Clone, Debug, Serialize)]
+pub struct Recombination<'seq> {
+    //pub sequence_id: String,
+    pub sequence: &'seq Sequence,
+    pub unique_key: String,
+    pub recombinant: Option<String>,
+    pub parents: Vec<String>,
+    pub breakpoints: Vec<Breakpoint>,
+    pub regions: BTreeMap<usize, Region>,
+    pub genome_length: usize,
+    pub edge_case: bool,
+    #[serde(skip_serializing)]
+    pub table: utils::table::Table,
+}
+
+impl<'seq> Recombination<'seq> {
+    pub fn new(sequence: &'seq Sequence) -> Self {
+        Recombination {
+            sequence,
+            unique_key: String::new(),
+            recombinant: None,
+            parents: Vec::new(),
+            breakpoints: Vec::new(),
+            regions: BTreeMap::new(),
+            table: utils::table::Table::new(),
+            genome_length: sequence.genome_length,
+            edge_case: false,
+        }
+    }
+}
+
 // ----------------------------------------------------------------------------
 // Breakpoint
 
@@ -55,40 +90,6 @@ pub struct Region {
 impl std::fmt::Display for Region {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         write!(f, "{}-{}|{}", self.start, self.end, self.origin)
-    }
-}
-
-// ----------------------------------------------------------------------------
-// Recombination
-
-#[derive(Clone, Debug, Serialize)]
-pub struct Recombination<'seq> {
-    //pub sequence_id: String,
-    pub sequence: &'seq Sequence,
-    pub unique_key: String,
-    pub recombinant: Option<String>,
-    pub parents: Vec<String>,
-    pub breakpoints: Vec<Breakpoint>,
-    pub regions: BTreeMap<usize, Region>,
-    pub genome_length: usize,
-    pub edge_case: bool,
-    #[serde(skip_serializing)]
-    pub table: utils::table::Table,
-}
-
-impl<'seq> Recombination<'seq> {
-    pub fn new(sequence: &'seq Sequence) -> Self {
-        Recombination {
-            sequence,
-            unique_key: String::new(),
-            recombinant: None,
-            parents: Vec::new(),
-            breakpoints: Vec::new(),
-            regions: BTreeMap::new(),
-            table: utils::table::Table::new(),
-            genome_length: sequence.genome_length,
-            edge_case: false,
-        }
     }
 }
 
