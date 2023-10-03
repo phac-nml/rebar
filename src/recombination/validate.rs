@@ -1,6 +1,8 @@
 use crate::dataset::{Dataset, SearchResult};
 use crate::recombination::Recombination;
 use color_eyre::eyre::{eyre, Report, Result};
+use itertools::Itertools;
+use log::warn;
 use std::fmt;
 use std::str::FromStr;
 
@@ -52,6 +54,7 @@ pub enum Details {
     IncorrectRecombinant,
     IncorrectParent,
     IncorrectPopulation,
+    NoRecombinationDetected,
 }
 
 impl fmt::Display for Details {
@@ -60,6 +63,7 @@ impl fmt::Display for Details {
             Details::IncorrectRecombinant => "incorrect_recombinant",
             Details::IncorrectParent => "incorrect_parent",
             Details::IncorrectPopulation => "incorrect_population",
+            Details::NoRecombinationDetected => "no_recombination_detected",
         };
         write!(f, "{}", result)
     }
@@ -72,6 +76,7 @@ impl FromStr for Details {
             "incorrect_recombinant" => Details::IncorrectRecombinant,
             "incorrect_parent" => Details::IncorrectParent,
             "incorrect_population" => Details::IncorrectPopulation,
+            "no_recombination_detected" => Details::NoRecombinationDetected,
             _ => return Err(eyre!("Unknown details: {input}")),
         };
         Ok(result)
@@ -131,10 +136,20 @@ pub fn validate(
         let validate_parent = if expected_parents.is_empty() {
             observed_parents.is_empty()
         } else {
-            let mut overlap = expected_parents.clone();
-            overlap.retain(|p| observed_parents.contains(p));
-            overlap.len() == expected_parents.len()
+
+            let mut expected_parents_descendants = expected_parents
+                .iter()
+                .flat_map(|parent| dataset.phylogeny.get_descendants(parent).unwrap())
+                .unique()
+                .collect_vec();
+    
+            expected_parents_descendants.retain(|p| observed_parents.contains(p));
+            expected_parents_descendants.len() == observed_parents.len()
         };
+
+        // ----------------------------------------------------------------
+        // Recombination Validation
+        // Were parents and breakpoints detected at all?
 
         // ----------------------------------------------------------------
         // Summary
@@ -153,11 +168,20 @@ pub fn validate(
                 validate.details.push(Details::IncorrectRecombinant);
             }
             if !validate_parent {
-                validate.details.push(Details::IncorrectParent);
+                // Were parents and breakpoints detected at all?
+                if !expected_parents.is_empty() && observed_parents.is_empty() {
+                    validate.details.push(Details::NoRecombinationDetected);
+                } else {
+                    validate.details.push(Details::IncorrectParent);
+                }
             }
             if !validate_population {
                 validate.details.push(Details::IncorrectPopulation);
             }
+            warn!(
+                "{expected_population} failed validation: {details}",
+                details = validate.details.iter().join(", ")
+            );
             validate
         };
 

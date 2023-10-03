@@ -2,7 +2,7 @@ pub mod constants;
 pub mod polygon;
 pub mod text;
 
-use crate::utils;
+use crate::utils::table::Table;
 use color_eyre::eyre::{eyre, Report, Result};
 use color_eyre::Help;
 use itertools::Itertools;
@@ -47,11 +47,11 @@ pub fn create(
         std::path::PathBuf::from("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf");
 
     // the name of the barcodes file will be the unique_key
-    let barcodes = utils::read_table(barcodes_path)?;
+    let barcodes = Table::read(barcodes_path)?;
     let unique_key = barcodes_path.file_stem().unwrap().to_str().unwrap();
 
     // filter the linelist to the current key
-    let mut linelist = utils::read_table(linelist_path)?;
+    let mut linelist = Table::read(linelist_path)?;
     //linelist = linelist.filter("unique_key", unique_key)?;
     linelist = linelist.filter("unique_key", unique_key)?;
     if linelist.rows.is_empty() {
@@ -61,9 +61,9 @@ pub fn create(
     }
 
     // optional import data
-    let mut annotations = utils::table::Table::new();
+    let mut annotations = Table::new();
     if let Some(annotations_path) = annotations_path {
-        annotations = utils::read_table(annotations_path)?
+        annotations = Table::read(annotations_path)?
     }
 
     // check for mandatory columns and header pos

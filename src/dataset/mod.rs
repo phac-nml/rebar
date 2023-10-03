@@ -1,9 +1,11 @@
 pub mod attributes;
-pub mod edge_cases;
-pub mod io;
+pub mod download;
+pub mod load;
+pub mod list;
+//pub mod io;
 pub mod sarscov2;
 
-use crate::dataset::edge_cases::EdgeCase;
+use crate::cli::run;
 use crate::phylogeny::Phylogeny;
 use crate::sequence::{Sequence, Substitution};
 use color_eyre::eyre::{eyre, Report, Result};
@@ -13,159 +15,6 @@ use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 use std::default::Default;
 use std::fmt;
-
-// ----------------------------------------------------------------------------
-// Structs
-// ----------------------------------------------------------------------------
-
-// ----------------------------------------------------------------------------
-// Population Conflict Summary
-
-#[derive(Clone, Debug, Deserialize, Serialize)]
-pub struct ConflictSummary {
-    pub support: Vec<Substitution>,
-    pub conflict_ref: Vec<Substitution>,
-    pub conflict_alt: Vec<Substitution>,
-    pub total: isize,
-}
-
-impl ConflictSummary {
-    pub fn new() -> Self {
-        ConflictSummary {
-            support: Vec::new(),
-            conflict_ref: Vec::new(),
-            conflict_alt: Vec::new(),
-            total: 0,
-        }
-    }
-}
-
-impl Default for ConflictSummary {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-// ----------------------------------------------------------------------------
-// Dataset Search Result
-
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
-pub struct SearchResult {
-    pub sequence_id: String,
-    pub consensus_population: String,
-    pub top_populations: Vec<String>,
-    pub diagnostic: Vec<String>,
-    pub substitutions: Vec<Substitution>,
-    pub support: BTreeMap<String, Vec<Substitution>>,
-    pub private: Vec<Substitution>,
-    pub conflict_ref: BTreeMap<String, Vec<Substitution>>,
-    pub conflict_alt: BTreeMap<String, Vec<Substitution>>,
-    pub total: BTreeMap<String, isize>,
-    pub recombinant: Option<String>,
-}
-
-impl SearchResult {
-    pub fn new(sequence: &Sequence) -> Self {
-        SearchResult {
-            sequence_id: sequence.id.clone(),
-            consensus_population: String::new(),
-            top_populations: Vec::new(),
-            diagnostic: Vec::new(),
-            support: BTreeMap::new(),
-            private: Vec::new(),
-            conflict_ref: BTreeMap::new(),
-            conflict_alt: BTreeMap::new(),
-            substitutions: Vec::new(),
-            total: BTreeMap::new(),
-            recombinant: None,
-        }
-    }
-
-    fn pretty_print(&self) -> String {
-        // Order the population lists from 'best' to 'worst'
-
-        // total
-        let mut total_order = self.total.iter().collect::<Vec<(_, _)>>();
-        total_order.sort_by(|a, b| b.1.cmp(a.1));
-
-        // support
-        let mut support_order: Vec<String> = Vec::new();
-        for (pop, _count) in &total_order {
-            let subs = &self.support[*pop];
-            let count = subs.len();
-            support_order.push(format!(
-                "{}:\n    - count: {}\n    - substitutions: {}",
-                pop,
-                count,
-                subs.iter().join(", ")
-            ));
-        }
-
-        // conflict_ref
-        let mut conflict_ref_order: Vec<String> = Vec::new();
-        for (pop, _count) in &total_order {
-            let subs = &self.conflict_ref[*pop];
-            let count = subs.len();
-            conflict_ref_order.push(format!(
-                "{}:\n    - count: {}\n    - substitutions: {}",
-                pop,
-                count,
-                subs.iter().join(", ")
-            ));
-        }
-
-        // conflict_alt
-        let mut conflict_alt_order: Vec<String> = Vec::new();
-        for (pop, _count) in &total_order {
-            let subs = &self.conflict_alt[*pop];
-            let count = subs.len();
-            conflict_alt_order.push(format!(
-                "{}:\n    - count: {}\n    - substitutions: {}",
-                pop,
-                count,
-                subs.iter().join(", ")
-            ));
-        }
-
-        // Pretty string formatting for yaml
-        let total_order = total_order
-            .iter()
-            .map(|(pop, count)| format!("{}:\n    - count: {}", &pop, &count))
-            .collect::<Vec<_>>();
-
-        // private count and list
-        let private_order = format!(
-            "  - count: {}\n    - substitutions: {}",
-            self.private.len(),
-            self.private.iter().join(", ")
-        );
-
-        format!(
-            "sequence_id: {}
-consensus_population: {}
-top_populations:\n  - {}
-diagnostic:\n  - {}
-recombinant: {}
-substitutions: {}
-total:\n  {}
-support:\n  {}
-conflict_ref:\n  {}
-conflict_alt:\n  {}
-private:\n  {}",
-            self.sequence_id,
-            self.consensus_population,
-            self.top_populations.join("\n  - "),
-            self.diagnostic.join("\n  - "),
-            self.recombinant.clone().unwrap_or("None".to_string()),
-            self.substitutions.iter().join(", "),
-            total_order.join("\n  "),
-            support_order.join("\n  "),
-            conflict_ref_order.join("\n  "),
-            conflict_alt_order.join("\n  "),
-            private_order,
-        )
-    }
-}
 
 // ----------------------------------------------------------------------------
 // Dataset
@@ -179,7 +28,7 @@ pub struct Dataset {
     pub mutations: BTreeMap<Substitution, Vec<String>>,
     pub diagnostic: BTreeMap<Substitution, String>,
     pub phylogeny: Phylogeny,
-    pub edge_cases: Vec<EdgeCase>,
+    pub edge_cases: Vec<run::Args>,
 }
 
 impl fmt::Display for Dataset {
@@ -281,10 +130,10 @@ impl Dataset {
 
         // check if we are restricting the population search
         //   otherwise use all populations in the dataset
-        let populations_default = self.populations.keys().cloned().collect_vec();
-        let populations = match populations {
-            Some(pops) => pops,
-            None => &populations_default,
+        let populations = if let Some(populations) = populations {
+            populations.clone()
+        } else {
+            self.populations.keys().cloned().collect_vec()
         };
 
         // --------------------------------------------------------------------
@@ -491,5 +340,154 @@ impl Dataset {
                 .replace('\n', format!("\n{}", " ".repeat(40)).as_str())
         );
         Ok(search_result)
+    }
+}
+
+// ----------------------------------------------------------------------------
+// Population Conflict Summary
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct ConflictSummary {
+    pub support: Vec<Substitution>,
+    pub conflict_ref: Vec<Substitution>,
+    pub conflict_alt: Vec<Substitution>,
+    pub total: isize,
+}
+
+impl ConflictSummary {
+    pub fn new() -> Self {
+        ConflictSummary {
+            support: Vec::new(),
+            conflict_ref: Vec::new(),
+            conflict_alt: Vec::new(),
+            total: 0,
+        }
+    }
+}
+
+impl Default for ConflictSummary {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+// ----------------------------------------------------------------------------
+// Dataset Search Result
+
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+pub struct SearchResult {
+    pub sequence_id: String,
+    pub consensus_population: String,
+    pub top_populations: Vec<String>,
+    pub diagnostic: Vec<String>,
+    pub substitutions: Vec<Substitution>,
+    pub support: BTreeMap<String, Vec<Substitution>>,
+    pub private: Vec<Substitution>,
+    pub conflict_ref: BTreeMap<String, Vec<Substitution>>,
+    pub conflict_alt: BTreeMap<String, Vec<Substitution>>,
+    pub total: BTreeMap<String, isize>,
+    pub recombinant: Option<String>,
+}
+
+impl SearchResult {
+    pub fn new(sequence: &Sequence) -> Self {
+        SearchResult {
+            sequence_id: sequence.id.clone(),
+            consensus_population: String::new(),
+            top_populations: Vec::new(),
+            diagnostic: Vec::new(),
+            support: BTreeMap::new(),
+            private: Vec::new(),
+            conflict_ref: BTreeMap::new(),
+            conflict_alt: BTreeMap::new(),
+            substitutions: Vec::new(),
+            total: BTreeMap::new(),
+            recombinant: None,
+        }
+    }
+
+    fn pretty_print(&self) -> String {
+        // Order the population lists from 'best' to 'worst'
+
+        // total
+        let mut total_order = self.total.iter().collect::<Vec<(_, _)>>();
+        total_order.sort_by(|a, b| b.1.cmp(a.1));
+
+        // support
+        let mut support_order: Vec<String> = Vec::new();
+        for (pop, _count) in &total_order {
+            let subs = &self.support[*pop];
+            let count = subs.len();
+            support_order.push(format!(
+                "{}:\n    - count: {}\n    - substitutions: {}",
+                pop,
+                count,
+                subs.iter().join(", ")
+            ));
+        }
+
+        // conflict_ref
+        let mut conflict_ref_order: Vec<String> = Vec::new();
+        for (pop, _count) in &total_order {
+            let subs = &self.conflict_ref[*pop];
+            let count = subs.len();
+            conflict_ref_order.push(format!(
+                "{}:\n    - count: {}\n    - substitutions: {}",
+                pop,
+                count,
+                subs.iter().join(", ")
+            ));
+        }
+
+        // conflict_alt
+        let mut conflict_alt_order: Vec<String> = Vec::new();
+        for (pop, _count) in &total_order {
+            let subs = &self.conflict_alt[*pop];
+            let count = subs.len();
+            conflict_alt_order.push(format!(
+                "{}:\n    - count: {}\n    - substitutions: {}",
+                pop,
+                count,
+                subs.iter().join(", ")
+            ));
+        }
+
+        // Pretty string formatting for yaml
+        let total_order = total_order
+            .iter()
+            .map(|(pop, count)| format!("{}:\n    - count: {}", &pop, &count))
+            .collect::<Vec<_>>();
+
+        // private count and list
+        let private_order = format!(
+            "  - count: {}\n    - substitutions: {}",
+            self.private.len(),
+            self.private.iter().join(", ")
+        );
+
+        format!(
+            "sequence_id: {}
+consensus_population: {}
+top_populations:\n  - {}
+diagnostic:\n  - {}
+recombinant: {}
+substitutions: {}
+total:\n  {}
+support:\n  {}
+conflict_ref:\n  {}
+conflict_alt:\n  {}
+private:\n  {}",
+            self.sequence_id,
+            self.consensus_population,
+            self.top_populations.join("\n  - "),
+            self.diagnostic.join("\n  - "),
+            self.recombinant.clone().unwrap_or("None".to_string()),
+            self.substitutions.iter().join(", "),
+            total_order.join("\n  "),
+            support_order.join("\n  "),
+            conflict_ref_order.join("\n  "),
+            conflict_alt_order.join("\n  "),
+            private_order,
+        )
     }
 }

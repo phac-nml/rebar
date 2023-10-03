@@ -3,7 +3,6 @@ use chrono::prelude::*;
 use color_eyre::eyre::{eyre, Report, Result, WrapErr};
 use color_eyre::Help;
 use indoc::formatdoc;
-use log::debug;
 use semver::{Version, VersionReq};
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
@@ -23,16 +22,16 @@ use strum::{EnumIter, EnumProperty};
 )]
 pub enum Name {
     #[serde(rename = "sars-cov-2")]
-    #[strum(props(list = "true"))]
+    #[strum(props(implemented = "true"))]
     SarsCov2,
     #[serde(rename = "rsv-a")]
-    #[strum(props(list = "false"))]
+    #[strum(props(implemented = "false"))]
     RsvA,
     #[serde(rename = "rsv-b")]
-    #[strum(props(ilist = "false"))]
+    #[strum(props(implemented = "false"))]
     RsvB,
     #[default]
-    #[strum(props(list = "false"))]
+    #[strum(props(implemented = "false"))]
     Unknown,
 }
 
@@ -44,8 +43,8 @@ impl Name {
             Name::SarsCov2 => {
                 compatibility.dataset.min_date =
                     Some(DateTime::parse_from_rfc3339("2023-02-09T12:00:00Z")?.into());
-            }
-            _ => (),
+            },
+            _ => compatibility.cli.version = Some(">=1.0.0".to_string()),
         }
         Ok(compatibility)
     }
@@ -270,52 +269,35 @@ impl Summary {
             misc: BTreeMap::new(),
         }
     }
-    /// import summary from specified format
-    pub fn import(
-        dataset_dir: &Path,
-        format: SummaryImportFormat,
-    ) -> Result<Summary, Report> {
-        //  import path
-        let mut import_path = dataset_dir.join("summary");
-        import_path.set_extension(format.extension());
+    /// Read summary from file.
+    pub fn read(path: &Path) -> Result<Summary, Report> {
 
-        let summary: Summary = match format {
-            SummaryImportFormat::Json => {
-                let summary = std::fs::read_to_string(import_path)
-                    .wrap_err_with(|| "Couldn't read summary {import_path:?}.")?;
-                serde_json::from_str(&summary)?
-            }
-        };
+        let summary = std::fs::read_to_string(path)
+            .wrap_err_with(|| "Failed to read file: {path:?}.")?;
+        let summary = serde_json::from_str(&summary)
+            .wrap_err_with(|| format!("Failed to parse file: {path:?}"))?;
 
         Ok(summary)
     }
 
-    /// Export summary to specified format
-    pub fn export(
-        &self,
-        dataset_dir: &Path,
-        format: SummaryExportFormat,
-    ) -> Result<(), Report> {
-        // output path
-        let mut output_path = dataset_dir.join("summary");
-        output_path.set_extension(format.extension());
-        debug!("Exporting summary to {format}: {output_path:?}");
+    /// Write summary to file.
+    pub fn write(&self, path: &Path) -> Result<(), Report> {
 
-        // format conversion
-        let output = match format {
-            SummaryExportFormat::Json => serde_json::to_string_pretty(self)
-                .wrap_err_with(|| format!("Failed to export summary to {format}"))?,
-        };
+        // create output file
+        let mut file = File::create(&path)
+            .wrap_err_with(|| {format!("Failed to create file: {path:?}")})?;
 
-        // Write to file
-        let mut file = File::create(&output_path).wrap_err_with(|| {
-            format!("Failed to access output summary path {output_path:?}")
-        })?;
-        file.write_all(output.as_bytes())
-            .wrap_err_with(|| format!("Failed to write summary to {output_path:?}"))?;
+        // parse to string
+        let output = serde_json::to_string_pretty(self)
+            .wrap_err_with(|| format!("Failed to parse: {self:?}"))?;
+
+        // write to file
+        file.write_all(format!("{}\n", output).as_bytes())
+            .wrap_err_with(|| format!("Failed to write file: {path:?}"))?;
 
         Ok(())
     }
+    
 }
 
 // ----------------------------------------------------------------------------
