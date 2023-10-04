@@ -1,9 +1,10 @@
+use crate::utils;
 use color_eyre::eyre::{eyre, Report, Result, WrapErr};
 use color_eyre::Help;
-use crate::utils;
+use log::debug;
 use petgraph::dot::{Config, Dot};
 use petgraph::graph::{Graph, NodeIndex};
-use petgraph::visit::Dfs;
+use petgraph::visit::{Dfs, IntoNodeReferences};
 use petgraph::Direction;
 use serde::{Deserialize, Serialize};
 use serde_json;
@@ -16,11 +17,10 @@ use std::string::ToString;
 // ----------------------------------------------------------------------------
 // Phylogeny
 
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct Phylogeny {
     pub graph: Graph<String, isize>,
     pub order: Vec<String>,
-    pub lookup: HashMap<String, NodeIndex>,
     pub recombinants: Vec<String>,
 }
 
@@ -35,17 +35,17 @@ impl Phylogeny {
         Phylogeny {
             graph: Graph::new(),
             order: Vec::new(),
-            lookup: HashMap::new(),
             recombinants: Vec::new(),
         }
     }
 
     pub fn is_empty(&self) -> bool {
-        self.lookup.len() == 0
+        self.graph.node_count() == 0
     }
 
+    /// Return true if a node name is a recombinant.
     pub fn is_recombinant(&self, name: &str) -> Result<bool, Report> {
-        let node = self.get_node(name).unwrap();
+        let node = self.get_node(name)?;
         let mut edges = self
             .graph
             .neighbors_directed(node, Direction::Incoming)
@@ -68,8 +68,8 @@ impl Phylogeny {
         let mut recombinants: Vec<String> = Vec::new();
 
         for node in self.graph.node_indices() {
-            let name = self.get_name(&node).unwrap();
-            let is_recombinant = self.is_recombinant(&name).unwrap();
+            let name = self.get_name(&node)?;
+            let is_recombinant = self.is_recombinant(&name)?;
             if is_recombinant {
                 recombinants.push(name);
             }
@@ -78,9 +78,33 @@ impl Phylogeny {
         Ok(recombinants)
     }
 
+    /// Prune a clade from the graph.
+    pub fn prune(&self, name: &str) -> Result<Phylogeny, Report> {
+
+        let mut phylogeny = self.clone();
+        
+        // Find the node that matches the name
+        let descendants = self.get_descendants(name)?;
+
+        for name in descendants {
+            debug!("Pruning node: {name}");
+            let node = self.get_node(&name)?;
+            // Remove from graph
+            phylogeny
+                .graph
+                .remove_node(node)
+                .ok_or_else(|| eyre!("Failed to calculated the maximum sequence ID length"))?;
+            // Remove from order
+            phylogeny.order.retain(|n| n != &name);
+            // Remove from recombinants
+            phylogeny.recombinants.retain(|r| r != &name);
+        }
+
+        Ok(phylogeny)
+
+    }
     /// Read phylogeny from file.
     pub fn read(path: &Path) -> Result<Phylogeny, Report> {
-
         let phylogeny = std::fs::read_to_string(path)
             .wrap_err_with(|| "Failed to read file: {path:?}.")?;
         let phylogeny = serde_json::from_str(&phylogeny)
@@ -91,10 +115,9 @@ impl Phylogeny {
 
     /// Write phylogeny to file.
     pub fn write(&self, output_path: &Path) -> Result<(), Report> {
-
         // Create output file
         let mut file = File::create(&output_path)?;
-        
+
         // .unwrap_or_else(|_| {
         //     return Err(eyre!("Failed to create file: {:?}.", &output_path))
         // });
@@ -115,19 +138,20 @@ impl Phylogeny {
                 output
             }
             // ----------------------------------------------------------------
-            // JSON for rebar          
+            // JSON for rebar
             "json" => serde_json::to_string_pretty(&self)
                 .unwrap_or_else(|_| panic!("Failed to parse: {self:?}")),
-            _ => return Err(
-                eyre!("Phylogeny write for extension .{ext} is not supported.")
-                .suggestion("Please try .json or .dot instead.")
-            )
+            _ => {
+                return Err(eyre!(
+                    "Phylogeny write for extension .{ext} is not supported."
+                )
+                .suggestion("Please try .json or .dot instead."))
+            }
         };
 
         // Write to file
-        file.write_all(output.as_bytes()).unwrap_or_else(|_| {
-            panic!("Failed to write file: {:?}.", &output_path)
-        });
+        file.write_all(output.as_bytes())
+            .unwrap_or_else(|_| panic!("Failed to write file: {:?}.", &output_path));
 
         Ok(())
     }
@@ -145,7 +169,7 @@ impl Phylogeny {
         // Iterate over descendants
         while let Some(nx) = dfs.next(&self.graph) {
             // Get node name
-            let nx_name = self.get_name(&nx).unwrap();
+            let nx_name = self.get_name(&nx)?;
             descendants.push(nx_name);
         }
 
@@ -162,7 +186,7 @@ impl Phylogeny {
             .neighbors_directed(node, Direction::Incoming)
             .detach();
         while let Some(parent_node) = neighbors.next_node(&self.graph) {
-            let parent_name = self.get_name(&parent_node).unwrap();
+            let parent_name = self.get_name(&parent_node)?;
             parents.push(parent_name);
         }
 
@@ -198,7 +222,7 @@ impl Phylogeny {
                 .detach();
             while let Some(parent_node) = neighbors.next_node(&self.graph) {
                 // convert the parent graph index to a string name
-                let parent_name = self.get_name(&parent_node).unwrap();
+                let parent_name = self.get_name(&parent_node)?;
 
                 // recursively get path of each parent to the destination
                 let mut parent_paths = self.get_paths(&parent_name, dest, direction)?;
@@ -314,21 +338,21 @@ impl Phylogeny {
     }
 
     pub fn get_node(&self, name: &str) -> Result<NodeIndex, Report> {
-        if self.lookup.contains_key(name) {
-            let node = self.lookup[name];
-            Ok(node)
-        } else {
-            Err(eyre!("Node {name} is not found in the phylogeny."))
-        }
-    }
-
-    pub fn get_name(&self, node: &NodeIndex) -> Option<String> {
-        for (name, node_l) in &self.lookup {
-            if node == node_l {
-                return Some(name.clone());
+        for (idx, n) in self.graph.node_references() {
+            if n == name {
+                return Ok(idx.clone())
             }
         }
+        return Err(eyre!("Name {name} is not in the phylogeny."))
+    }
 
-        None
+    pub fn get_name(&self, node: &NodeIndex) -> Result<String, Report> {
+
+        for (idx, n) in self.graph.node_references() {
+            if &idx == node {
+                return Ok(n.clone())
+            }
+        }
+        return Err(eyre!("Node {node:?} is not in the phylogeny."))
     }
 }

@@ -136,13 +136,12 @@ pub fn validate(
         let validate_parent = if expected_parents.is_empty() {
             observed_parents.is_empty()
         } else {
-
             let mut expected_parents_descendants = expected_parents
                 .iter()
                 .flat_map(|parent| dataset.phylogeny.get_descendants(parent).unwrap())
                 .unique()
                 .collect_vec();
-    
+
             expected_parents_descendants.retain(|p| observed_parents.contains(p));
             expected_parents_descendants.len() == observed_parents.len()
         };

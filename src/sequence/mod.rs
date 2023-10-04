@@ -140,7 +140,7 @@ impl Sequence {
     pub fn from_record(
         record: bio::io::fasta::Record,
         reference: Option<&Sequence>,
-        mask: usize,
+        mask: &Vec<usize>,
     ) -> Result<Self, Report> {
         let mut sample = Sequence::new();
         sample.id = record.id().to_string();
@@ -156,7 +156,10 @@ impl Sequence {
                 let mut s = *s;
                 let r = *r;
                 // Mask 5' and 3' ends
-                if coord <= mask || coord > sample.genome_length - mask {
+                if mask.len() >= 1 && coord <= mask[0] {
+                    s = 'N';
+                }
+                if mask.len() == 2 && coord > sample.genome_length - mask[1] {
                     s = 'N';
                 }
 
@@ -202,7 +205,7 @@ impl Sequence {
 // ----------------------------------------------------------------------------
 
 /// Read first record of fasta path into sequence record.
-pub fn read_reference(path: &Path, mask: usize) -> Result<Sequence, Report> {
+pub fn read_reference(path: &Path, mask: &Vec<usize>) -> Result<Sequence, Report> {
     // start reading in the reference as fasta, raise error if file doesn't exist
     let reader = fasta::Reader::from_file(path).expect("Unable to read reference");
 

@@ -1,16 +1,15 @@
 use crate::cli::run;
-use crate::phylogeny::Phylogeny;
+//use crate::phylogeny::Phylogeny;
 use color_eyre::eyre::{Report, Result};
-use itertools::Itertools;
+//use itertools::Itertools;
 use log::debug;
 
 /// Create default SARS-CoV-2 recombinant edge cases.
 pub fn default() -> Result<Vec<run::Args>, Report> {
-    
     let mut edge_cases: Vec<run::Args> = Vec::new();
 
     // // --------------------------------------------------------------------
-    // // Designated Recombinants  
+    // // Designated Recombinants
 
     // let manual = vec!["XCF", "XCG"].into_iter().map(String::from).collect_vec();
 
@@ -27,6 +26,14 @@ pub fn default() -> Result<Vec<run::Args>, Report> {
 
     // --------------------------------------------------------------------
     // Manual
+
+    // XR: BA.2 and BA.1 with no unique subs from BA.1
+    let recombinant = "XR".to_string();
+    debug!("Creating manual edge case: {recombinant:?}");
+    let mut edge_case = run::Args::default();
+    edge_case.min_subs = 0;
+    edge_case.population = Some(recombinant);
+    edge_cases.push(edge_case);
 
     // XCF: XBB and FE.1 (XBB.1.18.1) with no unique subs from XBB
     let recombinant = "XCF".to_string();

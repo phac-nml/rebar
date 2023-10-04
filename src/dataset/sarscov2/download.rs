@@ -1,28 +1,24 @@
-use color_eyre::eyre::{eyre, Report, Result, WrapErr};
 use crate::dataset::attributes::Tag;
 use crate::utils::{download_github, remote_file::RemoteFile};
+use color_eyre::eyre::{eyre, Report, Result, WrapErr};
 use std::path::Path;
 
 pub async fn reference(tag: &Tag, output_path: &Path) -> Result<RemoteFile, Report> {
     let repo = "nextstrain/ncov";
     let remote_path = "data/references_sequences.fasta";
     let sha: Option<String> = None;
-    let remote_file =
-        download_github(repo, tag, remote_path, output_path, &sha)
-            .await
-            .wrap_err_with(|| eyre!("Failed downloading sars-cov-2 reference fasta."))?;
+    let remote_file = download_github(repo, tag, remote_path, output_path, &sha)
+        .await
+        .wrap_err_with(|| eyre!("Failed downloading sars-cov-2 reference fasta."))?;
     Ok(remote_file)
 }
 pub async fn populations(tag: &Tag, output_path: &Path) -> Result<RemoteFile, Report> {
     let repo = "corneliusroemer/pango-sequences";
     let remote_path = "data/pango-consensus-sequences_genome-nuc.fasta.zst";
     let sha: Option<String> = None;
-    let remote_file =
-        download_github(repo, tag, remote_path, output_path, &sha)
-            .await
-            .wrap_err_with(|| {
-                eyre!("Failed downloading sars-cov-2 populations fasta.")
-            })?;
+    let remote_file = download_github(repo, tag, remote_path, output_path, &sha)
+        .await
+        .wrap_err_with(|| eyre!("Failed downloading sars-cov-2 populations fasta."))?;
     Ok(remote_file)
 }
 
@@ -34,10 +30,9 @@ pub async fn alias_key(tag: &Tag, output_path: &Path) -> Result<RemoteFile, Repo
     let repo = "cov-lineages/pango-designation";
     let remote_path = "pango_designation/alias_key.json";
     let sha: Option<String> = None;
-    let remote_file =
-        download_github(repo, tag, remote_path, output_path, &sha)
-            .await
-            .wrap_err_with(|| eyre!("Failed downloading sars-cov-2 alias key."))?;
+    let remote_file = download_github(repo, tag, remote_path, output_path, &sha)
+        .await
+        .wrap_err_with(|| eyre!("Failed downloading sars-cov-2 alias key."))?;
     Ok(remote_file)
 }
 
@@ -49,9 +44,8 @@ pub async fn lineage_notes(tag: &Tag, output_path: &Path) -> Result<RemoteFile, 
     let repo = "cov-lineages/pango-designation";
     let remote_path = "lineage_notes.txt";
     let sha: Option<String> = None;
-    let remote_file =
-        download_github(repo, tag, remote_path, output_path, &sha)
-            .await
-            .wrap_err_with(|| eyre!("Failed downloading sars-cov-2 lineage notes."))?;
+    let remote_file = download_github(repo, tag, remote_path, output_path, &sha)
+        .await
+        .wrap_err_with(|| eyre!("Failed downloading sars-cov-2 lineage notes."))?;
     Ok(remote_file)
 }

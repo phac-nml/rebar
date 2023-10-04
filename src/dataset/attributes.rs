@@ -43,7 +43,7 @@ impl Name {
             Name::SarsCov2 => {
                 compatibility.dataset.min_date =
                     Some(DateTime::parse_from_rfc3339("2023-02-09T12:00:00Z")?.into());
-            },
+            }
             _ => compatibility.cli.version = Some(">=1.0.0".to_string()),
         }
         Ok(compatibility)
@@ -271,7 +271,6 @@ impl Summary {
     }
     /// Read summary from file.
     pub fn read(path: &Path) -> Result<Summary, Report> {
-
         let summary = std::fs::read_to_string(path)
             .wrap_err_with(|| "Failed to read file: {path:?}.")?;
         let summary = serde_json::from_str(&summary)
@@ -282,10 +281,9 @@ impl Summary {
 
     /// Write summary to file.
     pub fn write(&self, path: &Path) -> Result<(), Report> {
-
         // create output file
         let mut file = File::create(&path)
-            .wrap_err_with(|| {format!("Failed to create file: {path:?}")})?;
+            .wrap_err_with(|| format!("Failed to create file: {path:?}"))?;
 
         // parse to string
         let output = serde_json::to_string_pretty(self)
@@ -297,7 +295,6 @@ impl Summary {
 
         Ok(())
     }
-    
 }
 
 // ----------------------------------------------------------------------------

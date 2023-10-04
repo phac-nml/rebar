@@ -10,22 +10,31 @@ use std::path::{Path, PathBuf};
 #[derive(Clone, Debug, Deserialize, Parser, Serialize)]
 #[clap(verbatim_doc_comment)]
 pub struct Args {
-    #[command(flatten)]
-    pub input: Input,
-
     /// Dataset directory.
     #[clap(short = 'd', long, required = true)]
+    #[serde(
+        skip_serializing_if = "Args::is_default_dataset_dir",
+        skip_deserializing
+    )]
     pub dataset_dir: PathBuf,
 
-    /// Output directory.
-    ///
-    /// If the directory does not exist, it will be created.
-    #[clap(short = 'o', long, required = true)]
-    pub output_dir: PathBuf,    
+    #[command(flatten)]
+    #[serde(skip_serializing_if = "Args::is_default_input", skip_deserializing)]
+    pub input: Input,
+
+    /// Remove these populations from the dataset.
+    /// 
+    /// Regardless of whether you use '*' or not, all descendants of the
+    /// specified populations will be removed.
+    #[arg(short = 'k', long, value_delimiter = ',')]
+    pub knockout: Option<Vec<String>>,
 
     /// Number of bases to mask at the 5' and 3' ends.
-    #[arg(short = 'm', long, default_value_t = Args::default().mask)]
-    pub mask: usize,
+    ///
+    /// Comma separ
+    #[arg(short = 'm', long)]
+    #[arg(long, value_delimiter = ',')]
+    pub mask: Vec<usize>,
 
     /// Maximum number of search iterations to find each parent.
     #[arg(short = 'i', long, default_value_t = Args::default().max_iter)]
@@ -45,10 +54,24 @@ pub struct Args {
 
     /// Minimum number of substitutions in a parental region.
     #[arg(short = 's', long, default_value_t = Args::default().min_subs)]
-    pub min_subs: usize, 
+    pub min_subs: usize,
+
+    /// Run a naive search, which does not use information about designated recombinant parents.
+    #[arg(short = 'u', long, default_value_t = Args::default().naive)]
+    pub naive: bool,
+
+    /// Output directory.
+    ///
+    /// If the directory does not exist, it will be created.
+    #[clap(short = 'o', long, required = true)]
+    #[serde(
+        skip_serializing_if = "Args::is_default_output_dir",
+        skip_deserializing
+    )]
+    pub output_dir: PathBuf,
 
     /// Restrict parent search to just these candidate parents.
-    #[arg(long, value_delimiter=',', num_args = 0..)]
+    #[arg(long, value_delimiter = ',')]
     pub parents: Option<Vec<String>>,
 
     // Hidden attribute, will be used for edge cases.
@@ -57,11 +80,8 @@ pub struct Args {
 
     /// Number of CPU threads to use.
     #[clap(short = 't', long, default_value_t = Args::default().threads)]
+    #[serde(skip)]
     pub threads: usize,
-
-    /// Run an unbiased search, which does not use information about designated recombinant parents.
-    #[arg(short = 'u', long, default_value_t = Args::default().unbiased)]
-    pub unbiased: bool,       
 }
 
 impl Default for Args {
@@ -69,17 +89,18 @@ impl Default for Args {
         Args {
             dataset_dir: PathBuf::new(),
             input: Input::default(),
-            mask: 200,
+            knockout: None,
+            mask: vec![100, 200],
             max_iter: 3,
             max_parents: 2,
             min_consecutive: 3,
             min_length: 500,
             min_subs: 1,
+            naive: false,
             output_dir: PathBuf::new(),
             parents: None,
             population: None,
             threads: 1,
-            unbiased: false,
         }
     }
 }
@@ -87,25 +108,39 @@ impl Default for Args {
 impl Args {
     pub fn new() -> Self {
         Args {
-            dataset_dir: PathBuf::new(),      
+            dataset_dir: PathBuf::new(),
             input: Input::default(),
-            mask: 0,
-            max_iter: 0,            
+            knockout: None,
+            mask: vec![0, 0],
+            max_iter: 0,
             max_parents: 0,
             min_consecutive: 0,
             min_length: 0,
             min_subs: 0,
             output_dir: PathBuf::new(),
             parents: None,
-            population: None,            
+            population: None,
             threads: 0,
-            unbiased: false,
+            naive: false,
         }
+    }
+
+    /// Check if input is default.
+    pub fn is_default_dataset_dir(path: &Path) -> bool {
+        path == &Args::default().dataset_dir
+    }
+
+    /// Check if input is default.
+    pub fn is_default_input(input: &Input) -> bool {
+        input == &Args::default().input
+    }
+    /// Check if output directory is default.
+    pub fn is_default_output_dir(path: &Path) -> bool {
+        path == &Args::default().output_dir
     }
 
     /// Override Args for edge case handling of particular recombinants.
     pub fn apply_edge_case(&self, new: &Args) -> Result<Args, Report> {
-
         let mut output = self.clone();
 
         output.max_iter = new.max_iter;
@@ -114,19 +149,17 @@ impl Args {
         output.min_length = new.min_length;
         output.min_subs = new.min_subs;
         output.parents = new.parents.clone();
-        output.unbiased = new.unbiased;
-            
+        output.naive = new.naive;
+
         Ok(output)
-    }    
+    }
 
     /// Read args from file.
-    /// 
+    ///
     /// Returns an Either with options:
     ///     Left: Args
     ///     Right: Vec<args>
-    pub fn read(path: &Path, multiple: bool) -> Result<
-    Either<Args, Vec<Args>>, Report> {
-
+    pub fn read(path: &Path, multiple: bool) -> Result<Either<Args, Vec<Args>>, Report> {
         let input = std::fs::read_to_string(path)
             .wrap_err_with(|| "Failed to read file: {path:?}.")?;
         let output: Vec<Args> = serde_json::from_str(&input)
@@ -137,14 +170,13 @@ impl Args {
         } else {
             Ok(Left(output[0].clone()))
         }
-    } 
+    }
 
     /// Write args to file.
     pub fn write(args: &[Args], path: &Path) -> Result<(), Report> {
-
         // create file
         let mut file = File::create(&path)
-            .wrap_err_with(|| {format!("Failed to create file: {path:?}")})?;
+            .wrap_err_with(|| format!("Failed to create file: {path:?}"))?;
 
         // parse to string
         let args = serde_json::to_string_pretty(args)
@@ -155,14 +187,14 @@ impl Args {
             .wrap_err_with(|| format!("Failed to write file: {path:?}"))?;
 
         Ok(())
-    }    
+    }
 }
 
-#[derive(ClapArgs, Clone, Debug, Deserialize, Serialize)]
+#[derive(ClapArgs, Clone, Debug, Deserialize, Serialize, PartialEq)]
 #[group(required = true, multiple = true)]
 pub struct Input {
     /// Input fasta alignment.
-    #[arg(long, value_delimiter=',', num_args = 0..)]
+    #[arg(long, value_delimiter = ',')]
     pub populations: Option<Vec<String>>,
 
     /// Input dataset population.
