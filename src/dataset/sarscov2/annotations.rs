@@ -1,5 +1,5 @@
-use color_eyre::eyre::{Result, Report};
 use crate::utils::table::Table;
+use color_eyre::eyre::{Report, Result};
 use itertools::Itertools;
 
 /// Create SARS-CoV-2 genome annotations.

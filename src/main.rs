@@ -1,6 +1,6 @@
 use clap::Parser;
 use color_eyre::eyre::{Report, Result};
-use rebar::cli::{Cli, Command, dataset};
+use rebar::cli::{dataset, Cli, Command};
 
 #[tokio::main]
 async fn main() -> Result<(), Report> {

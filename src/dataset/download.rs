@@ -1,16 +1,14 @@
-use color_eyre::eyre::{Report, Result};
 use crate::cli;
 use crate::dataset;
 use crate::dataset::attributes::{check_compatibility, Name, Summary};
 use crate::{utils, utils::remote_file::RemoteFile};
+use color_eyre::eyre::{Report, Result};
 use log::{info, warn};
 use std::fs::create_dir_all;
 use std::path::Path;
 
-
 /// Download dataset
 pub async fn dataset(args: &mut cli::dataset::download::Args) -> Result<(), Report> {
-
     info!("Downloading dataset: {} {}", &args.name, &args.tag);
 
     // --------------------------------------------------------------------
@@ -44,7 +42,7 @@ pub async fn dataset(args: &mut cli::dataset::download::Args) -> Result<(), Repo
     if !args.output_dir.exists() {
         info!("Creating output directory: {:?}", &args.output_dir);
         create_dir_all(&args.output_dir)?;
-    }   
+    }
 
     // --------------------------------------------------------------------
     // Reference
@@ -54,10 +52,11 @@ pub async fn dataset(args: &mut cli::dataset::download::Args) -> Result<(), Repo
 
     summary.reference = if args.summary.is_some() {
         snapshot(&summary.reference, &output_path).await?
-    }
-    else {
+    } else {
         match args.name {
-            Name::SarsCov2 => dataset::sarscov2::download::reference(&args.tag, &output_path).await?,
+            Name::SarsCov2 => {
+                dataset::sarscov2::download::reference(&args.tag, &output_path).await?
+            }
             _ => todo!(),
         }
     };
@@ -65,15 +64,16 @@ pub async fn dataset(args: &mut cli::dataset::download::Args) -> Result<(), Repo
     // --------------------------------------------------------------------
     // Populations
 
-    let output_path = args.output_dir.join("populations.fasta"); 
+    let output_path = args.output_dir.join("populations.fasta");
     info!("Downloading populations: {output_path:?}");
 
     summary.populations = if args.summary.is_some() {
         dataset::download::snapshot(&summary.populations, &output_path).await?
-    }
-    else {
+    } else {
         match args.name {
-            Name::SarsCov2 => dataset::sarscov2::download::populations(&args.tag, &output_path).await?,
+            Name::SarsCov2 => {
+                dataset::sarscov2::download::populations(&args.tag, &output_path).await?
+            }
             _ => todo!(),
         }
     };
@@ -97,7 +97,9 @@ pub async fn dataset(args: &mut cli::dataset::download::Args) -> Result<(), Repo
     info!("Building phylogeny: {output_path:?}");
 
     let phylogeny = match args.name {
-        Name::SarsCov2 => dataset::sarscov2::phylogeny::build(&mut summary, &args.output_dir).await?,
+        Name::SarsCov2 => {
+            dataset::sarscov2::phylogeny::build(&mut summary, &args.output_dir).await?
+        }
         _ => todo!(),
     };
     phylogeny.write(&output_path)?;
@@ -115,11 +117,11 @@ pub async fn dataset(args: &mut cli::dataset::download::Args) -> Result<(), Repo
         let output_path = args.output_dir.join("diagnostic_mutations.tsv");
         info!("Identifying diagnostic mutations: {output_path:?}");
 
-        let mask = 0;
+        let mask = vec![0, 0];
         let (_populations, mutations) = dataset::load::parse_populations(
             &summary.populations.local_path,
             &summary.reference.local_path,
-            mask,
+            &mask,
         )?;
         let diagnostic = dataset::load::get_diagnostic_mutations(&mutations, &phylogeny)?;
         diagnostic.write(&output_path)?;
@@ -157,8 +159,10 @@ pub async fn dataset(args: &mut cli::dataset::download::Args) -> Result<(), Repo
 }
 
 /// Download remote file from a summary snapshot.
-pub async fn snapshot(snapshot: &RemoteFile, output_path: &Path) -> Result<RemoteFile, Report> {
-
+pub async fn snapshot(
+    snapshot: &RemoteFile,
+    output_path: &Path,
+) -> Result<RemoteFile, Report> {
     // Check extension for decompression
     let ext = utils::path_to_ext(Path::new(&snapshot.url))?;
     let decompress = ext == "zst";

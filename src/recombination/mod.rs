@@ -1,10 +1,12 @@
 pub mod search;
 pub mod validate;
 
+use crate::cli::run;
 use crate::dataset::SearchResult;
 use crate::sequence::{Sequence, Substitution};
-use crate::utils;
+use crate::utils::table::Table;
 use color_eyre::eyre::{eyre, Report, Result};
+use color_eyre::Help;
 use itertools::Itertools;
 use log::debug;
 use serde::{Deserialize, Serialize};
@@ -14,13 +16,11 @@ use std::collections::BTreeMap;
 // Structs
 // ----------------------------------------------------------------------------
 
-
 // ----------------------------------------------------------------------------
 // Recombination
 
 #[derive(Clone, Debug, Serialize)]
 pub struct Recombination<'seq> {
-    //pub sequence_id: String,
     pub sequence: &'seq Sequence,
     pub unique_key: String,
     pub recombinant: Option<String>,
@@ -30,7 +30,7 @@ pub struct Recombination<'seq> {
     pub genome_length: usize,
     pub edge_case: bool,
     #[serde(skip_serializing)]
-    pub table: utils::table::Table,
+    pub table: Table,
 }
 
 impl<'seq> Recombination<'seq> {
@@ -42,7 +42,7 @@ impl<'seq> Recombination<'seq> {
             parents: Vec::new(),
             breakpoints: Vec::new(),
             regions: BTreeMap::new(),
-            table: utils::table::Table::new(),
+            table: Table::new(),
             genome_length: sequence.genome_length,
             edge_case: false,
         }
@@ -97,62 +97,83 @@ impl std::fmt::Display for Region {
 // Functions
 // ----------------------------------------------------------------------------
 
+/// Detect recombination in a query sequence.
+///
+///
+/// # Arguments
+///
+///  * `sequence` | `&'seq Sequence` | Query sequence.
+///  * `best_match` | &SearchResult |
+///  * `parents` | `&Vec<dataset::SearchResult>` | Any known recombination parents so far.
+///  * `parent_candidate` |  Option<&SearchResult> |  An unknown recombination parent to evaluate.
+///  * `reference` |
+///  * `args` | &run::Args | CLI run parameters.
+///
 pub fn detect_recombination<'seq>(
+    sequence: &'seq Sequence,
+    best_match: &SearchResult,
     parents: &Vec<SearchResult>,
-    search_result: Option<&SearchResult>,
-    args: &search::Args<'_, 'seq, '_>,
+    parent_candidate: Option<&SearchResult>,
+    reference: &Sequence,
+    args: &run::Args,
 ) -> Result<Recombination<'seq>, Report> {
-    let mut recombination = Recombination::new(args.sequence);
+    let mut recombination = Recombination::new(sequence);
 
-    //recombination.sequence = args.sequence;
-    //recombination.genome_length = args.sequence.genome_length;
-
-    // if no search_result was provided, just use first parent
-    let search_result_default = &parents[0];
-    let search_result = match search_result {
-        Some(summary) => summary,
-        None => search_result_default,
+    // if no parent candidates were provided, just use the first parent
+    let parent_candidate = match parent_candidate {
+        Some(search_result) => search_result,
+        None => {
+            if !parents.is_empty() {
+                &parents[0]
+            } else {
+                return Err(eyre!(
+                    "No parents were provided for recombination detection."
+                )
+                .suggestion("Please check the parents and parents_candidate variables."));
+            }
+        }
     };
 
-    // Create a table where rows are coordinates and columns are
-    // coord, parent, Reference, <parents...>, <search_result> <sequence>
+    // Combine previously known parents and new candidates
+    let mut parents = parents.clone();
+    parents.push(parent_candidate.clone());
 
-    let mut table = utils::table::Table::new();
+    // --------------------------------------------------------------------
+    // Init Table
+    // --------------------------------------------------------------------
+
+    // Create a table where rows are coordinates and columns are
+    // coord, parent, Reference, <parents...>, <parent_candidate> <sequence>
+
+    let mut table = Table::new();
     table.headers = vec!["coord", "origin", "Reference"]
         .into_iter()
         .map(String::from)
         .collect_vec();
-    for parent in parents {
+    for parent in &parents {
         table.headers.push(parent.consensus_population.to_string());
     }
-    table
-        .headers
-        .push(search_result.consensus_population.to_string());
-    table.headers.push(args.sequence.id.to_string());
+    table.headers.push(sequence.id.to_string());
     table.rows = Vec::new();
 
     // get the column position of each header, trying to avoid hard-coding
     let coord_col_i = table.header_position("coord")?;
     let origin_col_i = table.header_position("origin")?;
     let ref_col_i = table.header_position("Reference")?;
-    let search_col_i = table.header_position(&search_result.consensus_population)?;
-    let seq_col_i = table.header_position(&args.sequence.id)?;
-
-    // Identify all subs found in parents and search_result
-    let mut all_subs = Vec::new();
-    for parent in parents {
-        all_subs.extend(parent.substitutions.to_owned());
-    }
-    all_subs.extend(search_result.substitutions.to_owned());
-    all_subs.sort();
+    let seq_col_i = table.header_position(&sequence.id)?;
 
     // --------------------------------------------------------------------
     // Identify Substitution Parental Origins
     // --------------------------------------------------------------------
 
-    let all_coords = all_subs.iter().map(|sub| sub.coord).collect::<Vec<_>>();
     // Deduplicate coords (might be non-bi-allelic)
-    let coords = all_coords.into_iter().unique().collect::<Vec<_>>();
+    let mut coords = parents
+        .iter()
+        .flat_map(|p| p.substitutions.iter().map(|s| s.coord).collect_vec())
+        .unique()
+        .collect_vec();
+    coords.sort();
+
     let mut privates = Vec::new();
 
     for coord in coords {
@@ -163,54 +184,39 @@ pub fn detect_recombination<'seq>(
         row[coord_col_i] = coord.to_string();
 
         // get Reference base directly from sequence
-        let ref_base = &args.dataset.reference.seq[coord - 1];
+        let ref_base = &reference.seq[coord - 1];
         row[ref_col_i] = ref_base.to_string();
 
         // get Sample base directly form sequence
-        let seq_base = &args.sequence.seq[coord - 1];
+        let seq_base = &sequence.seq[coord - 1];
         row[seq_col_i] = seq_base.to_string();
 
-        // init base origins (could be multiple)
+        // init sequence base origins (could be multiple)
         let mut origins = Vec::new();
 
         // Keep track of parent bases diversity, if they're all the same, this
         // isn't an informative/differentiating site
         let mut parent_bases = Vec::new();
 
-        for parent in parents {
+        for parent in &parents {
             let parent_base = parent
                 .substitutions
                 .iter()
                 .filter(|sub| sub.coord == coord)
                 .map(|sub| sub.alt)
                 .next()
+                // Assume reference if no substitution, perhaps risky
                 .unwrap_or(*ref_base);
 
             if parent_base == *seq_base {
                 origins.push(parent.consensus_population.clone());
             }
 
+            // Add bases to table
             let parent_col_i = table.header_position(&parent.consensus_population)?;
             row[parent_col_i] = parent_base.to_string();
             parent_bases.push(parent_base);
         }
-
-        // Add the search result that is currently being evaluated
-        let search_result_base = search_result
-            .substitutions
-            .iter()
-            .filter(|sub| sub.coord == coord)
-            .map(|sub| sub.alt)
-            .next()
-            .unwrap_or(*ref_base);
-
-        if search_result_base == *seq_base {
-            origins.push(search_result.consensus_population.clone());
-        }
-
-        // Add search result to the row
-        row[search_col_i] = search_result_base.to_string();
-        parent_bases.push(search_result_base);
 
         // Is this coord a discriminating site?
         // Remove subs that are identical between all parents
@@ -221,18 +227,21 @@ pub fn detect_recombination<'seq>(
             continue;
         }
 
-        // If no origins were found, this is private
+        // Option #1. No known origins, is private mutation
         if origins.is_empty() {
-            let private = args
-                .sequence
-                .substitutions
-                .iter()
-                .find(|sub| sub.coord == coord);
+            let private = sequence.substitutions.iter().find(|sub| sub.coord == coord);
             privates.push(private);
-        } else if origins.len() == 1 {
+        }
+        // Option #2. Is fully descriminating (only 1 parent matches)
+        else if origins.len() == 1 {
             // add origins to row
             row[origin_col_i] = origins.iter().join(",");
             table.rows.push(row);
+        }
+        // Option #3. Non-discriminating
+        // todo!() revisit this when we test >= 3 parents
+        else {
+            continue;
         }
     }
 
@@ -289,14 +298,14 @@ pub fn detect_recombination<'seq>(
         serde_json::to_string(&regions_intersect).unwrap()
     );
 
-    // Make sure all the prev_parents + search_result have at least 1 region
+    // Make sure all the prev_parents + parent_candidate have at least 1 region
     let region_origins = regions_intersect
         .values()
         .map(|region| region.origin.to_owned())
         .unique()
         .collect_vec();
 
-    for parent in parents {
+    for parent in &parents {
         if !region_origins.contains(&parent.consensus_population) {
             return Err(eyre!(
                 "No recombination detected for parent {}.",
@@ -304,10 +313,10 @@ pub fn detect_recombination<'seq>(
             ));
         }
     }
-    if !region_origins.contains(&search_result.consensus_population) {
+    if !region_origins.contains(&parent_candidate.consensus_population) {
         return Err(eyre!(
             "No recombination detected for parent {}.",
-            &search_result.consensus_population
+            &parent_candidate.consensus_population
         ));
     }
 
@@ -364,18 +373,17 @@ pub fn detect_recombination<'seq>(
     recombination.breakpoints = breakpoints;
     // pre-filter or post-filter table?
     recombination.table = table;
-    recombination.recombinant = args.best_match.recombinant.clone();
+    recombination.recombinant = best_match.recombinant.clone();
 
     // Grab name of recombinant for unique key
-    let best_match_recombinant = &args.best_match.recombinant;
-    let rec_key = match best_match_recombinant {
-        Some(recombinant) => recombinant,
+    let recombinant_name = match &best_match.recombinant {
+        Some(name) => name,
         None => "novel",
     };
 
     recombination.unique_key = format!(
         "{}_{}_{}",
-        rec_key,
+        recombinant_name,
         &recombination.parents.iter().join("_"),
         &recombination.breakpoints.iter().join("_"),
     );
@@ -383,9 +391,7 @@ pub fn detect_recombination<'seq>(
     Ok(recombination)
 }
 
-pub fn identify_regions(
-    table: &utils::table::Table,
-) -> Result<BTreeMap<usize, Region>, Report> {
+pub fn identify_regions(table: &Table) -> Result<BTreeMap<usize, Region>, Report> {
     let mut origin_prev: Option<String> = None;
     let mut regions = BTreeMap::new();
     let mut start = 0;
@@ -575,7 +581,7 @@ pub fn identify_breakpoints(
 pub fn combine_tables(
     recombinations: &[Recombination],
     reference: &Sequence,
-) -> Result<utils::table::Table, Report> {
+) -> Result<Table, Report> {
     // ------------------------------------------------------------------------
     // Input Checking
 
@@ -611,7 +617,7 @@ pub fn combine_tables(
     // Construct Table Headers
 
     // final result to mutate and return
-    let mut combine_table = utils::table::Table::new();
+    let mut combine_table = Table::new();
 
     // Mandatory headers
     // convert to String, &str won't work here, since we're going to create

@@ -1,8 +1,8 @@
-use color_eyre::eyre::{Result, Report};
-use chrono::SecondsFormat;
 use crate::cli;
 use crate::dataset::attributes::Name;
 use crate::utils::table::Table;
+use chrono::SecondsFormat;
+use color_eyre::eyre::{Report, Result};
 use itertools::Itertools;
 use strum::{EnumProperty, IntoEnumIterator};
 

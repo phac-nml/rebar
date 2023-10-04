@@ -3,7 +3,7 @@ use color_eyre::eyre::{eyre, Report, Result, WrapErr};
 use itertools::Itertools;
 use std::default::Default;
 use std::fs::File;
-use std::io::{Write, BufRead, BufReader};
+use std::io::{BufRead, BufReader, Write};
 use std::path::{Path, PathBuf};
 
 #[derive(Debug, Clone)]
@@ -30,18 +30,18 @@ impl Table {
 
     pub fn read(path: &Path) -> Result<Table, Report> {
         let mut table = Table::new();
-    
+
         // lookup delimiter from file extension
         let delim = utils::path_to_delim(path)?;
 
         // attempt to open the file path
-        let file = File::open(path)
-            .wrap_err_with(|| eyre!("Failed to read file: {path:?}"))?;
+        let file =
+            File::open(path).wrap_err_with(|| eyre!("Failed to read file: {path:?}"))?;
         // read in the lines
         let lines = BufReader::new(file).lines();
-            //.map_err(|e| eyre!(e))
-            //.wrap_err_with(|| eyre!("Failed to parse file: {path:?}"))?;  
-    
+        //.map_err(|e| eyre!(e))
+        //.wrap_err_with(|| eyre!("Failed to parse file: {path:?}"))?;
+
         for line in lines.flatten() {
             let row = line
                 .split(delim)
@@ -58,11 +58,11 @@ impl Table {
                 table.rows.push(row);
             }
         }
-    
+
         table.path = path.to_path_buf();
-    
+
         Ok(table)
-    }    
+    }
 
     pub fn header_position(&self, header: &str) -> Result<usize, Report> {
         let pos = self

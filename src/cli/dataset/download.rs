@@ -1,5 +1,5 @@
-use clap::Parser;
 use crate::dataset::attributes::{Name, Tag};
+use clap::Parser;
 use std::path::PathBuf;
 
 /// Download dataset.

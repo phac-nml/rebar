@@ -112,7 +112,7 @@ pub fn linelist(
         } else {
             best_match.diagnostic.iter().join(",").to_string()
         };
-        row[table.header_position("diagnostic")?] = diagnostic;        
+        row[table.header_position("diagnostic")?] = diagnostic;
 
         // genome_length
         let genome_length = recombination.genome_length.to_string();

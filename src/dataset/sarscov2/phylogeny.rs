@@ -1,19 +1,21 @@
+use crate::{dataset, phylogeny::Phylogeny, utils::table::Table};
 use bio::io::fasta;
 use color_eyre::eyre::{eyre, Report, Result, WrapErr};
 use color_eyre::Help;
-use crate::{dataset, phylogeny::Phylogeny, utils::table::Table};
 use itertools::Itertools;
 use log::{debug, info, warn};
 use std::collections::BTreeMap;
 use std::path::Path;
 
-pub async fn build(summary: &mut dataset::attributes::Summary, output_dir: &Path) -> Result<Phylogeny, Report> {
-
+pub async fn build(
+    summary: &mut dataset::attributes::Summary,
+    output_dir: &Path,
+) -> Result<Phylogeny, Report> {
     // ------------------------------------------------------------------------
     // Download
-    // ------------------------------------------------------------------------    
+    // ------------------------------------------------------------------------
 
-    // ------------------------------------------------------------------------   
+    // ------------------------------------------------------------------------
     // Lineage Notes
     let output_path = output_dir.join("lineage_notes.txt");
     info!("Downloading lineage notes: {output_path:?}");
@@ -23,9 +25,11 @@ pub async fn build(summary: &mut dataset::attributes::Summary, output_dir: &Path
     } else {
         dataset::sarscov2::download::lineage_notes(&summary.tag, &output_path).await?
     };
-    summary.misc.insert("lineage_notes".to_string(), remote_file);
+    summary
+        .misc
+        .insert("lineage_notes".to_string(), remote_file);
 
-    // ------------------------------------------------------------------------   
+    // ------------------------------------------------------------------------
     // Alias key
     let output_path = output_dir.join("alias_key.json");
     info!("Downloading alias key: {output_path:?}");
@@ -39,7 +43,7 @@ pub async fn build(summary: &mut dataset::attributes::Summary, output_dir: &Path
 
     // ------------------------------------------------------------------------
     // Parse
-    // ------------------------------------------------------------------------    
+    // ------------------------------------------------------------------------
 
     // read alias key into Map
     let alias_key = read_alias_key(&summary.misc["alias_key"].local_path)?;
@@ -67,13 +71,16 @@ pub async fn build(summary: &mut dataset::attributes::Summary, output_dir: &Path
             result.wrap_err(eyre!("Failed to parse file: {populations_path:?}"))?;
         let lineage = record.id().to_string();
         if !notes_lineages.contains(&lineage) {
-            warn!("Lineage {lineage} is in {populations_path:?} but not in {:?}.", &summary.misc["lineage_notes"].local_path);
+            warn!(
+                "Lineage {lineage} is in {populations_path:?} but not in {:?}.",
+                &summary.misc["lineage_notes"].local_path
+            );
         }
     }
 
     // ------------------------------------------------------------------------
     // Parent Child Relationships
-    // ------------------------------------------------------------------------    
+    // ------------------------------------------------------------------------
 
     let mut graph_data: BTreeMap<String, Vec<String>> = BTreeMap::new();
     let mut graph_order: Vec<String> = Vec::new();
@@ -101,14 +108,12 @@ pub async fn build(summary: &mut dataset::attributes::Summary, output_dir: &Path
     // Add root node
     let name = "root".to_string();
     let id = phylogeny.graph.add_node(name.clone());
-    phylogeny.lookup.insert(name, id);
 
     // todo!() Do this twice? in case lineages are accidentally out of order?
 
     // Add descendants
     for name in &phylogeny.order {
-        let id = phylogeny.graph.add_node(name.clone());
-        phylogeny.lookup.insert(name.clone(), id);
+        phylogeny.graph.add_node(name.clone());
         let parents = &graph_data[&name.clone()];
 
         debug!("Population: {name}; Parents: {parents:?}");
@@ -118,14 +123,14 @@ pub async fn build(summary: &mut dataset::attributes::Summary, output_dir: &Path
             phylogeny.recombinants.push(name.clone());
         }
         for parent in parents {
-            if !phylogeny.lookup.contains_key(parent) {
+            if phylogeny.get_node(parent).is_err() {
                 return Err(eyre!("Parental lineage {parent} is not in the graph.")
                     .suggestion(
                         "Are the alias_key.json and lineage_notes.txt out of sync?",
                     )
                     .suggestion("Please check if {parent} is in the alias key."));
             }
-            let parent_id = phylogeny.lookup[&parent.clone()];
+            let parent_id = phylogeny.get_node(&parent)?;
             phylogeny.graph.add_edge(parent_id, id, 1);
         }
     }

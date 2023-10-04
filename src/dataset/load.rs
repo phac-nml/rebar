@@ -1,11 +1,11 @@
-use bio::io::fasta;
-use color_eyre::eyre::{eyre, Result, Report, WrapErr};
 use crate::cli::run;
-use crate::dataset::Dataset;
 use crate::dataset::attributes::Summary;
+use crate::dataset::Dataset;
 use crate::phylogeny::Phylogeny;
 use crate::sequence::{read_reference, Sequence, Substitution};
 use crate::utils::table::Table;
+use bio::io::fasta;
+use color_eyre::eyre::{eyre, Report, Result, WrapErr};
 use indicatif::{ProgressBar, ProgressStyle};
 use itertools::Itertools;
 use log::{debug, info, warn};
@@ -19,7 +19,6 @@ use std::str::FromStr;
 
 /// Load dataset.
 pub fn dataset(args: &run::Args) -> Result<Dataset, Report> {
-
     info!("Loading dataset: {:?}", args.dataset_dir);
 
     let mut dataset = Dataset::new();
@@ -32,12 +31,12 @@ pub fn dataset(args: &run::Args) -> Result<Dataset, Report> {
 
     // Reference
     let reference_path = args.dataset_dir.join("reference.fasta");
-    dataset.reference = read_reference(&reference_path, args.mask)?;
+    dataset.reference = read_reference(&reference_path, &args.mask)?;
 
     // Populations and Mutations
     let populations_path = args.dataset_dir.join("populations.fasta");
-    (dataset.populations, dataset.mutations) = parse_populations(
-        &populations_path, &reference_path, args.mask)?;
+    (dataset.populations, dataset.mutations) =
+        parse_populations(&populations_path, &reference_path, &args.mask)?;
 
     // Edge Cases
     let edge_cases_path = args.dataset_dir.join("edge_cases.json");
@@ -81,7 +80,6 @@ pub fn dataset(args: &run::Args) -> Result<Dataset, Report> {
     Ok(dataset)
 }
 
-
 // ----------------------------------------------------------------------------
 // Parse Populations
 // ----------------------------------------------------------------------------
@@ -90,7 +88,7 @@ pub fn dataset(args: &run::Args) -> Result<Dataset, Report> {
 pub fn parse_populations(
     populations_path: &Path,
     reference_path: &Path,
-    mask: usize,
+    mask: &Vec<usize>,
 ) -> Result<
     (
         BTreeMap<String, Sequence>,
@@ -99,8 +97,7 @@ pub fn parse_populations(
     Report,
 > {
     // read in populations from fasta
-    let populations_reader =
-        fasta::Reader::from_file(populations_path)
+    let populations_reader = fasta::Reader::from_file(populations_path)
         .map_err(|e| eyre!(e))
         .wrap_err("Failed to read file: {populations_path:?}")?;
 

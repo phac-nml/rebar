@@ -1,6 +1,6 @@
 pub mod dataset;
-pub mod run;
 pub mod plot;
+pub mod run;
 
 use clap::{Parser, Subcommand, ValueEnum};
 use serde::Serialize;

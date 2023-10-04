@@ -1,7 +1,7 @@
 pub mod attributes;
 pub mod download;
-pub mod load;
 pub mod list;
+pub mod load;
 //pub mod io;
 pub mod sarscov2;
 
