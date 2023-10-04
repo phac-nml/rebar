@@ -4,7 +4,7 @@ use crate::recombination::{detect_recombination, Recombination};
 use crate::sequence::Sequence;
 use color_eyre::eyre::{eyre, Report, Result};
 use itertools::Itertools;
-use log::debug;
+use log::{debug, warn};
 use std::collections::BTreeMap;
 
 // ----------------------------------------------------------------------------
@@ -18,53 +18,50 @@ pub fn all_parents<'seq>(
     best_match: &mut SearchResult,
     args: &run::Args,
 ) -> Result<(Vec<SearchResult>, Recombination<'seq>), Report> {
-    // Copy args, because we might mutate to apply edge cases
-    let mut args = args.clone();
+
     // This is not a good place to check this argument, should be further upstream?
     if args.max_parents == 0 {
         return Err(eyre!("Parameter max_parents is set to 0."));
     }
 
-    // initialize parents to return
-    let mut parents = vec![];
-
-    // keep track if this is an edge case with override parameters
     let mut edge_case = false;
-
-    // don't restrict which populations are excluded/included
-    // by default, dataset.search will look through all populations
-    //let mut exclude_populations: Vec<String> = vec![];
-    let mut include_populations: Vec<String> = vec![];
-
-    // If this is a known recombinant, exclude self and the recombinant's
-    // descendants from the parent search. A recombinant's children cannot
-    // be it's parents.
-    // Ex. XCF is XBB* and XBB.1.18.1.1 (FE.1)
-    //     Before it was designated it would have come back as recombinant 'XBB'?
-    //
-    // if let Some(recombinant) = &best_match.recombinant {
-    //     // exclude self
-    //     exclude_populations.push(best_match.consensus_population.clone());
-    //     // exclude descendants of self
-    //     let descendants = dataset.phylogeny.get_descendants(&recombinant)?;
-    //     exclude_populations.extend(descendants);
-    // }
+    let mut fallback_bias = true;
 
     // ----------------------------------------------------------------------------
-    // Naive vs. Biased
+    // Naive Search
+    // ----------------------------------------------------------------------------
 
-    // The default search mechanism is deliberately BIASED to incorporate
-    // prior information. A developer might want to run a NAIVE search
-    // to test the algorithm by supplying the --naive flag.
-    // When running a BIASED search, we apply the following BIASES:
+    // use best match as the first parent
+    let parents = vec![best_match.clone()];
+    // try to search for secondary parents
+    let mut result = secondary_parents(sequence, dataset, best_match, &parents, &args);
+    // examine the result, we won't run the fallback bias search if multiple parents were found
+    if let Ok((parents, _)) = &result {
+        if parents.len() > 1 {
+            fallback_bias = false
+        }
+    }
 
-    if !args.naive {
+    // ----------------------------------------------------------------------------
+    // Biased Search
+    // ----------------------------------------------------------------------------
+
+    if !args.naive && fallback_bias {
+
+        warn!("Naive recombination search failed, trying biased search.");
+
+        let mut exclude_populations: Vec<String> = vec![];
+        let mut include_populations: Vec<String> = vec![];
+        let mut parents = vec![];
+        let mut args = args.clone();
+
         // Bias #1. Use phylogenetic information about designated parents
         if let Some(recombinant) = &best_match.recombinant {
             let designated_parents = dataset.phylogeny.get_parents(recombinant)?;
-            debug!("Applying Search Bias #1, prioritizing designated parents: {designated_parents:?}");
+            debug!("Applying bias #1, prioritizing designated parents: {designated_parents:?}");
             include_populations = designated_parents;
         }
+
         // Bias #2. Use edge case parameters (if applicable)
         let edge_case_args = dataset
             .edge_cases
@@ -79,38 +76,37 @@ pub fn all_parents<'seq>(
             if let Some(parents) = &edge_case_args.parents {
                 include_populations = parents.clone();
             }
-        }
+        }        
 
-        // Priority #3. Use parents from CLI Args
+        // Bias #3. Use parents from CLI Args
         if let Some(parents_cli) = &args.parents {
             debug!("Applying Search Bias #3, parents from CLI: {parents_cli:?}");
             include_populations = parents_cli.clone();
         }
+
+        // ----------------------------------------------------------------------------
+        // Primary parent
+
+        // Possibly different parameters for populations
+        let parent_primary = if include_populations.is_empty() {
+            dataset.search(sequence, None, None)?
+        } else {
+            dataset.search(sequence, Some(&include_populations), None)?
+        };
+        parents.push(parent_primary);
+
+        // ----------------------------------------------------------------------------
+        // Secondary parents ( 2 : max_parents)
+        result = secondary_parents(sequence, dataset, best_match, &parents, &args);
     }
 
-    // ----------------------------------------------------------------------------
-    // Primary parent
-
-    // redo simple dataset search, with possibly different parameters for populations
-    let parent_primary = if include_populations.is_empty() {
-        dataset.search(sequence, None, None)?
-    } else {
-        dataset.search(sequence, Some(&include_populations), None)?
-    };
-    parents.push(parent_primary);
-
-    // ----------------------------------------------------------------------------
-    // Secondary parents ( 2 : max_parents)
-    let (parents, mut recombination) =
-        secondary_parents(sequence, dataset, best_match, &parents, &args)?;
-
-    // add edge case annotation
+    let (parents, mut recombination) = result?;
     recombination.edge_case = edge_case;
 
     // check if observed parents match expected parents
     // ex. XBL (before designated) was XBB ( BA.2.75 and XBB.1.5.57)
     // which conflicts with expected XBB parents BJ.1 (BA.2.10.1) and BM.1.1.1 (BA.2.75.3)
-    // which direction should the search be in?
+    // todo!() decide on the order, should descendants be from observed or expected?
     if let Some(recombinant) = &best_match.recombinant {
 
         let expected_parents = dataset.phylogeny.get_parents(&recombinant)?;
@@ -145,16 +141,16 @@ pub fn secondary_parents<'seq>(
     let mut exclude_populations: Vec<String> = Vec::new();
     let mut designated_parents = Vec::new();
 
-    // running a biased search, prioritize designated parents
-    if !args.naive {
-        if let Some(recombinant) = &best_match.recombinant {
-            designated_parents = dataset.phylogeny.get_parents(recombinant)?;
-            // exclude self and descendants from secondary parent
-            // ex. XR might try to test against itself as a parent
-            let descendants = dataset.phylogeny.get_descendants(recombinant)?;
-            exclude_populations.extend(descendants)
-        }
-    }
+    // // running a biased search, prioritize designated parents
+    // if !args.naive {
+    //     if let Some(recombinant) = &best_match.recombinant {
+    //         designated_parents = dataset.phylogeny.get_parents(recombinant)?;
+    //         // exclude self and descendants from secondary parent
+    //         // ex. XR might try to test against itself as a parent
+    //         let descendants = dataset.phylogeny.get_descendants(recombinant)?;
+    //         exclude_populations.extend(descendants)
+    //     }
+    // }
 
     loop {
         // --------------------------------------------------------------------
@@ -168,16 +164,15 @@ pub fn secondary_parents<'seq>(
             return Ok((parents, recombination));
         }
         if num_iter >= args.max_iter {
+            debug!("Maximum iterations reached ({num_iter}).");
+
             // If we found parents, fine to max out iter
             if num_parents > 1 {
-                debug!("Maximum iterations reached ({num_iter}).");
                 return Ok((parents, recombination));
             }
             // If we didn't find parents, this is a failure
             else {
-                let message = format!("Maximum iterations reached ({num_iter}) with no secondary parent found.");
-                debug!("{}", &message);
-                return Err(eyre!(message));
+                return Err(eyre!("No secondary parents found."));
             }
         }
         num_iter += 1;
@@ -243,7 +238,12 @@ pub fn secondary_parents<'seq>(
         // }
         if conflict_alt.len() < args.min_subs {
             debug!("Sufficient conflict_alt resolution reached, stopping parent search.");
-            break;
+            // If we found parents, fine to max out iter
+            if num_parents > 1 {
+                return Ok((parents, recombination));
+            } else {
+                return Err(eyre!("No secondary parents found."));             
+            }
         }
 
         // Collect the conflict/unresolved coordinates
@@ -404,10 +404,7 @@ pub fn secondary_parents<'seq>(
                 num_iter = 0;
                 parents.push(parent_candidate);
                 recombination = detect_result;
-                continue;
             }
         }
     }
-
-    Ok((parents, recombination))
 }
