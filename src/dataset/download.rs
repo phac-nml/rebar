@@ -16,7 +16,7 @@ pub async fn dataset(args: &mut cli::dataset::download::Args) -> Result<(), Repo
 
     let mut summary: Summary = if let Some(summary_path) = &args.summary {
         info!("Importing summary: {summary_path:?}");
-        let summary = Summary::read(&summary_path)?;
+        let summary = Summary::read(summary_path)?;
 
         // Warn if summary conflicts with any CLI args
         if summary.name != args.name || summary.tag != args.tag {
@@ -172,7 +172,7 @@ pub async fn snapshot(
     remote_file.local_path = output_path.to_path_buf();
 
     // Download the file
-    utils::download_file(&snapshot.url, &output_path, decompress).await?;
+    utils::download_file(&snapshot.url, output_path, decompress).await?;
 
     Ok(remote_file)
 }

@@ -129,7 +129,9 @@ pub fn detect_recombination<'seq>(
                 return Err(eyre!(
                     "No parents were provided for recombination detection."
                 )
-                .suggestion("Please check the parents and parents_candidate variables."));
+                .suggestion(
+                    "Please check the parents and parents_candidate variables.",
+                ));
             }
         }
     };

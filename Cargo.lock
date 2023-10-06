@@ -1868,6 +1868,7 @@ dependencies = [
  "itertools 0.11.0",
  "log",
  "petgraph",
+ "rand",
  "raqote",
  "rayon",
  "regex",

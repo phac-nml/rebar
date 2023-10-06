@@ -9,15 +9,17 @@ pub mod utils;
 
 use crate::dataset::attributes::Name;
 use crate::dataset::SearchResult;
-use crate::recombination::{search, Recombination};
+use crate::recombination::{Recombination, Region};
 use crate::sequence::Sequence;
 use bio::io::fasta;
 use color_eyre::eyre::{eyre, Report, Result, WrapErr};
 use indicatif::{style::ProgressStyle, ProgressBar};
 use itertools::Itertools;
 use log::{debug, info, warn};
+use rand::Rng;
 use rayon::prelude::*;
-use std::fs::create_dir_all;
+use std::fs::{create_dir_all, File};
+use std::io::Write;
 
 /// Download rebar dataset
 pub async fn download_dataset(
@@ -33,8 +35,110 @@ pub async fn list_datasets(args: &cli::dataset::list::Args) -> Result<(), Report
     Ok(())
 }
 
+/// Simulate recombination.
+pub fn simulate(args: &cli::simulate::Args) -> Result<(), Report> {
+    // create output directory if it doesn't exist
+    if !args.output_dir.exists() {
+        info!("Creating output directory: {:?}", args.output_dir);
+        create_dir_all(&args.output_dir)?;
+    }
+
+    // Load dataset, disable masking
+    info!("Loading dataset: {:?}", &args.dataset_dir);
+    let mask = vec![0, 0];
+    let dataset = dataset::load::dataset(&args.dataset_dir, &mask)?;
+    let genome_length = dataset.reference.genome_length;
+
+    // Check to make sure all parents are in dataset
+    let parents = args.parents.clone();
+    for parent in &parents {
+        if !dataset.populations.contains_key(parent.as_str()) {
+            return Err(eyre!(
+                "Parent {parent} is not the dataset populations fasta."
+            ));
+        }
+    }
+
+    // ------------------------------------------------------------------------
+    // Breakpoints
+
+    let mut breakpoints = if let Some(breakpoints) = &args.breakpoints {
+        info!("Using manual breakpoints: {breakpoints:?}");
+        breakpoints.clone()
+    } else {
+        let mut breakpoints = Vec::new();
+        let mut num_breakpoints_remaining = parents.len() - 1;
+        let mut start = 1;
+        let mut rng = rand::thread_rng();
+        while num_breakpoints_remaining > 0 {
+            // save some coordinates for future breakpoints
+            let end = genome_length - num_breakpoints_remaining;
+            let coord = rng.gen_range(start..end);
+            breakpoints.push(coord);
+            start = coord + 1;
+            num_breakpoints_remaining -= 1;
+        }
+        info!("Using random breakpoints: {breakpoints:?}");
+        breakpoints
+    };
+
+    let unique_key = format!(
+        "simulate_{}_{}",
+        &parents.iter().join("_"),
+        &breakpoints
+            .iter()
+            .map(|start| format!("{start}-{}", start + 1))
+            .join("_"),
+    );
+    info!("Unique Key: {unique_key:?}");
+
+    // ------------------------------------------------------------------------
+    // Regions
+
+    breakpoints.push(genome_length);
+    let mut regions = Vec::new();
+    let mut start = 1;
+
+    for (origin, end) in parents.into_iter().zip(breakpoints.into_iter()) {
+        let region = Region {
+            start,
+            end,
+            origin,
+            substitutions: Vec::new(),
+        };
+        regions.push(region);
+        start = end + 1;
+    }
+    debug!("Regions: {regions:?}");
+
+    // ------------------------------------------------------------------------
+    // Sequences
+
+    let sequence: String = regions
+        .iter()
+        .map(|region| {
+            let sequence = dataset.populations.get(&region.origin).unwrap();
+            // Reminder, -1 to coordinates since they are 1-based
+            sequence.seq[region.start - 1..=region.end - 1]
+                .iter()
+                .collect::<String>()
+        })
+        .collect();
+
+    let output_path = args.output_dir.join(format!("{unique_key}.fasta"));
+    info!("Exporting fasta: {output_path:?}");
+    let mut output_file = File::create(&output_path)
+        .wrap_err_with(|| format!("Unable to create file: {output_path:?}"))?;
+    let lines = format!(">{unique_key}\n{sequence}");
+    output_file
+        .write_all(lines.as_bytes())
+        .wrap_err_with(|| format!("Unable to write file: {output_path:?}"))?;
+
+    Ok(())
+}
+
 /// Run rebar on input alignment and/or dataset population
-pub fn run(args: cli::run::Args) -> Result<(), Report> {
+pub fn run(args: &mut cli::run::Args) -> Result<(), Report> {
     // check how many threads are available on the system
     let default_thread_pool = rayon::ThreadPoolBuilder::new().build().unwrap();
     info!(
@@ -74,7 +178,7 @@ pub fn run(args: cli::run::Args) -> Result<(), Report> {
     // Collect files in dataset_dir into a dataset object
     // This mainly includes parent populations sequences
     //   and optionally a phylogenetic representation.
-    let mut dataset = dataset::load::dataset(&args)?;
+    let mut dataset = dataset::load::dataset(&args.dataset_dir, &args.mask)?;
 
     // init a container to hold query sequences, dataset
     // populations and/or sequences from an input alignment
@@ -84,54 +188,28 @@ pub fn run(args: cli::run::Args) -> Result<(), Report> {
 
     // ------------------------------------------------------------------------
     // Parse Input Populations
+    // ------------------------------------------------------------------------
 
     // this step is pretty fast, don't really need a progress bar here
 
     if let Some(populations) = &args.input.populations {
-        info!("Loading query populations: {populations:?}");
+        info!("Parsing input populations: {populations:?}");
 
-        // Parse populations, and expand '*' to get descendants
-        let search_populations = populations
-            .into_iter()
-            .map(|p| {
-                // if population is '*', use all populations in dataset
-                if p == "*" {
-                    Ok(dataset.populations.keys().cloned().collect_vec())
-                }
-                // if population ends with '*' expand descendants
-                else if p.ends_with('*') {
-                    let p = p.replace("*", "");
-                    dataset.phylogeny.get_descendants(&p)
-                } 
-                // simple population name, that is in the dataset
-                else if dataset.populations.contains_key(p) {
-                    Ok(vec![p.to_string()])
-                }
-                else {
-                    Err(eyre!("{p} is not present in the dataset."))
-                }
-            })
-            // flatten and handle the `Result` layer
-            .collect::<Result<Vec<_>, Report>>()?
-            .into_iter()
-            // flatten and handle the `Vec` layer
-            .flatten()
-            .unique()
-            .collect_vec();
-
-        (ids_seen, sequences) = search_populations
+        (ids_seen, sequences) = dataset
+            .expand_populations(populations)?
             .into_iter()
             .map(|p| {
                 debug!("Adding population {p} to query sequences.");
-                let mut sequence = dataset.populations[&p].clone();
-                sequence.id = format!("population_{}", sequence.id).to_string();
-                (sequence.id.clone(), sequence)
+                let sequence = dataset.populations[&p].clone();
+                let id = format!("population_{}", sequence.id);
+                (id, sequence)
             })
             .unzip();
     }
 
     // ------------------------------------------------------------------------
-    // Parse Input alignment
+    // Parse Input Alignment
+    // ------------------------------------------------------------------------
 
     if let Some(alignment) = &args.input.alignment {
         info!("Loading query alignment: {:?}", alignment);
@@ -141,7 +219,8 @@ pub fn run(args: cli::run::Args) -> Result<(), Report> {
 
         for result in alignment_reader.records() {
             let record = result.wrap_err("Unable to parse alignment: {alignment:?}")?;
-            let sequence = Sequence::from_record(record, Some(&dataset.reference), &args.mask)?;
+            let sequence =
+                Sequence::from_record(record, Some(&dataset.reference), &args.mask)?;
 
             // check for duplicates
             if ids_seen.contains(&sequence.id) {
@@ -158,42 +237,57 @@ pub fn run(args: cli::run::Args) -> Result<(), Report> {
     }
 
     // ------------------------------------------------------------------------
+    // Parse and expand input parents
+
+    if let Some(parents) = &args.parents {
+        info!("Parsing input parents: {:?}", &parents);
+        args.parents = Some(dataset.expand_populations(parents)?);
+    }
+
+    // ------------------------------------------------------------------------
     // Dataset Knockout
+    // ------------------------------------------------------------------------
 
     if let Some(knockout) = &args.knockout {
         info!("Performing dataset knockout: {knockout:?}");
 
-        //let mut knockout_populations = vec![];
-    
         for p in knockout {
-            let p = p.replace("*", "");
+            // Replace the wildcard, knockout will always include descendants
+            let p = p.replace('*', "");
+
+            // Identify descendants
+            let exclude_populations = dataset.phylogeny.get_descendants(&p)?;
 
             // remove from populations
-            debug!("Removing {p} from the populations fasta.");
-            let exclude_populations = dataset.phylogeny.get_descendants(&p)?;
-            dataset.populations.retain(|id, _| !exclude_populations.contains(id));
-
-            // remove from phylogeny
-            debug!("Removing {p} from the phylogeny.");
-            dataset.phylogeny = dataset.phylogeny.prune(&p)?;
+            debug!("Removing {p}* from the populations fasta.");
+            dataset
+                .populations
+                .retain(|id, _| !exclude_populations.contains(id));
 
             // remove from mutations
-            debug!("Removing {p} from the mutations.");
+            debug!("Removing {p}* from the mutations.");
             dataset.mutations = dataset
                 .mutations
                 .into_iter()
                 .filter_map(|(sub, mut populations)| {
-                    populations.retain(|p| !exclude_populations.contains(&p));
-                    if populations.is_empty() { None } 
-                    else { Some((sub, populations))}
+                    populations.retain(|p| !exclude_populations.contains(p));
+                    if populations.is_empty() {
+                        None
+                    } else {
+                        Some((sub, populations))
+                    }
                 })
                 .collect();
+
+            // remove from phylogeny
+            debug!("Removing {p}* from the phylogeny.");
+            dataset.phylogeny = dataset.phylogeny.prune(&p)?;
         }
-        
     }
 
     // ------------------------------------------------------------------------
     // Recombination Search
+    // ------------------------------------------------------------------------
 
     info!("Running recombination search.");
 
@@ -201,7 +295,7 @@ pub fn run(args: cli::run::Args) -> Result<(), Report> {
     let progress_bar = ProgressBar::new(sequences.len() as u64);
     progress_bar.set_style(progress_bar_style);
 
-    // Search for the best matches and recombination parents for each sequence.
+    // Search for the best match and recombination parents for each sequence.
     // This loop/closure is structured weirdly for rayon compatability, and the
     // fact that we need to return multiple types of objects
     let results: Vec<(SearchResult, Recombination)> = sequences
@@ -210,31 +304,47 @@ pub fn run(args: cli::run::Args) -> Result<(), Report> {
             // initialize with default results, regardless of whether our
             // searches "succeed", we're going to return standardized data
             // structures to build our exports upon (ex. linelist columns)
+            // which will include the "negative" results
             let mut best_match = SearchResult::new(sequence);
             let mut recombination = Recombination::new(sequence);
 
-            // search for the best match in the dataset to this sequence
+            // ------------------------------------------------------------------------
+            // Best Match (Consensus)
+            //
+            // search for the best match in the dataset to this sequence.
+            // this will represent the consensus population call.
+
+            debug!("Identifying best match (consensus population).");
             let search_result = dataset.search(sequence, None, None);
 
+            // if we found a match, proceed with recombinant search
             if let Ok(search_result) = search_result {
-                // use the successful search as the best_match
                 best_match = search_result;
-                // search for all recombination parents (primary and then secondary)
-                let parent_search =
-                    search::all_parents(&sequence, &dataset, &mut best_match, &args);
-                // if the search was successful, unpack the results or issue a warning
-                match parent_search {
+
+                // ------------------------------------------------------------
+                // Search #1. Novel Recombinants
+
+                debug!("Novel Recombinant Search");
+                let novel_search = recombination::search::novel(
+                    sequence,
+                    &dataset,
+                    &mut best_match,
+                    args,
+                );
+                match novel_search {
                     Ok(search_result) => (_, recombination) = search_result,
-                    Err(e) => warn!("{e:?}")
+                    Err(e) => debug!("Search did not succeed. {e}"),
                 }
             }
             // what to do if not a single population matched?
             else {
                 // temporary handling for root population B
                 if dataset.name == Name::SarsCov2 {
-                    if sequence.id == "population_B".to_string() {
+                    if sequence.id == "population_B" {
                         best_match.consensus_population = "B".to_string();
                     }
+                } else {
+                    debug!("No matches found.");
                 }
             }
 

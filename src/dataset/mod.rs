@@ -9,6 +9,7 @@ use crate::cli::run;
 use crate::phylogeny::Phylogeny;
 use crate::sequence::{Sequence, Substitution};
 use color_eyre::eyre::{eyre, Report, Result};
+use indoc::formatdoc;
 use itertools::Itertools;
 use log::debug;
 use serde::{Deserialize, Serialize};
@@ -55,6 +56,42 @@ impl Dataset {
             phylogeny: Phylogeny::new(),
             edge_cases: Vec::new(),
         }
+    }
+
+    /// Expand list of populations with wildcarding.
+    pub fn expand_populations(
+        &self,
+        populations: &[String],
+    ) -> Result<Vec<String>, Report> {
+        // expand '*' to get descendants
+        let expanded = populations
+            .iter()
+            .map(|p| {
+                // if population is '*', use all populations in dataset
+                if p == "*" {
+                    Ok(self.populations.keys().cloned().collect_vec())
+                }
+                // if population ends with '*' expand descendants
+                else if p.ends_with('*') {
+                    let p = p.replace('*', "");
+                    self.phylogeny.get_descendants(&p)
+                }
+                // simple population name, that is in the dataset
+                else if self.populations.contains_key(p) {
+                    Ok(vec![p.to_string()])
+                } else {
+                    Err(eyre!("{p} is not present in the dataset."))
+                }
+            })
+            // flatten and handle the `Result` layer
+            .collect::<Result<Vec<_>, Report>>()?
+            .into_iter()
+            // flatten and handle the `Vec` layer
+            .flatten()
+            .unique()
+            .collect_vec();
+
+        Ok(expanded)
     }
 
     /// Summarize population conflicts relative to the query sequence.
@@ -333,12 +370,7 @@ impl Dataset {
             .map(|sub| sub.to_owned())
             .collect::<Vec<_>>();
 
-        debug!(
-            "{}",
-            search_result
-                .pretty_print()
-                .replace('\n', format!("\n{}", " ".repeat(40)).as_str())
-        );
+        debug!("Search Result:\n{}", search_result.pretty_print());
         Ok(search_result)
     }
 }
@@ -465,18 +497,18 @@ impl SearchResult {
             self.private.iter().join(", ")
         );
 
-        format!(
+        formatdoc!(
             "sequence_id: {}
-consensus_population: {}
-top_populations:\n  - {}
-diagnostic:\n  - {}
-recombinant: {}
-substitutions: {}
-total:\n  {}
-support:\n  {}
-conflict_ref:\n  {}
-conflict_alt:\n  {}
-private:\n  {}",
+            consensus_population: {}
+            top_populations:\n  - {}
+            diagnostic:\n  - {}
+            recombinant: {}
+            substitutions: {}
+            total:\n  {}
+            support:\n  {}
+            conflict_ref:\n  {}
+            conflict_alt:\n  {}
+            private:\n  {}",
             self.sequence_id,
             self.consensus_population,
             self.top_populations.join("\n  - "),

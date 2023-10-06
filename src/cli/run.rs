@@ -23,7 +23,7 @@ pub struct Args {
     pub input: Input,
 
     /// Remove these populations from the dataset.
-    /// 
+    ///
     /// Regardless of whether you use '*' or not, all descendants of the
     /// specified populations will be removed.
     #[arg(short = 'k', long, value_delimiter = ',')]
@@ -31,7 +31,7 @@ pub struct Args {
 
     /// Number of bases to mask at the 5' and 3' ends.
     ///
-    /// Comma separ
+    /// Comma separated.
     #[arg(short = 'm', long)]
     #[arg(long, value_delimiter = ',')]
     pub mask: Vec<usize>,
@@ -43,6 +43,10 @@ pub struct Args {
     /// Maximum number of parents.
     #[arg(long, default_value_t = Args::default().max_parents)]
     pub max_parents: usize,
+
+    /// Minimum number of parents.
+    #[arg(long, default_value_t = Args::default().min_parents)]
+    pub min_parents: usize,
 
     /// Minimum number of consecutive bases in a parental region.
     #[arg(short = 'c', long, default_value_t = Args::default().min_consecutive)]
@@ -92,6 +96,7 @@ impl Default for Args {
             knockout: None,
             mask: vec![100, 200],
             max_iter: 3,
+            min_parents: 2,
             max_parents: 2,
             min_consecutive: 3,
             min_length: 500,
@@ -113,6 +118,7 @@ impl Args {
             knockout: None,
             mask: vec![0, 0],
             max_iter: 0,
+            min_parents: 0,
             max_parents: 0,
             min_consecutive: 0,
             min_length: 0,
@@ -127,7 +133,7 @@ impl Args {
 
     /// Check if input is default.
     pub fn is_default_dataset_dir(path: &Path) -> bool {
-        path == &Args::default().dataset_dir
+        path == Args::default().dataset_dir
     }
 
     /// Check if input is default.
@@ -136,7 +142,7 @@ impl Args {
     }
     /// Check if output directory is default.
     pub fn is_default_output_dir(path: &Path) -> bool {
-        path == &Args::default().output_dir
+        path == Args::default().output_dir
     }
 
     /// Override Args for edge case handling of particular recombinants.
@@ -175,7 +181,7 @@ impl Args {
     /// Write args to file.
     pub fn write(args: &[Args], path: &Path) -> Result<(), Report> {
         // create file
-        let mut file = File::create(&path)
+        let mut file = File::create(path)
             .wrap_err_with(|| format!("Failed to create file: {path:?}"))?;
 
         // parse to string

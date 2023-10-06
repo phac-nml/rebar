@@ -282,7 +282,7 @@ impl Summary {
     /// Write summary to file.
     pub fn write(&self, path: &Path) -> Result<(), Report> {
         // create output file
-        let mut file = File::create(&path)
+        let mut file = File::create(path)
             .wrap_err_with(|| format!("Failed to create file: {path:?}"))?;
 
         // parse to string

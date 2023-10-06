@@ -156,7 +156,7 @@ impl Sequence {
                 let mut s = *s;
                 let r = *r;
                 // Mask 5' and 3' ends
-                if mask.len() >= 1 && coord <= mask[0] {
+                if !mask.is_empty() && coord <= mask[0] {
                     s = 'N';
                 }
                 if mask.len() == 2 && coord > sample.genome_length - mask[1] {
@@ -194,6 +194,8 @@ impl Sequence {
                     _ => continue,
                 }
             }
+        } else {
+            sample.genome_length = sample.seq.len();
         }
 
         Ok(sample)
