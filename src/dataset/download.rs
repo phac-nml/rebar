@@ -3,6 +3,7 @@ use crate::dataset;
 use crate::dataset::attributes::{check_compatibility, Name, Summary};
 use crate::{utils, utils::remote_file::RemoteFile};
 use color_eyre::eyre::{Report, Result};
+use itertools::Itertools;
 use log::{info, warn};
 use std::fs::create_dir_all;
 use std::path::Path;
@@ -136,10 +137,34 @@ pub async fn dataset(args: &mut cli::dataset::download::Args) -> Result<(), Repo
     let output_path = args.output_dir.join("edge_cases.json");
     info!("Creating edge cases: {output_path:?}");
 
-    let edge_cases = match args.name {
+    let mut edge_cases = match args.name {
         Name::SarsCov2 => dataset::sarscov2::edge_cases::default()?,
         _ => todo!(),
     };
+    let manual_populations = edge_cases
+        .iter()
+        .filter_map(|e| e.population.clone())
+        .collect_vec();
+
+    let problematic_recombinants = phylogeny.get_problematic_recombinants()?;
+    for recombinant in problematic_recombinants {
+        let parents = phylogeny.get_parents(&recombinant)?;
+        warn!(
+            "The parents of recombinant {recombinant} are not sister taxa: {parents:?}"
+        );
+        if manual_populations.contains(&recombinant) {
+            info!("Manual edge case exists: {recombinant:?}");
+        } else {
+            info!("Creating auto edge case: {recombinant:?}");
+            let edge_case = cli::run::Args {
+                population: Some(recombinant),
+                parents: Some(parents),
+                ..Default::default()
+            };
+            edge_cases.push(edge_case);
+        }
+    }
+
     // Reminder, we use the module write  method, not the struct method,
     // because this is a vector of arguments we need to serialize.
     cli::run::Args::write(&edge_cases, &output_path)?;

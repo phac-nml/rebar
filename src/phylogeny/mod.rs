@@ -1,6 +1,7 @@
 use crate::utils;
 use color_eyre::eyre::{eyre, Report, Result, WrapErr};
 use color_eyre::Help;
+use itertools::Itertools;
 use log::debug;
 use petgraph::dot::{Config, Dot};
 use petgraph::graph::{Graph, NodeIndex};
@@ -194,6 +195,32 @@ impl Phylogeny {
         }
 
         Ok(parents)
+    }
+
+    /// Get problematic recombinants, where the parents are not sister taxa.
+    /// They might be parent-child instead.
+    pub fn get_problematic_recombinants(&self) -> Result<Vec<String>, Report> {
+        let mut problematic_recombinants = Vec::new();
+
+        for recombinant in &self.recombinants {
+            let parents = self.get_parents(recombinant)?;
+            for i1 in 0..parents.len() - 1 {
+                let p1 = &parents[i1];
+                for p2 in parents.iter().skip(i1 + 1) {
+                    let mut descendants = self.get_descendants(p2)?;
+                    let ancestors =
+                        self.get_ancestors(p2)?.into_iter().flatten().collect_vec();
+                    descendants.extend(ancestors);
+
+                    if descendants.contains(p1) {
+                        problematic_recombinants.push(recombinant.clone());
+                        break;
+                    }
+                }
+            }
+        }
+
+        Ok(problematic_recombinants)
     }
 
     /// Get all paths from the origin node to the destination node, always traveling
