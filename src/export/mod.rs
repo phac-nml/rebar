@@ -68,9 +68,8 @@ pub fn linelist(
         row[table.header_position("population")?] = population.clone();
 
         // recombinant
-        if best_match.recombinant.is_some() {
-            let recombinant = best_match.recombinant.clone().unwrap();
-            row[table.header_position("recombinant")?] = recombinant;
+        if let Some(recombinant) = &recombination.recombinant {
+            row[table.header_position("recombinant")?] = recombinant.clone();
         }
 
         // parents

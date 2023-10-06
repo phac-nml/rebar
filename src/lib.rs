@@ -9,7 +9,7 @@ pub mod utils;
 
 use crate::dataset::attributes::Name;
 use crate::dataset::SearchResult;
-use crate::recombination::{Recombination, Region};
+use crate::recombination::Recombination;
 use crate::sequence::Sequence;
 use bio::io::fasta;
 use color_eyre::eyre::{eyre, Report, Result, WrapErr};
@@ -100,7 +100,7 @@ pub fn simulate(args: &cli::simulate::Args) -> Result<(), Report> {
     let mut start = 1;
 
     for (origin, end) in parents.into_iter().zip(breakpoints.into_iter()) {
-        let region = Region {
+        let region = recombination::Region {
             start,
             end,
             origin,
@@ -200,9 +200,9 @@ pub fn run(args: &mut cli::run::Args) -> Result<(), Report> {
             .into_iter()
             .map(|p| {
                 debug!("Adding population {p} to query sequences.");
-                let sequence = dataset.populations[&p].clone();
-                let id = format!("population_{}", sequence.id);
-                (id, sequence)
+                let mut sequence = dataset.populations[&p].clone();
+                sequence.id = format!("population_{}", sequence.id);
+                (sequence.id.clone(), sequence)
             })
             .unzip();
     }
@@ -251,6 +251,8 @@ pub fn run(args: &mut cli::run::Args) -> Result<(), Report> {
     if let Some(knockout) = &args.knockout {
         info!("Performing dataset knockout: {knockout:?}");
 
+        let mut expanded_knockout = Vec::new();
+
         for p in knockout {
             // Replace the wildcard, knockout will always include descendants
             let p = p.replace('*', "");
@@ -282,7 +284,11 @@ pub fn run(args: &mut cli::run::Args) -> Result<(), Report> {
             // remove from phylogeny
             debug!("Removing {p}* from the phylogeny.");
             dataset.phylogeny = dataset.phylogeny.prune(&p)?;
+
+            expanded_knockout.extend(exclude_populations);
         }
+
+        args.knockout = Some(expanded_knockout);
     }
 
     // ------------------------------------------------------------------------
@@ -321,19 +327,16 @@ pub fn run(args: &mut cli::run::Args) -> Result<(), Report> {
             if let Ok(search_result) = search_result {
                 best_match = search_result;
 
-                // ------------------------------------------------------------
-                // Search #1. Novel Recombinants
-
-                debug!("Novel Recombinant Search");
-                let novel_search = recombination::search::novel(
+                debug!("Searching for recombination parents.");
+                let parent_search = recombination::search::all_parents(
                     sequence,
                     &dataset,
-                    &mut best_match,
+                    &best_match,
                     args,
                 );
-                match novel_search {
+                match parent_search {
                     Ok(search_result) => (_, recombination) = search_result,
-                    Err(e) => debug!("Search did not succeed. {e}"),
+                    Err(e) => debug!("Parent search did not succeed. {e}"),
                 }
             }
             // what to do if not a single population matched?

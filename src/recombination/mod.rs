@@ -2,7 +2,7 @@ pub mod search;
 pub mod validate;
 
 use crate::cli::run;
-use crate::dataset::SearchResult;
+use crate::dataset::{Dataset, SearchResult};
 use crate::sequence::{Sequence, Substitution};
 use crate::utils::table::Table;
 use color_eyre::eyre::{eyre, Report, Result};
@@ -111,6 +111,7 @@ impl std::fmt::Display for Region {
 ///
 pub fn detect_recombination<'seq>(
     sequence: &'seq Sequence,
+    dataset: &Dataset,
     best_match: &SearchResult,
     parents: &Vec<SearchResult>,
     parent_candidate: Option<&SearchResult>,
@@ -375,17 +376,39 @@ pub fn detect_recombination<'seq>(
     recombination.breakpoints = breakpoints;
     // pre-filter or post-filter table?
     recombination.table = table;
-    recombination.recombinant = best_match.recombinant.clone();
 
-    // Grab name of recombinant for unique key
-    let recombinant_name = match &best_match.recombinant {
-        Some(name) => name,
-        None => "novel",
+    // Decide on novel vs known recombinant at this point
+    recombination.recombinant = if let Some(recombinant) = &best_match.recombinant {
+        // check if expected parents match observed
+        // todo!() decide on the order, should descendants be from observed or expected?
+
+        let expected_parents = dataset.phylogeny.get_parents(recombinant)?;
+        let mut observed_parents_descendants = recombination
+            .parents
+            .iter()
+            .flat_map(|p| dataset.phylogeny.get_descendants(p).unwrap())
+            .unique()
+            .collect_vec();
+
+        observed_parents_descendants.retain(|p| expected_parents.contains(p));
+
+        // if the observed and expected parents match, the best match recombinant was correct
+        if observed_parents_descendants.len() == expected_parents.len() {
+            Some(recombinant.to_string())
+        }
+        // otherwise, best match recombinant was wrong, it's actually novel!
+        else {
+            Some("novel".to_string())
+        }
+    }
+    // otherwise its novel
+    else {
+        Some("novel".to_string())
     };
 
     recombination.unique_key = format!(
         "{}_{}_{}",
-        recombinant_name,
+        &recombination.recombinant.clone().unwrap(),
         &recombination.parents.iter().join("_"),
         &recombination.breakpoints.iter().join("_"),
     );
