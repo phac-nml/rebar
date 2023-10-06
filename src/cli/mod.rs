@@ -1,14 +1,15 @@
 pub mod dataset;
 pub mod plot;
 pub mod run;
+pub mod simulate;
 
 use clap::{Parser, Subcommand, ValueEnum};
 use serde::Serialize;
 use std::default::Default;
 
-// -----------------------------------------------------------------------------
+// ----------------------------------------------------------------------------
 // CLI Entry Point
-// -----------------------------------------------------------------------------
+// ----------------------------------------------------------------------------
 
 /// Rebar command-line interface (CLI)
 #[derive(Parser, Debug)]
@@ -20,6 +21,8 @@ pub struct Cli {
     // rebar command (dataset, run, help)
     pub command: Command,
 
+    // ------------------------------------------------------------------------
+    // Global Options
     /// Control output verbosity level.
     #[clap(short = 'v', long)]
     #[clap(value_enum, default_value_t = Verbosity::default())]
@@ -35,6 +38,7 @@ pub enum Command {
     Dataset(Box<dataset::Args>),
     Run(Box<run::Args>),
     Plot(Box<plot::Args>),
+    Simulate(Box<simulate::Args>),
 }
 
 // -----------------------------------------------------------------------------

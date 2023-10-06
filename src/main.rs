@@ -31,10 +31,13 @@ async fn main() -> Result<(), Report> {
         },
         // --------------------------------------------------------------------
         // Run
-        Command::Run(args) => rebar::run(*args)?,
+        Command::Run(mut args) => rebar::run(&mut args)?,
         // --------------------------------------------------------------------
         // Plot
         Command::Plot(args) => rebar::plot(*args)?,
+        // --------------------------------------------------------------------
+        // Simulate
+        Command::Simulate(args) => rebar::simulate(&args)?,
     }
 
     Ok(())

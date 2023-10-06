@@ -80,29 +80,31 @@ impl Phylogeny {
 
     /// Prune a clade from the graph.
     pub fn prune(&self, name: &str) -> Result<Phylogeny, Report> {
-
         let mut phylogeny = self.clone();
-        
+
         // Find the node that matches the name
         let descendants = self.get_descendants(name)?;
 
-        for name in descendants {
+        for name in &descendants {
             debug!("Pruning node: {name}");
-            let node = self.get_node(&name)?;
+            let node = self.get_node(name)?;
             // Remove from graph
-            phylogeny
-                .graph
-                .remove_node(node)
-                .ok_or_else(|| eyre!("Failed to calculated the maximum sequence ID length"))?;
-            // Remove from order
-            phylogeny.order.retain(|n| n != &name);
-            // Remove from recombinants
-            phylogeny.recombinants.retain(|r| r != &name);
+            let removal = phylogeny.graph.remove_node(node);
+            // If we have already checked that the node exists, why does this fail?
+            // Ex. XBB knockout, fails on XBL
+            if removal.is_none() {
+                debug!("Node {node:?} was not found in the graph.");
+            }
         }
 
-        Ok(phylogeny)
+        // Remove from order
+        phylogeny.order.retain(|n| !descendants.contains(n));
+        // Remove from recombinants
+        phylogeny.recombinants.retain(|r| !descendants.contains(r));
 
+        Ok(phylogeny)
     }
+
     /// Read phylogeny from file.
     pub fn read(path: &Path) -> Result<Phylogeny, Report> {
         let phylogeny = std::fs::read_to_string(path)
@@ -116,7 +118,7 @@ impl Phylogeny {
     /// Write phylogeny to file.
     pub fn write(&self, output_path: &Path) -> Result<(), Report> {
         // Create output file
-        let mut file = File::create(&output_path)?;
+        let mut file = File::create(output_path)?;
 
         // .unwrap_or_else(|_| {
         //     return Err(eyre!("Failed to create file: {:?}.", &output_path))
@@ -164,6 +166,7 @@ impl Phylogeny {
         let node = self.get_node(name)?;
         // Construct a depth-first-search (Dfs)
         let mut dfs = Dfs::new(&self.graph, node);
+
         // Skip over self?
         // dfs.next(&self.graph);
         // Iterate over descendants
@@ -340,19 +343,18 @@ impl Phylogeny {
     pub fn get_node(&self, name: &str) -> Result<NodeIndex, Report> {
         for (idx, n) in self.graph.node_references() {
             if n == name {
-                return Ok(idx.clone())
+                return Ok(idx);
             }
         }
-        return Err(eyre!("Name {name} is not in the phylogeny."))
+        Err(eyre!("Name {name} is not in the phylogeny."))
     }
 
     pub fn get_name(&self, node: &NodeIndex) -> Result<String, Report> {
-
         for (idx, n) in self.graph.node_references() {
             if &idx == node {
-                return Ok(n.clone())
+                return Ok(n.clone());
             }
         }
-        return Err(eyre!("Node {node:?} is not in the phylogeny."))
+        Err(eyre!("Node {node:?} is not in the phylogeny."))
     }
 }

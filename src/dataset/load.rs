@@ -18,35 +18,35 @@ use std::str::FromStr;
 // ----------------------------------------------------------------------------
 
 /// Load dataset.
-pub fn dataset(args: &run::Args) -> Result<Dataset, Report> {
-    info!("Loading dataset: {:?}", args.dataset_dir);
+pub fn dataset(dataset_dir: &Path, mask: &Vec<usize>) -> Result<Dataset, Report> {
+    info!("Loading dataset: {:?}", dataset_dir);
 
     let mut dataset = Dataset::new();
 
     // Summary
-    let summary_path = args.dataset_dir.join("summary.json");
+    let summary_path = dataset_dir.join("summary.json");
     let summary = Summary::read(&summary_path)?;
     dataset.name = summary.name;
     dataset.tag = summary.tag;
 
     // Reference
-    let reference_path = args.dataset_dir.join("reference.fasta");
-    dataset.reference = read_reference(&reference_path, &args.mask)?;
+    let reference_path = dataset_dir.join("reference.fasta");
+    dataset.reference = read_reference(&reference_path, mask)?;
 
     // Populations and Mutations
-    let populations_path = args.dataset_dir.join("populations.fasta");
+    let populations_path = dataset_dir.join("populations.fasta");
     (dataset.populations, dataset.mutations) =
-        parse_populations(&populations_path, &reference_path, &args.mask)?;
+        parse_populations(&populations_path, &reference_path, mask)?;
 
     // Edge Cases
-    let edge_cases_path = args.dataset_dir.join("edge_cases.json");
+    let edge_cases_path = dataset_dir.join("edge_cases.json");
     let multiple = true;
     dataset.edge_cases = run::Args::read(&edge_cases_path, multiple)?.unwrap_right();
 
     // ------------------------------------------------------------------------
     // Load Phylogeny (Optional)
 
-    let phylogeny_path = args.dataset_dir.join("phylogeny.json");
+    let phylogeny_path = dataset_dir.join("phylogeny.json");
     dataset.phylogeny = if phylogeny_path.exists() {
         Phylogeny::read(&phylogeny_path)?
     } else {
@@ -57,7 +57,7 @@ pub fn dataset(args: &run::Args) -> Result<Dataset, Report> {
     // --------------------------------------------------------------------
     // Diagnostic Mutations (Optional)
 
-    let diagnostic_path = args.dataset_dir.join("diagnostic_mutations.tsv");
+    let diagnostic_path = dataset_dir.join("diagnostic_mutations.tsv");
     dataset.diagnostic = BTreeMap::new();
 
     if diagnostic_path.exists() {

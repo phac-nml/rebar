@@ -107,13 +107,13 @@ pub async fn build(
 
     // Add root node
     let name = "root".to_string();
-    let id = phylogeny.graph.add_node(name.clone());
+    phylogeny.graph.add_node(name);
 
     // todo!() Do this twice? in case lineages are accidentally out of order?
 
     // Add descendants
     for name in &phylogeny.order {
-        phylogeny.graph.add_node(name.clone());
+        let id = phylogeny.graph.add_node(name.clone());
         let parents = &graph_data[&name.clone()];
 
         debug!("Population: {name}; Parents: {parents:?}");
@@ -130,7 +130,7 @@ pub async fn build(
                     )
                     .suggestion("Please check if {parent} is in the alias key."));
             }
-            let parent_id = phylogeny.get_node(&parent)?;
+            let parent_id = phylogeny.get_node(parent)?;
             phylogeny.graph.add_edge(parent_id, id, 1);
         }
     }

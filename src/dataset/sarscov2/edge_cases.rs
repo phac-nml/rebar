@@ -30,18 +30,22 @@ pub fn default() -> Result<Vec<run::Args>, Report> {
     // XR: BA.2 and BA.1 with no unique subs from BA.1
     let recombinant = "XR".to_string();
     debug!("Creating manual edge case: {recombinant:?}");
-    let mut edge_case = run::Args::default();
-    edge_case.min_subs = 0;
-    edge_case.population = Some(recombinant);
+    let edge_case = run::Args {
+        min_subs: 0,
+        population: Some(recombinant),
+        ..Default::default()
+    };
     edge_cases.push(edge_case);
 
     // XCF: XBB and FE.1 (XBB.1.18.1) with no unique subs from XBB
     let recombinant = "XCF".to_string();
     debug!("Creating manual edge case: {recombinant:?}");
-    let mut edge_case = run::Args::default();
-    edge_case.min_subs = 0;
-    edge_case.min_consecutive = 2;
-    edge_case.population = Some(recombinant);
+    let edge_case = run::Args {
+        min_subs: 0,
+        min_consecutive: 2,
+        population: Some(recombinant),
+        ..Default::default()
+    };
     edge_cases.push(edge_case);
 
     // --------------------------------------------------------------------
@@ -49,10 +53,12 @@ pub fn default() -> Result<Vec<run::Args>, Report> {
 
     let recombinant = "XCG".to_string();
     debug!("Creating manual edge case: {recombinant:?}");
-    let mut edge_case = run::Args::default();
-    edge_case.min_subs = 1;
-    edge_case.min_consecutive = 2;
-    edge_case.population = Some(recombinant);
+    let edge_case = run::Args {
+        min_subs: 1,
+        min_consecutive: 2,
+        population: Some(recombinant),
+        ..Default::default()
+    };
     edge_cases.push(edge_case);
 
     // --------------------------------------------------------------------
