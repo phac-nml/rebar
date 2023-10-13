@@ -75,7 +75,7 @@ pub fn all_parents<'seq>(
 
     debug!("Primary Parent Search.");
     let parent_primary = dataset.search(sequence, Some(&include_populations), None)?;
-    let parent_primary_pop = parent_primary.consensus_population.to_string();
+    //let parent_primary_pop = parent_primary.consensus_population.to_string();
     parents.push(parent_primary);
 
     // ----------------------------------------------------------------------------
@@ -109,40 +109,26 @@ pub fn all_parents<'seq>(
         &args,
     );
 
-    // // If first time failed, try again, this time don't let the consensus
-    // // population be a parent
-    // // ex. XA will fail, remov
-    // if result.is_err() && allow_recursion {
+    // If first time failed, try again, this time don't let the consensus
+    // population be a parent
+    // ex. XA will fail, remov
+    if result.is_err() && allow_recursion {
 
-    //     if let Some(recombinant) = &best_match.recombinant {
-    //         debug!(
-    //             "Attempting another search, recombinant {best_match_pop} cannot be parent."
-    //         );
-    //         // Add descendants to the knockout
-    //         let descendants = dataset.phylogeny.get_descendants(recombinant)?;
-    //         args.knockout = if let Some(mut populations) = args.knockout {
-    //             populations.extend(descendants);
-    //             Some(populations)
-    //         } else {
-    //             Some(descendants)
-    //         };
-    //         result = all_parents(sequence, dataset, best_match, false, &args);            
-    //     }
-    //     // debug!(
-    //     //     "Attempting another search, best match {best_match_pop} cannot be parent."
-    //     // );
-
-    //     // // Add the best match and its descendants to the knockout
-    //     // let best_match_descendants =
-    //     //     dataset.phylogeny.get_descendants(&best_match_pop)?;
-    //     // args.knockout = if let Some(mut populations) = args.knockout {
-    //     //     populations.extend(best_match_descendants);
-    //     //     Some(populations)
-    //     // } else {
-    //     //     Some(best_match_descendants)
-    //     // };
-    //     // result = all_parents(sequence, dataset, best_match, false, &args);
-    // }
+        if let Some(recombinant) = &best_match.recombinant {
+            debug!(
+                "Attempting another search, recombinant {best_match_pop} cannot be parent."
+            );
+            // Add descendants to the knockout
+            let descendants = dataset.phylogeny.get_descendants(recombinant)?;
+            args.knockout = if let Some(mut populations) = args.knockout {
+                populations.extend(descendants);
+                Some(populations)
+            } else {
+                Some(descendants)
+            };
+            result = all_parents(sequence, dataset, best_match, false, &args);            
+        }
+    }
 
     let (parents, mut recombination) = result?;
 
@@ -295,6 +281,10 @@ pub fn secondary_parents<'seq>(
             .collect_vec();
         coordinates.sort();
         debug!("coordinates: {coordinates:?}");
+
+        if coordinates.len() == 0 {
+            return Err(eyre!("No coordinates left to search."));
+        }
 
         // --------------------------------------------------------------------
         // EXCLUDE POPULATIONS

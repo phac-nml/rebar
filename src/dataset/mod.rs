@@ -239,10 +239,33 @@ impl Dataset {
             .total
             .iter()
             .max_by(|a, b| a.1.cmp(b.1))
-            .map(|(_pop, count)| *count)
+            .map(|(_pop, count)| count.clone())
             .unwrap_or_else(|| {
                 panic!("No populations in the summary total for: {}", sequence.id)
             });
+
+        // // How to break ties? Potentially based on which population has lower
+        // // conflict_alt? This is useful for recombinant XB (tie of B.1 vs. B.1.634 parent)
+        // let min_conflict_alt = search_result
+        //     .conflict_alt
+        //     .iter()
+        //     .map(|(pop, subs)| subs.len())
+        //     .min_by(|a, b| a.cmp(b))
+        //     .unwrap_or_else(|| {
+        //         panic!("No populations in the summary conflict_alt for: {}", sequence.id)
+        //     });
+
+        // debug!("min_conflict_alt: {min_conflict_alt}");
+
+        // let test = search_result
+        //     .total
+        //     .iter()
+        //     .zip(search_result.conflict_alt.iter())
+        //     .filter(|((_, total), (_))| *total >= &max_total)
+        //     .map(|((pop, _), (_))| pop)
+        //     .collect_vec();
+
+        // debug!("test: {test:?}");
 
         search_result.top_populations = search_result
             .total
@@ -250,9 +273,10 @@ impl Dataset {
             .filter(|(_pop, count)| *count >= &max_total)
             .map(|(pop, _count)| pop)
             .cloned()
-            .collect::<Vec<_>>();
+            .collect_vec();
 
-        // Undecided if this filter is a good idea
+        // Undecided if this filter is a good idea!
+        // 
         // But it helps cut down on verbosity and data stored
         search_result.total = search_result
             .total

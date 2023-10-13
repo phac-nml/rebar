@@ -27,6 +27,17 @@ pub fn default() -> Result<Vec<run::Args>, Report> {
     // --------------------------------------------------------------------
     // Manual
 
+    // XB: B.1.631 and B.1.634 are exactly tied for the first parent
+    // which makes the consensus call (undesirably) B.1
+    let recombinant = "XB".to_string();
+    debug!("Creating manual edge case: {recombinant:?}");
+    let edge_case = run::Args {
+        parents: Some(vec!["B.1.631".to_string(), "B.1.634".to_string()]),
+        population: Some(recombinant),
+        ..Default::default()
+    };
+    edge_cases.push(edge_case);
+
     // XR: BA.2 and BA.1 with no unique subs from BA.1
     let recombinant = "XR".to_string();
     debug!("Creating manual edge case: {recombinant:?}");

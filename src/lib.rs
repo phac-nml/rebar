@@ -332,8 +332,8 @@ pub fn run(args: &mut cli::run::Args) -> Result<(), Report> {
                 best_match = search_result;
 
                 debug!("Searching for recombination parents.");
-                //let allow_recursion = true;
-                let allow_recursion = false;
+                let allow_recursion = true;
+                //let allow_recursion = false;
                 let parent_search = recombination::search::all_parents(
                     sequence,
                     &dataset,
