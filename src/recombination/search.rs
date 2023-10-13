@@ -19,6 +19,7 @@ pub fn all_parents<'seq>(
     sequence: &'seq Sequence,
     dataset: &Dataset,
     best_match: &SearchResult,
+    allow_recursion: bool,
     args: &run::Args,
 ) -> Result<(Vec<SearchResult>, Recombination<'seq>), Report> {
     let mut args = args.clone();
@@ -30,12 +31,12 @@ pub fn all_parents<'seq>(
     // ------------------------------------------------------------------------
     // Edge Case : Low Priority
 
-    let edge_case_args = dataset
+    let edge_case_search = dataset
         .edge_cases
         .iter()
         .find(|e| e.population.as_ref() == Some(&best_match_pop));
 
-    if let Some(edge_case_args) = edge_case_args {
+    if let Some(edge_case_args) = edge_case_search {
         debug!("Applying edge case parameters: {edge_case_args:?}");
         edge_case = true;
         args = args.apply_edge_case(edge_case_args)?;
@@ -81,19 +82,23 @@ pub fn all_parents<'seq>(
     // Secondary Parents
     debug!("Secondary Parents Search.");
 
-    // Decide whether consensus descendants can be secondary parents
-    if !include_populations.contains(&best_match_pop) {
-        debug!("Removing best match {best_match_pop}* from search.");
-        let descendants = dataset.phylogeny.get_descendants(&best_match_pop)?;
-        exclude_populations.extend(descendants);
-    }
+    // // Decide whether consensus descendants can be secondary parents
+    // // Either because we've manually excluded them, or because we're not
+    // // allowing recursion anymore and have run out of retries
+    // if !include_populations.contains(&best_match_pop) || !allow_recursion {
+    //     debug!("Removing best match {best_match_pop}* from search.");
+    //     let descendants = dataset.phylogeny.get_descendants(&best_match_pop)?;
+    //     exclude_populations.extend(descendants);
+    // }
 
-    // Decide whether parent #1 descendants can be secondary parents
-    if !include_populations.contains(&parent_primary_pop) {
-        debug!("Removing parent #1 {parent_primary_pop}* from search.");
-        let descendants = dataset.phylogeny.get_descendants(&parent_primary_pop)?;
-        exclude_populations.extend(descendants);
-    }
+    // // Decide whether parent #1 descendants can be secondary parents
+    // // Either because we've manually excluded them, or because we're not
+    // // allowing recursion anymore and have run out of retries
+    // if !include_populations.contains(&parent_primary_pop) || !allow_recursion {
+    //     debug!("Removing parent #1 {parent_primary_pop}* from search.");
+    //     let descendants = dataset.phylogeny.get_descendants(&parent_primary_pop)?;
+    //     exclude_populations.extend(descendants);
+    // }
 
     let mut result = secondary_parents(
         sequence,
@@ -104,25 +109,40 @@ pub fn all_parents<'seq>(
         &args,
     );
 
-    // If first time failed, try again, this time don't let the consensus
-    // population be a parent
-    if result.is_err() && best_match_pop == parent_primary_pop {
-        debug!(
-            "Attempting another search, best match {best_match_pop} cannot be parent."
-        );
+    // // If first time failed, try again, this time don't let the consensus
+    // // population be a parent
+    // // ex. XA will fail, remov
+    // if result.is_err() && allow_recursion {
 
-        // Add the best match and its descendants to the knockout
-        let best_match_descendants =
-            dataset.phylogeny.get_descendants(&best_match_pop)?;
-        args.knockout = if let Some(mut populations) = args.knockout {
-            populations.extend(best_match_descendants);
-            Some(populations)
-        } else {
-            Some(best_match_descendants)
-        };
+    //     if let Some(recombinant) = &best_match.recombinant {
+    //         debug!(
+    //             "Attempting another search, recombinant {best_match_pop} cannot be parent."
+    //         );
+    //         // Add descendants to the knockout
+    //         let descendants = dataset.phylogeny.get_descendants(recombinant)?;
+    //         args.knockout = if let Some(mut populations) = args.knockout {
+    //             populations.extend(descendants);
+    //             Some(populations)
+    //         } else {
+    //             Some(descendants)
+    //         };
+    //         result = all_parents(sequence, dataset, best_match, false, &args);            
+    //     }
+    //     // debug!(
+    //     //     "Attempting another search, best match {best_match_pop} cannot be parent."
+    //     // );
 
-        result = all_parents(sequence, dataset, best_match, &args);
-    }
+    //     // // Add the best match and its descendants to the knockout
+    //     // let best_match_descendants =
+    //     //     dataset.phylogeny.get_descendants(&best_match_pop)?;
+    //     // args.knockout = if let Some(mut populations) = args.knockout {
+    //     //     populations.extend(best_match_descendants);
+    //     //     Some(populations)
+    //     // } else {
+    //     //     Some(best_match_descendants)
+    //     // };
+    //     // result = all_parents(sequence, dataset, best_match, false, &args);
+    // }
 
     let (parents, mut recombination) = result?;
 
@@ -130,32 +150,6 @@ pub fn all_parents<'seq>(
 
     Ok((parents, recombination))
 }
-// // ----------------------------------------------------------------------------
-// // Check known vs novel status
-
-// // If there was more than 1 parent, but the best match is not a known recombinant
-// // this is a novel recombinant.
-// if parents.len() > 1 && best_match.recombinant.is_none() {
-//     best_match.recombinant = Some("novel".to_string());
-// }
-// // check if observed parents match expected parents
-// // ex. XBL (before designated) was XBB ( BA.2.75 and XBB.1.5.57)
-// // which conflicts with expected XBB parents BJ.1 (BA.2.10.1) and BM.1.1.1 (BA.2.75.3)
-// // todo!() decide on the order, should descendants be from observed or expected?
-// else if let Some(recombinant) = &best_match.recombinant {
-
-//     let expected_parents = dataset.phylogeny.get_parents(&recombinant)?;
-//     let mut observed_parents_descendants = recombination.parents
-//         .iter()
-//         .flat_map(|p| dataset.phylogeny.get_descendants(p).unwrap())
-//         .unique()
-//         .collect_vec();
-
-//     observed_parents_descendants.retain(|p| expected_parents.contains(p));
-//     if observed_parents_descendants.len() != expected_parents.len(){
-//         best_match.recombinant = Some("novel".to_string());
-//     }
-// }
 
 // Search for the secondary recombination parent(s).
 pub fn secondary_parents<'seq>(
@@ -306,7 +300,7 @@ pub fn secondary_parents<'seq>(
         // EXCLUDE POPULATIONS
 
         // Add currently known parents to search exclusion
-        // Don't exclude their descendants! (ex. XBL is BA.2.75 and XBB.1.5.57)
+        // Exclude their descendants?
         for p in &parents {
             if exclude_populations.contains(&p.consensus_population) {
                 exclude_populations.push(p.consensus_population.clone());

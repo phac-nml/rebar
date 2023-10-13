@@ -195,16 +195,20 @@ pub fn run(args: &mut cli::run::Args) -> Result<(), Report> {
     if let Some(populations) = &args.input.populations {
         info!("Parsing input populations: {populations:?}");
 
-        (ids_seen, sequences) = dataset
+        dataset
             .expand_populations(populations)?
             .into_iter()
-            .map(|p| {
-                debug!("Adding population {p} to query sequences.");
-                let mut sequence = dataset.populations[&p].clone();
-                sequence.id = format!("population_{}", sequence.id);
-                (sequence.id.clone(), sequence)
-            })
-            .unzip();
+            .for_each(|p| {
+                if !dataset.populations.contains_key(&p){
+                    warn!("Population {p} is not in the dataset populations fasta.");
+                } else {
+                    debug!("Adding population {p} to query sequences.");
+                    let mut sequence = dataset.populations[&p].clone();
+                    sequence.id = format!("population_{}", sequence.id);
+                    ids_seen.push(sequence.id.clone());
+                    sequences.push(sequence);
+                }
+            });
     }
 
     // ------------------------------------------------------------------------
@@ -328,10 +332,13 @@ pub fn run(args: &mut cli::run::Args) -> Result<(), Report> {
                 best_match = search_result;
 
                 debug!("Searching for recombination parents.");
+                //let allow_recursion = true;
+                let allow_recursion = false;
                 let parent_search = recombination::search::all_parents(
                     sequence,
                     &dataset,
                     &best_match,
+                    allow_recursion,
                     args,
                 );
                 match parent_search {
