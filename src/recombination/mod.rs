@@ -380,28 +380,22 @@ pub fn detect_recombination<'seq>(
     // Decide on novel vs known recombinant at this point
     recombination.recombinant = if let Some(recombinant) = &best_match.recombinant {
         // check if expected parents match observed
-        // todo!() decide on the order, should descendants be from observed or expected?
-
+        let observed_parents = &recombination.parents;
         let expected_parents = dataset.phylogeny.get_parents(recombinant)?;
-        let mut observed_parents_descendants = recombination
-            .parents
-            .iter()
-            .flat_map(|p| dataset.phylogeny.get_descendants(p).unwrap())
-            .unique()
-            .collect_vec();
+        let parents_match =
+            validate::compare_parents(observed_parents, &expected_parents, dataset)?;
 
-        observed_parents_descendants.retain(|p| expected_parents.contains(p));
-
-        // if the observed and expected parents match, the best match recombinant was correct
-        if observed_parents_descendants.len() == expected_parents.len() {
+        if parents_match {
             Some(recombinant.to_string())
         }
-        // otherwise, best match recombinant was wrong, it's actually novel!
+        // use the "-like" nomenclature to indicate this novel recombinant is
+        // a mimic of another known kind
         else {
-            Some("novel".to_string())
+            Some(format!("{recombinant}-like"))
+            //Some("novel".to_string())
         }
     }
-    // otherwise its novel
+    // otherwise its totally novel
     else {
         Some("novel".to_string())
     };
