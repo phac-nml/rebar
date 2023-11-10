@@ -199,7 +199,7 @@ pub fn run(args: &mut cli::run::Args) -> Result<(), Report> {
             .expand_populations(populations)?
             .into_iter()
             .for_each(|p| {
-                if !dataset.populations.contains_key(&p){
+                if !dataset.populations.contains_key(&p) {
                     warn!("Population {p} is not in the dataset populations fasta.");
                 } else {
                     debug!("Adding population {p} to query sequences.");

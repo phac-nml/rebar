@@ -25,7 +25,7 @@ pub fn all_parents<'seq>(
     let mut args = args.clone();
     let mut exclude_populations: Vec<String> = Vec::new();
     let mut include_populations = dataset.populations.keys().cloned().collect_vec();
-    let mut edge_case = true;
+    let mut edge_case = false;
     let best_match_pop = best_match.consensus_population.to_string();
 
     // ------------------------------------------------------------------------
@@ -113,7 +113,6 @@ pub fn all_parents<'seq>(
     // population be a parent
     // ex. XA will fail, remov
     if result.is_err() && allow_recursion {
-
         if let Some(recombinant) = &best_match.recombinant {
             debug!(
                 "Attempting another search, recombinant {best_match_pop} cannot be parent."
@@ -126,9 +125,11 @@ pub fn all_parents<'seq>(
             } else {
                 Some(descendants)
             };
-            result = all_parents(sequence, dataset, best_match, false, &args);            
+            result = all_parents(sequence, dataset, best_match, false, &args);
         }
     }
+
+    // If the search still failed, fallback on designated parents
 
     let (parents, mut recombination) = result?;
 
@@ -282,7 +283,7 @@ pub fn secondary_parents<'seq>(
         coordinates.sort();
         debug!("coordinates: {coordinates:?}");
 
-        if coordinates.len() == 0 {
+        if coordinates.is_empty() {
             return Err(eyre!("No coordinates left to search."));
         }
 
@@ -362,47 +363,51 @@ pub fn secondary_parents<'seq>(
             conflict_alt_populations
         };
 
-        // --------------------------------------------------------------------
-        // Search Dataset #1 (Full Coordinate Range)
-        // --------------------------------------------------------------------
+        // // --------------------------------------------------------------------
+        // // Search Dataset #1 (Full Coordinate Range)
+        // // --------------------------------------------------------------------
 
-        // find the next parent candidate based on the full coordinate range
-        let coord_min = coordinates.iter().min().unwrap();
-        let coord_max = coordinates.iter().max().unwrap();
-        let coord_range = (coord_min.to_owned()..coord_max.to_owned()).collect_vec();
+        // // In what cases do we want to search the full coordinate range first vs
+        // // after the specific coordinates
+        // // Example. XD (tag: 2023-10-26), search specific first
 
-        debug!("Searching based on coordinate range: {coord_min} - {coord_max}");
+        // // find the next parent candidate based on the full coordinate range
+        // let coord_min = coordinates.iter().min().unwrap();
+        // let coord_max = coordinates.iter().max().unwrap();
+        // let coord_range = (coord_min.to_owned()..coord_max.to_owned()).collect_vec();
 
-        let parent_candidate =
-            dataset.search(sequence, Some(&include_populations), Some(&coord_range));
+        // debug!("Searching based on coordinate range: {coord_min} - {coord_max}");
 
-        // if the search found parents, check for recombination
-        if let Ok(parent_candidate) = parent_candidate {
-            // remove this parent from future searches
-            exclude_populations.push(parent_candidate.consensus_population.clone());
-            //designated_parents.retain(|p| p != &parent_candidate.consensus_population);
+        // let parent_candidate =
+        //     dataset.search(sequence, Some(&include_populations), Some(&coord_range));
 
-            // check for recombination
-            let detect_result = detect_recombination(
-                sequence,
-                dataset,
-                best_match,
-                &parents,
-                Some(&parent_candidate),
-                &dataset.reference,
-                args,
-            );
+        // // if the search found parents, check for recombination
+        // if let Ok(parent_candidate) = parent_candidate {
+        //     // remove this parent from future searches
+        //     exclude_populations.push(parent_candidate.consensus_population.clone());
+        //     //designated_parents.retain(|p| p != &parent_candidate.consensus_population);
 
-            // if successful, add this parent to the list and update recombination
-            if let Ok(detect_result) = detect_result {
-                num_parents += 1;
-                // reset the iter counter
-                num_iter = 0;
-                parents.push(parent_candidate);
-                recombination = detect_result;
-                continue;
-            }
-        }
+        //     // check for recombination
+        //     let detect_result = detect_recombination(
+        //         sequence,
+        //         dataset,
+        //         best_match,
+        //         &parents,
+        //         Some(&parent_candidate),
+        //         &dataset.reference,
+        //         args,
+        //     );
+
+        //     // if successful, add this parent to the list and update recombination
+        //     if let Ok(detect_result) = detect_result {
+        //         num_parents += 1;
+        //         // reset the iter counter
+        //         num_iter = 0;
+        //         parents.push(parent_candidate);
+        //         recombination = detect_result;
+        //         continue;
+        //     }
+        // }
 
         // --------------------------------------------------------------------
         // Search Dataset #2 (Precise Coordinates)

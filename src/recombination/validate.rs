@@ -133,18 +133,8 @@ pub fn validate(
             Vec::new()
         };
 
-        let validate_parent = if expected_parents.is_empty() {
-            observed_parents.is_empty()
-        } else {
-            let mut expected_parents_descendants = expected_parents
-                .iter()
-                .flat_map(|parent| dataset.phylogeny.get_descendants(parent).unwrap())
-                .unique()
-                .collect_vec();
-
-            expected_parents_descendants.retain(|p| observed_parents.contains(p));
-            expected_parents_descendants.len() == observed_parents.len()
-        };
+        let validate_parent =
+            compare_parents(observed_parents, &expected_parents, dataset)?;
 
         // ----------------------------------------------------------------
         // Recombination Validation
@@ -186,4 +176,47 @@ pub fn validate(
 
         Ok(Some(validate))
     }
+}
+
+/// Compare expected and observed recombination parents.
+pub fn compare_parents(
+    observed: &Vec<String>,
+    expected: &Vec<String>,
+    dataset: &Dataset,
+) -> Result<bool, Report> {
+    // todo!() decide on the order, should descendants be from observed or expected?
+
+    // --------------------------------------------------------------------
+    // Order Version #1, observed is a parent of expected.
+    // Example. ???: expected parents =
+    //               observed parents =
+
+    let mut observed_descendants = observed
+        .iter()
+        .flat_map(|p| dataset.phylogeny.get_descendants(p).unwrap())
+        .unique()
+        .collect_vec();
+
+    observed_descendants.retain(|p| expected.contains(p));
+
+    let parents_match = observed_descendants.len() == expected.len();
+
+    if parents_match {
+        return Ok(parents_match);
+    }
+
+    // --------------------------------------------------------------------
+    // Order Version #2, observed is a descendant of expected.
+    // Example. XC: expected parents = AY.29, B.1.1.7
+    //              observed parents = AY.29.1, B.1.1.7
+
+    let mut expected_descendants = expected
+        .iter()
+        .flat_map(|p| dataset.phylogeny.get_descendants(p).unwrap())
+        .unique()
+        .collect_vec();
+    expected_descendants.retain(|p| observed.contains(p));
+
+    let parents_match = expected_descendants.len() == observed.len();
+    Ok(parents_match)
 }

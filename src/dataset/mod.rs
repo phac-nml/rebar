@@ -239,7 +239,7 @@ impl Dataset {
             .total
             .iter()
             .max_by(|a, b| a.1.cmp(b.1))
-            .map(|(_pop, count)| count.clone())
+            .map(|(_pop, count)| *count)
             .unwrap_or_else(|| {
                 panic!("No populations in the summary total for: {}", sequence.id)
             });
@@ -276,7 +276,7 @@ impl Dataset {
             .collect_vec();
 
         // Undecided if this filter is a good idea!
-        // 
+        //
         // But it helps cut down on verbosity and data stored
         search_result.total = search_result
             .total
