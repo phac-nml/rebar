@@ -129,7 +129,15 @@ pub fn all_parents<'seq>(
         }
     }
 
-    // If the search still failed, fallback on designated parents
+    // // If the search still failed, fallback on designated parents
+    // if result.is_err() {
+    //     if let Some(recombinant) = &best_match.recombinant {
+    //         let designated_parents = dataset.phylogeny.get_parents(recombinant)?;
+    //         debug!(
+    //             "Attempting another search, prioritizing designated parents: {designated_parents:?}"
+    //         );
+    //     }
+    // }
 
     let (parents, mut recombination) = result?;
 

@@ -49,7 +49,7 @@ impl FromStr for Status {
 // ----------------------------------------------------------------------------
 // Details
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum Details {
     IncorrectRecombinant,
     IncorrectParent,
@@ -116,7 +116,7 @@ pub fn validate(
         // Is this a recombinant, and if so, is the recombinant ancestor
         // exactly as expected?
 
-        let observed_recombinant = &best_match.recombinant;
+        let observed_recombinant = &recombination.recombinant;
         let expected_recombinant = dataset
             .phylogeny
             .get_recombinant_ancestor(&expected_population)?;
@@ -153,8 +153,8 @@ pub fn validate(
                 status: Status::Fail,
                 details: Vec::new(),
             };
-            if !validate_recombinant {
-                validate.details.push(Details::IncorrectRecombinant);
+            if !validate_population {
+                validate.details.push(Details::IncorrectPopulation);
             }
             if !validate_parent {
                 // Were parents and breakpoints detected at all?
@@ -164,8 +164,10 @@ pub fn validate(
                     validate.details.push(Details::IncorrectParent);
                 }
             }
-            if !validate_population {
-                validate.details.push(Details::IncorrectPopulation);
+            if !validate_recombinant
+                && !validate.details.contains(&Details::NoRecombinationDetected)
+            {
+                validate.details.push(Details::IncorrectRecombinant);
             }
             warn!(
                 "{expected_population} failed validation: {details}",
@@ -186,6 +188,11 @@ pub fn compare_parents(
 ) -> Result<bool, Report> {
     // todo!() decide on the order, should descendants be from observed or expected?
 
+    if (observed.is_empty() && !expected.is_empty())
+        || (!observed.is_empty() && expected.is_empty())
+    {
+        return Ok(false);
+    }
     // --------------------------------------------------------------------
     // Order Version #1, observed is a parent of expected.
     // Example. ???: expected parents =
