@@ -4,11 +4,11 @@ use rebar::cli::{dataset, Cli, Command};
 
 #[tokio::main]
 async fn main() -> Result<(), Report> {
-    // Parse CLI parameters
-    let args = Cli::parse();
-
     // ------------------------------------------------------------------------
     // CLI Setup
+
+    // Parse CLI parameters
+    let args = Cli::parse();
 
     // initialize color_eyre crate for colorized logs
     color_eyre::install()?;

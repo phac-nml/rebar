@@ -137,7 +137,7 @@ pub fn simulate(args: &cli::simulate::Args) -> Result<(), Report> {
     Ok(())
 }
 
-/// Run rebar on input alignment and/or dataset population
+/// Run rebar on input alignment and/or dataset population(s)
 pub fn run(args: &mut cli::run::Args) -> Result<(), Report> {
     // check how many threads are available on the system
     let default_thread_pool = rayon::ThreadPoolBuilder::new().build().unwrap();

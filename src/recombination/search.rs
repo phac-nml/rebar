@@ -15,11 +15,18 @@ use std::collections::BTreeMap;
 ///
 /// Uses a recursion_limit for safety. It is not intended to
 /// run this wrapper function more than once recursively.
+///
+/// Compares 3 different hypotheses concerning recombination:
+/// 1. Designated (known) Recombinant.
+/// 2. Novel Recombinant.
+///     2a. (Recursive) Recombinant parent.
+///     2b. Non-recombinant parent.
+/// 3. No Recombination.
 pub fn all_parents<'seq>(
     sequence: &'seq Sequence,
     dataset: &Dataset,
     best_match: &SearchResult,
-    allow_recursion: bool,
+    _allow_recursion: bool,
     args: &run::Args,
 ) -> Result<(Vec<SearchResult>, Recombination<'seq>), Report> {
     let mut args = args.clone();
@@ -50,7 +57,7 @@ pub fn all_parents<'seq>(
     }
 
     // ------------------------------------------------------------------------
-    // args.parents : Medium Priority
+    // Parents : Medium Priority
     // args.parents supplied on the CLI overrides edge case
 
     if let Some(populations) = &args.parents {
@@ -58,7 +65,7 @@ pub fn all_parents<'seq>(
     }
 
     // ------------------------------------------------------------------------
-    // args.knockout : High Priority
+    // Knockout : High Priority
     // args.knockout supplied on the CLI overrides edge cases and args.parents
 
     if let Some(populations) = &args.knockout {
@@ -69,73 +76,99 @@ pub fn all_parents<'seq>(
     exclude_populations.retain(|p| !include_populations.contains(p));
 
     // ----------------------------------------------------------------------------
-    // Primary Parent Search
-
-    let mut parents = Vec::new();
-
-    debug!("Primary Parent Search.");
-    let parent_primary = dataset.search(sequence, Some(&include_populations), None)?;
-    //let parent_primary_pop = parent_primary.consensus_population.to_string();
-    parents.push(parent_primary);
+    // Hypotheses Testing
+    // ----------------------------------------------------------------------------
 
     // ----------------------------------------------------------------------------
-    // Secondary Parents
-    debug!("Secondary Parents Search.");
+    // Hypothesis #1. Designated Recombinant.
 
-    // // Decide whether consensus descendants can be secondary parents
-    // // Either because we've manually excluded them, or because we're not
-    // // allowing recursion anymore and have run out of retries
-    // if !include_populations.contains(&best_match_pop) || !allow_recursion {
-    //     debug!("Removing best match {best_match_pop}* from search.");
-    //     let descendants = dataset.phylogeny.get_descendants(&best_match_pop)?;
-    //     exclude_populations.extend(descendants);
-    // }
+    if let Some(recombinant) = &best_match.recombinant {
+        let mut hyp_1_parents = Vec::new();
+        let designated_parents = dataset.phylogeny.get_parents(recombinant)?;
+        debug!("Hypothesis #1. Designated Recombinant: {recombinant}, {designated_parents:?}");
 
-    // // Decide whether parent #1 descendants can be secondary parents
-    // // Either because we've manually excluded them, or because we're not
-    // // allowing recursion anymore and have run out of retries
-    // if !include_populations.contains(&parent_primary_pop) || !allow_recursion {
-    //     debug!("Removing parent #1 {parent_primary_pop}* from search.");
-    //     let descendants = dataset.phylogeny.get_descendants(&parent_primary_pop)?;
-    //     exclude_populations.extend(descendants);
-    // }
+        // Search for primary and scondary parents
+        debug!("Hypothesis #1. Primary Parent Search.");
+        let hyp_1_primary = dataset.search(sequence, Some(&designated_parents), None)?;
+        hyp_1_parents.push(hyp_1_primary);
 
-    let mut result = secondary_parents(
+        debug!("Hypothesis #1. Secondary Parent(s) Search.");
+        let mut hyp_1_exclude = exclude_populations.clone();
+        hyp_1_exclude.retain(|p| designated_parents.contains(p));
+        let _hyp_1_result = secondary_parents(
+            sequence,
+            dataset,
+            best_match,
+            &hyp_1_parents,
+            &hyp_1_exclude,
+            &args,
+        );
+    }
+
+    // ----------------------------------------------------------------------------
+    // Hypothesis #2a. Novel Recombinant, all parents.
+
+    debug!("Hypothesis #2a. Novel Recombinant, all possible parents.");
+    let mut hyp_2a_parents = Vec::new();
+
+    debug!("Hypothesis #2a. Primary Parent Search.");
+    let hyp_2a_primary = dataset.search(sequence, Some(&include_populations), None)?;
+    hyp_2a_parents.push(hyp_2a_primary);
+
+    debug!("Hypothesis #2a. Secondary Parent(s) Search.");
+    let result = secondary_parents(
         sequence,
         dataset,
         best_match,
-        &parents,
+        &hyp_2a_parents,
         &exclude_populations,
         &args,
     );
 
-    // If first time failed, try again, this time don't let the consensus
-    // population be a parent
-    // ex. XA will fail, remov
-    if result.is_err() && allow_recursion {
-        if let Some(recombinant) = &best_match.recombinant {
-            debug!(
-                "Attempting another search, recombinant {best_match_pop} cannot be parent."
-            );
-            // Add descendants to the knockout
-            let descendants = dataset.phylogeny.get_descendants(recombinant)?;
-            args.knockout = if let Some(mut populations) = args.knockout {
-                populations.extend(descendants);
-                Some(populations)
-            } else {
-                Some(descendants)
-            };
-            result = all_parents(sequence, dataset, best_match, false, &args);
-        }
-    }
+    // ----------------------------------------------------------------------------
+    // Hypothesis #2b. Novel Recombinant, non-recombinant parents.
 
-    // // If the search still failed, fallback on designated parents
-    // if result.is_err() {
+    debug!("Hypothesis #2b. Novel Recombinant, non-recombinant parents.");
+    let mut hyp_2b_parents = Vec::new();
+
+    // Update the include/exclude lists
+    let mut hyp_2b_include = include_populations.clone();
+    let mut hyp_2b_exclude = exclude_populations.clone();
+    hyp_2b_include.retain(|p| !dataset.phylogeny.recombinants.contains(p));
+    hyp_2b_exclude.retain(|p| hyp_2b_include.contains(p));
+
+    // Search for primary and scondary parents
+    debug!("Hypothesis #2b. Primary Parent Search.");
+    let hyp_2b_primary = dataset.search(sequence, Some(&hyp_2b_include), None)?;
+    hyp_2b_parents.push(hyp_2b_primary);
+
+    debug!("Hypothesis #2b.Secondary Parent(s) Search.");
+    let _hyp_2b_result = secondary_parents(
+        sequence,
+        dataset,
+        best_match,
+        &hyp_2b_parents,
+        &hyp_2b_exclude,
+        &args,
+    );
+
+    // // If first time failed, try again, this time don't let the consensus
+    // // population be a parent
+    // // ex. XA will fail, remov
+    // if result.is_err() && allow_recursion {
     //     if let Some(recombinant) = &best_match.recombinant {
-    //         let designated_parents = dataset.phylogeny.get_parents(recombinant)?;
     //         debug!(
-    //             "Attempting another search, prioritizing designated parents: {designated_parents:?}"
+    //             "Attempting another search, recombinant {best_match_pop} cannot be parent."
     //         );
+    //         // Add descendants to the knockout
+    //         let descendants = dataset.phylogeny.get_descendants(recombinant)?;
+    //         args.knockout = if let Some(mut populations) = args.knockout {
+    //             populations.extend(descendants);
+    //             Some(populations)
+    //         } else {
+    //             Some(descendants)
+    //         };
+    //         result = all_parents(sequence, dataset, best_match, false, &args);
     //     }
     // }
 
@@ -371,51 +404,51 @@ pub fn secondary_parents<'seq>(
             conflict_alt_populations
         };
 
-        // // --------------------------------------------------------------------
-        // // Search Dataset #1 (Full Coordinate Range)
-        // // --------------------------------------------------------------------
+        // --------------------------------------------------------------------
+        // Search Dataset #1 (Full Coordinate Range)
+        // --------------------------------------------------------------------
 
-        // // In what cases do we want to search the full coordinate range first vs
-        // // after the specific coordinates
-        // // Example. XD (tag: 2023-10-26), search specific first
+        // In what cases do we want to search the full coordinate range first vs
+        // after the specific coordinates
+        // Example. XD (tag: 2023-10-26), search specific first
 
-        // // find the next parent candidate based on the full coordinate range
-        // let coord_min = coordinates.iter().min().unwrap();
-        // let coord_max = coordinates.iter().max().unwrap();
-        // let coord_range = (coord_min.to_owned()..coord_max.to_owned()).collect_vec();
+        // find the next parent candidate based on the full coordinate range
+        let coord_min = coordinates.iter().min().unwrap();
+        let coord_max = coordinates.iter().max().unwrap();
+        let coord_range = (coord_min.to_owned()..coord_max.to_owned()).collect_vec();
 
-        // debug!("Searching based on coordinate range: {coord_min} - {coord_max}");
+        debug!("Searching based on coordinate range: {coord_min} - {coord_max}");
 
-        // let parent_candidate =
-        //     dataset.search(sequence, Some(&include_populations), Some(&coord_range));
+        let parent_candidate =
+            dataset.search(sequence, Some(&include_populations), Some(&coord_range));
 
-        // // if the search found parents, check for recombination
-        // if let Ok(parent_candidate) = parent_candidate {
-        //     // remove this parent from future searches
-        //     exclude_populations.push(parent_candidate.consensus_population.clone());
-        //     //designated_parents.retain(|p| p != &parent_candidate.consensus_population);
+        // if the search found parents, check for recombination
+        if let Ok(parent_candidate) = parent_candidate {
+            // remove this parent from future searches
+            exclude_populations.push(parent_candidate.consensus_population.clone());
+            //designated_parents.retain(|p| p != &parent_candidate.consensus_population);
 
-        //     // check for recombination
-        //     let detect_result = detect_recombination(
-        //         sequence,
-        //         dataset,
-        //         best_match,
-        //         &parents,
-        //         Some(&parent_candidate),
-        //         &dataset.reference,
-        //         args,
-        //     );
+            // check for recombination
+            let detect_result = detect_recombination(
+                sequence,
+                dataset,
+                best_match,
+                &parents,
+                Some(&parent_candidate),
+                &dataset.reference,
+                args,
+            );
 
-        //     // if successful, add this parent to the list and update recombination
-        //     if let Ok(detect_result) = detect_result {
-        //         num_parents += 1;
-        //         // reset the iter counter
-        //         num_iter = 0;
-        //         parents.push(parent_candidate);
-        //         recombination = detect_result;
-        //         continue;
-        //     }
-        // }
+            // if successful, add this parent to the list and update recombination
+            if let Ok(detect_result) = detect_result {
+                num_parents += 1;
+                // reset the iter counter
+                num_iter = 0;
+                parents.push(parent_candidate);
+                recombination = detect_result;
+                continue;
+            }
+        }
 
         // --------------------------------------------------------------------
         // Search Dataset #2 (Precise Coordinates)

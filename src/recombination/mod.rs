@@ -7,6 +7,7 @@ use crate::sequence::{Sequence, Substitution};
 use crate::utils::table::Table;
 use color_eyre::eyre::{eyre, Report, Result};
 use color_eyre::Help;
+use indoc::formatdoc;
 use itertools::Itertools;
 use log::debug;
 use serde::{Deserialize, Serialize};
@@ -29,6 +30,10 @@ pub struct Recombination<'seq> {
     pub regions: BTreeMap<usize, Region>,
     pub genome_length: usize,
     pub edge_case: bool,
+    pub support: BTreeMap<String, Vec<Substitution>>,
+    pub conflict_ref: BTreeMap<String, Vec<Substitution>>,
+    pub conflict_alt: BTreeMap<String, Vec<Substitution>>,
+    pub score: BTreeMap<String, isize>,
     #[serde(skip_serializing)]
     pub table: Table,
 }
@@ -45,7 +50,59 @@ impl<'seq> Recombination<'seq> {
             table: Table::new(),
             genome_length: sequence.genome_length,
             edge_case: false,
+            support: BTreeMap::new(),
+            conflict_ref: BTreeMap::new(),
+            conflict_alt: BTreeMap::new(),
+            score: BTreeMap::new(),
         }
+    }
+
+    pub fn pretty_print_parsimony(&self) -> String {
+        let mut score = String::new();
+        let mut support = String::new();
+        let mut conflict_ref = String::new();
+        let mut conflict_alt = String::new();
+
+        self.parents.iter().for_each(|pop| {
+            // score
+            let subs = self.support.get(pop).unwrap();
+            let msg = format!("  - {pop}:\n    - count: {}\n", subs.len(),);
+            score.push_str(&msg);
+
+            // support
+            let subs = self.support.get(pop).unwrap();
+            let msg = format!(
+                "  - {pop}:\n    - count: {}\n    - substitutions: {}\n",
+                subs.len(),
+                subs.iter().join(", ")
+            );
+            support.push_str(&msg);
+
+            // conflict_ref
+            let subs = self.conflict_ref.get(pop).unwrap();
+            let msg = format!(
+                "  - {pop}:\n    - count: {}\n    - substitutions: {}\n",
+                subs.len(),
+                subs.iter().join(", ")
+            );
+            conflict_ref.push_str(&msg);
+
+            // conflict_alt
+            let subs = self.conflict_alt.get(pop).unwrap();
+            let msg = format!(
+                "  - {pop}:\n    - count: {}\n    - substitutions: {}\n",
+                subs.len(),
+                subs.iter().join(", ")
+            );
+            conflict_alt.push_str(&msg);
+        });
+
+        formatdoc!(
+            "score:\n{score}
+            support:\n{support}
+            conflict_ref:\n{conflict_ref}
+            conflict_alt:\n{conflict_alt}"
+        )
     }
 }
 
@@ -376,6 +433,36 @@ pub fn detect_recombination<'seq>(
     recombination.breakpoints = breakpoints;
     // pre-filter or post-filter table?
     recombination.table = table;
+
+    // compound recombination parsimony score
+    for pop in &recombination.parents {
+        // Which coordinate ranges are attributed to this parent
+        let coordinates = recombination
+            .regions
+            .iter()
+            .filter(|(_start, region)| &region.origin == pop)
+            .flat_map(|(_start, region)| ((region.start)..=(region.end)).collect_vec())
+            .collect_vec();
+
+        let summary = dataset.parsimony_summary(pop, sequence, Some(&coordinates))?;
+        // update recombination with support and conflicts found
+        recombination
+            .support
+            .insert(pop.to_owned(), summary.support);
+        recombination
+            .conflict_ref
+            .insert(pop.to_owned(), summary.conflict_ref);
+        recombination
+            .conflict_alt
+            .insert(pop.to_owned(), summary.conflict_alt);
+        recombination.score.insert(pop.to_owned(), summary.score);
+    }
+
+    // convoluted debug message
+    debug!(
+        "Parsimony Summary:\n{}",
+        recombination.pretty_print_parsimony()
+    );
 
     // Decide on novel vs known recombinant at this point
     recombination.recombinant = if let Some(recombinant) = &best_match.recombinant {
