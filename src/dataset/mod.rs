@@ -164,7 +164,7 @@ impl Dataset {
     pub fn search(
         &self,
         sequence: &Sequence,
-        populations: Option<&Vec<String>>,
+        populations: Option<&Vec<&String>>,
         coordinates: Option<&Vec<usize>>,
     ) -> Result<SearchResult, Report> {
         // initialize an empty result, this will be the final product of this function
@@ -184,52 +184,49 @@ impl Dataset {
                 .substitutions
                 .iter()
                 .filter(|sub| coordinates.contains(&sub.coord))
-                .cloned()
                 .collect_vec()
         } else {
-            sequence.substitutions.clone()
+            sequence.substitutions.iter().collect()
         };
 
         // Count up all matching population subs ("support")
-        let mut population_support_counts = BTreeMap::new();
-        search_subs
+        let mut max_support = 0;
+        let population_support_counts: BTreeMap<&String, usize> = self
+            .populations
             .iter()
-            .filter(|sub| self.mutations.contains_key(sub))
-            .for_each(|sub| {
-                self.mutations[sub]
+            .filter(|(pop, _seq)| {
+                if let Some(populations) = populations {
+                    if populations.contains(pop) {
+                        true
+                    } else {
+                        false
+                    }
+                } else {
+                    true
+                }
+            })
+            .filter_map(|(pop, seq)| {
+                let count = seq
+                    .substitutions
                     .iter()
-                    .filter(|pop| {
-                        // optionally filter populations
-                        if let Some(populations) = &populations {
-                            populations.contains(pop)
-                        } else {
-                            true
-                        }
-                    })
-                    .for_each(|pop| {
-                        population_support_counts
-                            .entry(pop)
-                            .and_modify(|count| *count += 1)
-                            .or_insert(0);
-                    })
-            });
-
-        // Get maximum support value
-        let max_support = population_support_counts
-            .values()
-            .cloned()
-            .max()
-            .unwrap_or(0);
+                    .filter(|sub| search_subs.contains(sub))
+                    .collect_vec()
+                    .len();
+                if count >= max_support {
+                    max_support = count
+                }
+                (count > 0).then(|| (pop, count))
+            })
+            .collect();
 
         // todo!() decide how much wiggle room we want to give in max support
         // if we want to do max_support - 10, we might need to alter pretty_print
         // so that it only displays the first N candidates (ex. 5,10)
+        // this will also cause slow downs
         let population_matches = population_support_counts
             .into_iter()
-            //.filter(|(_pop, count)| *count == max_support)
-            .filter(|(_pop, count)| *count >= (max_support - 10))
-            .map(|(pop, _count)| pop)
-            .cloned()
+            .filter_map(|(pop, count)| (count == max_support).then(|| pop))
+            //.filter(|(_pop, count)| *count >= (max_support - 10))
             .collect_vec();
 
         if population_matches.is_empty() {
@@ -240,17 +237,12 @@ impl Dataset {
         // Conflict
 
         // check which populations have extra subs/lacking subs
-        population_matches.iter().for_each(|pop| {
+        population_matches.into_iter().for_each(|pop| {
+            // calculate the parsimony score, and store results in map by population
             let summary = self.parsimony_summary(pop, sequence, coordinates).unwrap();
-            search_result
-                .support
-                .insert(pop.to_owned(), summary.support);
-            search_result
-                .conflict_ref
-                .insert(pop.to_owned(), summary.conflict_ref);
-            search_result
-                .conflict_alt
-                .insert(pop.to_owned(), summary.conflict_alt);
+            search_result.support.insert(pop.to_owned(), summary.support);
+            search_result.conflict_ref.insert(pop.to_owned(), summary.conflict_ref);
+            search_result.conflict_alt.insert(pop.to_owned(), summary.conflict_alt);
             search_result.score.insert(pop.to_owned(), summary.score);
         });
 
@@ -261,33 +253,32 @@ impl Dataset {
         // Ex. XCU parent #1 could be FL.23 (highest support) or XBC.1 (lowest conflict)
 
         // which population(s) has the highest score?
+        // there is a slight possibility that it could be negative
         let max_score = search_result.score.values().max().unwrap();
 
-        search_result.top_populations = search_result
+        let max_score_populations = search_result
             .score
             .iter()
-            .filter(|(_pop, count)| *count == max_score)
-            .map(|(pop, _count)| pop)
-            .cloned()
+            .filter_map(|(pop, count)| (count == max_score).then(|| pop))
             .collect_vec();
 
         // break additional ties by max support
         let max_support = search_result
             .support
             .iter()
-            .filter(|(pop, _subs)| search_result.top_populations.contains(pop))
-            .map(|(_pop, subs)| subs.len())
+            .filter_map(|(pop, subs)| {
+                (max_score_populations.contains(&pop)).then(|| subs.len())
+            })
             .max()
-            .unwrap();
+            .unwrap_or(0);
 
         search_result.top_populations = search_result
             .score
             .iter()
             .zip(search_result.support.iter())
-            .filter(|((_, score), (_, subs))| {
-                *score == max_score && subs.len() == max_support
+            .filter_map(|((pop, score), (_, subs))| {
+                (score == max_score && subs.len() == max_support).then(|| pop)
             })
-            .map(|((pop, _score), _)| pop)
             .cloned()
             .collect_vec();
 
@@ -312,56 +303,25 @@ impl Dataset {
         //     .unique()
         //     .collect::<Vec<_>>();
 
+        //todo!() decide how this will shape/affect top populations
+
         // --------------------------------------------------------------------
         // Consensus Population
 
-        // Without a phylogeny, just use first pop in list
-        if self.phylogeny.is_empty() {
-            // if we found populations with diagnostic mutations, prioritize those
-            if !search_result.diagnostic.is_empty() {
-                search_result.consensus_population = search_result.diagnostic[0].clone();
-            }
-            // otherwise use top_populations list
-            else {
-                search_result.consensus_population =
-                    search_result.top_populations[0].clone();
-            }
-        }
-        // Otherwise, summarize top populations by common ancestor
-        else {
-            // if we found populations with diagnostic mutations, prioritize those
-            if !search_result.diagnostic.is_empty() {
-                search_result.consensus_population = self
-                    .phylogeny
-                    .get_common_ancestor(&search_result.diagnostic)?;
-            }
-            // otherwise use top_populations list
-            else {
-                search_result.consensus_population = self
-                    .phylogeny
-                    .get_common_ancestor(&search_result.top_populations)?;
-            }
-        }
+        // todo!() think about how mandatory a phylogeny is
+        // summarize top populations by common ancestor
+        // if we found populations with diagnostic mutations, prioritize those
+        search_result.consensus_population =
+            self.phylogeny.get_common_ancestor(&search_result.top_populations)?;
 
         // if the common_ancestor was not in the populations list, add it
         // this is repeated code from before, maybe make it a function
-        if !search_result
-            .top_populations
-            .contains(&search_result.consensus_population)
-        {
+        if !search_result.top_populations.contains(&search_result.consensus_population) {
             let pop = &search_result.consensus_population;
             let summary = self.parsimony_summary(pop, sequence, coordinates)?;
-
-            // update search results with support and conflicts found
-            search_result
-                .support
-                .insert(pop.to_owned(), summary.support);
-            search_result
-                .conflict_ref
-                .insert(pop.to_owned(), summary.conflict_ref);
-            search_result
-                .conflict_alt
-                .insert(pop.to_owned(), summary.conflict_alt);
+            search_result.support.insert(pop.to_owned(), summary.support);
+            search_result.conflict_ref.insert(pop.to_owned(), summary.conflict_ref);
+            search_result.conflict_alt.insert(pop.to_owned(), summary.conflict_alt);
             search_result.score.insert(pop.to_owned(), summary.score);
         }
 
@@ -375,39 +335,24 @@ impl Dataset {
             [&search_result.consensus_population]
             .substitutions
             .iter()
-            .filter(|sub| {
-                !sequence.missing.contains(&sub.coord)
-                    && !sequence.deletions.contains(&sub.to_deletion())
+            .filter_map(|sub| {
+                (!sequence.missing.contains(&sub.coord)
+                    && !sequence.deletions.contains(&sub.to_deletion()))
+                .then(|| sub.to_owned())
             })
-            .map(|sub| sub.to_owned())
-            .collect::<Vec<_>>();
+            .collect_vec();
 
         // Filter out non-top populations from the debug log.
         // helps cut down on verbosity and data stored
         // Ex. XE, lots of BA.2 candidates
-        search_result.score = search_result
-            .score
-            .into_iter()
-            .filter(|(pop, _count)| search_result.top_populations.contains(pop))
-            .collect::<BTreeMap<_, _>>();
-
-        search_result.support = search_result
-            .support
-            .into_iter()
-            .filter(|(pop, _count)| search_result.top_populations.contains(pop))
-            .collect::<BTreeMap<_, _>>();
-
-        search_result.conflict_ref = search_result
+        search_result.score.retain(|p, _| search_result.top_populations.contains(p));
+        search_result.support.retain(|p, _| search_result.top_populations.contains(p));
+        search_result
             .conflict_ref
-            .into_iter()
-            .filter(|(pop, _subs)| search_result.top_populations.contains(pop))
-            .collect::<BTreeMap<_, _>>();
-
-        search_result.conflict_alt = search_result
+            .retain(|p, _| search_result.top_populations.contains(p));
+        search_result
             .conflict_alt
-            .into_iter()
-            .filter(|(pop, _count)| search_result.top_populations.contains(pop))
-            .collect::<BTreeMap<_, _>>();
+            .retain(|p, _| search_result.top_populations.contains(p));
 
         debug!("Search Result:\n{}", search_result.pretty_print());
         Ok(search_result)

@@ -111,11 +111,9 @@ pub fn parse_populations(
         let record = result?;
         let sequence = Sequence::from_record(record, Some(&reference), mask)?;
         populations.insert(sequence.id.clone(), sequence.clone());
+
         for sub in sequence.substitutions {
-            mutations
-                .entry(sub)
-                .or_insert(Vec::new())
-                .push(sequence.id.clone());
+            mutations.entry(sub.clone()).or_insert(Vec::new()).push(sequence.id.clone());
         }
     }
 

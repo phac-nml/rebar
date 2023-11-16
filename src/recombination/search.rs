@@ -27,60 +27,38 @@ pub fn all_parents<'seq>(
     sequence: &'seq Sequence,
     dataset: &Dataset,
     best_match: &SearchResult,
+    populations: &[&String],
     args: &run::Args,
 ) -> Result<Recombination<'seq>, Report> {
-    //let parents = Vec::new();
-    //let mut recombination = Recombination::new(sequence);
-
     // copy args, we don't want to modify the original global parameters
     let mut args = args.clone();
+    // copy search populations, we will refine these based on edge cases and
+    // different hypotheses
+    let mut populations = populations.to_vec();
 
     // ------------------------------------------------------------------------
-    // Filters
+    // Edge Case
     // ------------------------------------------------------------------------
 
-    // Restrict the parent search to particular populations.
-    let mut exclude_populations: Vec<String> = Vec::new();
-    let mut include_populations = dataset.populations.keys().cloned().collect_vec();
-
-    // Edge Cases : Low Priority
-    // Manualy specified in the organism's dataset.
+    // // Edge Cases: Manually specified in the organism's dataset.
     let mut edge_case = false;
-    let best_match_pop = best_match.consensus_population.to_string();
     let edge_case_search = dataset
         .edge_cases
         .iter()
-        .find(|e| e.population.as_ref() == Some(&best_match_pop));
+        .find(|e| e.population.as_ref() == Some(&best_match.consensus_population));
 
     if let Some(edge_case_args) = edge_case_search {
         debug!("Applying edge case parameters: {edge_case_args:?}");
         edge_case = true;
         args = args.apply_edge_case(edge_case_args)?;
 
-        if let Some(populations) = &edge_case_args.parents {
-            include_populations = populations.clone();
+        if let Some(parents) = &edge_case_args.parents {
+            populations.retain(|pop| parents.contains(pop))
         }
-        if let Some(populations) = &edge_case_args.knockout {
-            exclude_populations = populations.clone();
+        if let Some(knockout) = &edge_case_args.knockout {
+            populations.retain(|pop| !knockout.contains(pop))
         }
     }
-
-    // Parents : Medium Priority
-    // args.parents supplied on the CLI can override edge case
-
-    if let Some(populations) = &args.parents {
-        include_populations = populations.clone();
-    }
-
-    // Knockout : High Priority
-    // args.knockout supplied on the CLI can override edge cases and args.parents
-    if let Some(populations) = &args.knockout {
-        exclude_populations = populations.clone();
-    }
-
-    // make include/exclude mutually exclusive
-    include_populations.retain(|p| !exclude_populations.contains(p));
-    exclude_populations.retain(|p| !include_populations.contains(p));
 
     // ----------------------------------------------------------------------------
     // Hypothesis Testing
@@ -94,24 +72,21 @@ pub fn all_parents<'seq>(
     for hypothesis in Hypothesis::iter() {
         debug!("Testing Hypothesis: {hypothesis:?}");
 
-        let mut hyp_include = include_populations.clone();
-        let mut hyp_exclude = exclude_populations.clone();
-        let mut hyp_args = args.clone();
-
         // ----------------------------------------------------------------------------
         // Hypothesis: Non-Recombinant
         // The sequence is simply it's best match (consensus population)
         // + conflict_alt mutations and + conflict_ref reversions
         if hypothesis == Hypothesis::NonRecombinant {
             if best_match.recombinant.is_none() {
-                let parsimony_score = best_match
-                    .score
-                    .get(&best_match.consensus_population)
-                    .unwrap();
+                let parsimony_score =
+                    best_match.score.get(&best_match.consensus_population).unwrap();
                 hypotheses.insert(Hypothesis::NonRecombinant, (*parsimony_score, None));
             }
             continue;
         }
+
+        let mut hyp_args = args.clone();
+        let mut hyp_populations = populations.clone();
 
         // ----------------------------------------------------------------------------
         // Hypothesis: Designated Recombinant.
@@ -120,90 +95,85 @@ pub fn all_parents<'seq>(
 
         if hypothesis == Hypothesis::DesignatedRecombinant {
             if let Some(recombinant) = &best_match.recombinant {
-                hyp_include = dataset.phylogeny.get_parents(recombinant)?;
-                debug!("Designated Parents: {hyp_include:?}");
-                hyp_args.parents = Some(hyp_include.clone());
-
-                // Exclude all populations that are not the designated parents
-                hyp_exclude = dataset.populations.keys().cloned().collect_vec();
-                hyp_exclude.retain(|p| !hyp_include.contains(p));
+                let designated_parents = dataset.phylogeny.get_parents(recombinant)?;
+                debug!("Designated Parents: {designated_parents:?}");
+                hyp_populations.retain(|pop| designated_parents.contains(pop));
             }
         }
 
         // ----------------------------------------------------------------------------
         // Hypothesis: Novel Recombinant, Allow Recursion.
         // One or more parent(s) are recombinants or recombinant descendants
-        if hypothesis == Hypothesis::NovelRecursiveRecombinant {}
+        // This is a default search, no filter edits needed
 
         // ----------------------------------------------------------------------------
-        // Hypothesis: Novel Recombinant, Allow Recursion.
+        // Hypothesis: Novel Recombinant, Disallow Recursion.
         // No parent(s) are recombinants or recombinant descendants
         if hypothesis == Hypothesis::NovelNonRecursiveRecombinant {
             // skip this hypothesis if
             if hypotheses.contains_key(&Hypothesis::NovelNonRecursiveRecombinant) {
                 continue;
             }
-            let all_recombinants = dataset.phylogeny.get_recombinants_all()?;
-            hyp_include.retain(|p| !all_recombinants.contains(p));
-            hyp_args.parents = Some(hyp_include.clone());
-            hyp_exclude.retain(|p| !hyp_include.contains(p));
+            hyp_populations
+                .retain(|pop| dataset.phylogeny.non_recombinants_all.contains(pop));
         }
 
         // ----------------------------------------------------------------------------
         // Hypothesis Test Time!
         // Search for primary and scondary parents
-        let mut parents = Vec::new();
 
         debug!("Primary Parent Search.");
-        let primary_search = dataset.search(sequence, Some(&hyp_include), None);
-
-        // Check if primary search found anything
-        if let Ok(primary_parent) = primary_search {
-            debug!("Primary Parent Search was successful.");
-            parents.push(primary_parent);
-            debug!("Secondary Parent(s) Search.");
-            let secondary_search = secondary_parents(
-                sequence,
-                dataset,
-                best_match,
-                &parents,
-                &hyp_exclude,
-                &hyp_args,
-            );
-
-            if let Ok(recombination) = secondary_search {
-                debug!("Secondary Parent(s) Search was successful.");
-                let parsimony_score: isize = recombination.score.values().sum();
-
-                // adjust the hypothesis, in case it wasn't actually recursive
-                let hypothesis = if hypothesis == Hypothesis::NovelRecursiveRecombinant {
-                    let mut is_recursive = false;
-                    recombination.parents.iter().for_each(|pop| {
-                        let recombinant_ancestor = dataset
-                            .phylogeny
-                            .get_recombinant_ancestor(pop)
-                            .unwrap_or(None);
-                        if recombinant_ancestor.is_some() {
-                            is_recursive = true
-                        }
-                    });
-
-                    if is_recursive {
-                        Hypothesis::NovelRecursiveRecombinant
-                    } else {
-                        Hypothesis::NovelNonRecursiveRecombinant
-                    }
-                } else {
-                    hypothesis
-                };
-
-                hypotheses.insert(hypothesis, (parsimony_score, Some(recombination)));
-            } else {
-                debug!("Secondary Parent(s) Search was unsuccessful.");
-            }
-        } else {
-            debug!("Primary Parent Search was unsuccessful.");
+        if populations.is_empty() {
+            return Err(eyre!("No parent populations provided for search."));
         }
+        let primary_search = dataset.search(sequence, Some(&hyp_populations), None);
+
+        // // Check if primary search found anything
+        // if let Ok(primary_parent) = primary_search {
+        //     debug!("Primary Parent Search was successful.");
+        //     debug!("Secondary Parent(s) Search.");
+        //     let secondary_search = secondary_parents(
+        //         sequence,
+        //         dataset,
+        //         best_match,
+        //         &[primary_parent],
+        //         &hyp_exclude,
+        //         &hyp_args,
+        //     );
+
+        //     if let Ok(recombination) = secondary_search {
+        //         debug!("Secondary Parent(s) Search was successful.");
+        //         let parsimony_score: isize = recombination.score.values().sum();
+
+        //         // adjust the hypothesis, in case it wasn't actually recursive
+        //         let hypothesis = if hypothesis == Hypothesis::NovelRecursiveRecombinant {
+        //             let mut is_recursive = false;
+        //             recombination.parents.iter().for_each(|pop| {
+        //                 let recombinant_ancestor = dataset
+        //                     .phylogeny
+        //                     .get_recombinant_ancestor(pop)
+        //                     .unwrap_or(None);
+        //                 if recombinant_ancestor.is_some() {
+        //                     is_recursive = true
+        //                 }
+        //             });
+
+        //             if is_recursive {
+        //                 Hypothesis::NovelRecursiveRecombinant
+        //             } else {
+        //                 Hypothesis::NovelNonRecursiveRecombinant
+        //             }
+        //         } else {
+        //             hypothesis
+        //         };
+
+        //         hypotheses.insert(hypothesis, (parsimony_score, Some(recombination)));
+        //     } else {
+        //         debug!("Secondary Parent(s) Search was unsuccessful.");
+        //     }
+        // } else {
+        //     debug!("Primary Parent Search was unsuccessful.");
+        // }
     }
 
     // ----------------------------------------------------------------------------
@@ -211,21 +181,15 @@ pub fn all_parents<'seq>(
 
     debug!(
         "Hypotheses: {}",
-        hypotheses
-            .iter()
-            .map(|(hyp, (score, _))| format!("{hyp:?}: {score}"))
-            .join(", ")
+        hypotheses.iter().map(|(hyp, (score, _))| format!("{hyp:?}: {score}")).join(", ")
     );
 
     if hypotheses.is_empty() {
         return Err(eyre!("No evidence for any recombination hypotheses."));
     }
 
-    let max_score = hypotheses
-        .iter()
-        .map(|(_hyp, (score, _recombination))| score)
-        .max()
-        .unwrap();
+    let max_score =
+        hypotheses.iter().map(|(_hyp, (score, _recombination))| score).max().unwrap();
 
     let best_hypothesis = hypotheses
         .iter()
@@ -277,7 +241,7 @@ pub fn secondary_parents<'seq>(
     let mut exclude_populations = exclude_populations.to_vec();
     // The inclusion parents may have been set by the args
     let mut include_populations = if let Some(parents) = &args.parents {
-        parents.clone()
+        parents.iter().collect_vec()
     } else {
         Vec::new()
     };
@@ -473,7 +437,6 @@ pub fn secondary_parents<'seq>(
                 .into_iter()
                 .filter(|(_pop, count)| *count >= args.min_subs)
                 .map(|(pop, _count)| pop)
-                .cloned()
                 .collect_vec();
 
             debug!("Prioritizing conflict_alt resolution.");

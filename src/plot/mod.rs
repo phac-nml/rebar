@@ -84,12 +84,7 @@ pub fn create(
         .parse::<usize>()?;
 
     // get coords
-    let coords = barcodes
-        .rows
-        .iter()
-        .map(|row| &row[coord_i])
-        .unique()
-        .collect_vec();
+    let coords = barcodes.rows.iter().map(|row| &row[coord_i]).unique().collect_vec();
 
     // get parents (origins column)
     let parents = barcodes
@@ -117,12 +112,8 @@ pub fn create(
     }
 
     // get sequence ids (columns after mandatory cols and parents)
-    let sequence_ids = barcodes
-        .headers
-        .iter()
-        .skip(3 + parents.len())
-        .cloned()
-        .collect_vec();
+    let sequence_ids =
+        barcodes.headers.iter().skip(3 + parents.len()).cloned().collect_vec();
 
     // search for sequence_ids in the linelist
     let strain_i = linelist.header_position("strain")?;
@@ -300,12 +291,8 @@ pub fn create(
     // iterate over parental regions in linelist
     let regions_i = linelist.header_position("regions")?;
     // they *should be all the same, just grab first
-    let regions = &linelist
-        .rows
-        .iter()
-        .map(|row| row[regions_i].to_string())
-        .next()
-        .unwrap();
+    let regions =
+        &linelist.rows.iter().map(|row| row[regions_i].to_string()).next().unwrap();
     // 0-1000|parent1,1000-2000|parent2;
     let regions_split = regions.split(',').collect_vec();
 
@@ -634,14 +621,10 @@ pub fn create(
         //println!("{prev_region_end} {next_region_start}");
 
         // which subs does this fall between
-        let coord_prev_i = coords
-            .iter()
-            .position(|c| **c == prev_region_end.to_string())
-            .unwrap();
-        let coord_next_i = coords
-            .iter()
-            .position(|c| **c == next_region_start.to_string())
-            .unwrap();
+        let coord_prev_i =
+            coords.iter().position(|c| **c == prev_region_end.to_string()).unwrap();
+        let coord_next_i =
+            coords.iter().position(|c| **c == next_region_start.to_string()).unwrap();
         //println!("\t{coord_prev_i} {coord_next_i}");
 
         // middle will depend on breakpoints uncertainy

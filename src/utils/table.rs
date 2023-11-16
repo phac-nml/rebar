@@ -65,13 +65,9 @@ impl Table {
     }
 
     pub fn header_position(&self, header: &str) -> Result<usize, Report> {
-        let pos = self
-            .headers
-            .iter()
-            .position(|h| h == header)
-            .ok_or_else(|| {
-                eyre!("Column '{header}' was not found in table: {:?}.", self.path)
-            })?;
+        let pos = self.headers.iter().position(|h| h == header).ok_or_else(|| {
+            eyre!("Column '{header}' was not found in table: {:?}.", self.path)
+        })?;
 
         Ok(pos)
     }

@@ -25,9 +25,7 @@ pub async fn build(
     } else {
         dataset::sarscov2::download::lineage_notes(&summary.tag, &output_path).await?
     };
-    summary
-        .misc
-        .insert("lineage_notes".to_string(), remote_file);
+    summary.misc.insert("lineage_notes".to_string(), remote_file);
 
     // ------------------------------------------------------------------------
     // Alias key
@@ -202,6 +200,9 @@ pub async fn build(
         }
     }
 
+    phylogeny.recombinants_all = phylogeny.get_recombinants_all()?;
+    phylogeny.non_recombinants_all = phylogeny.get_non_recombinants_all()?;
+
     Ok(phylogeny)
 }
 
@@ -227,10 +228,8 @@ pub fn get_lineage_parents(
     let decompress = decompress_lineage(lineage, alias_key).unwrap();
 
     // Ex. BA.5.2 -> ["BA", "5", "2"]
-    let decompress_parts = decompress
-        .split('.')
-        .map(|p| p.to_string())
-        .collect::<Vec<_>>();
+    let decompress_parts =
+        decompress.split('.').map(|p| p.to_string()).collect::<Vec<_>>();
 
     // If just 1 part, parent is root (ex. A)
     let mut parent = String::from("root");
@@ -266,10 +265,7 @@ pub fn compress_lineage(
     }
 
     // Ex. BA.5.2 -> ["BA", "5", "2"]
-    let compress_parts = compress
-        .split('.')
-        .map(|p| p.to_string())
-        .collect::<Vec<_>>();
+    let compress_parts = compress.split('.').map(|p| p.to_string()).collect::<Vec<_>>();
 
     if compress_parts.len() > 1 {
         for i in (0..compress_parts.len()).rev() {

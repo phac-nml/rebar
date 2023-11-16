@@ -38,16 +38,12 @@ pub async fn datasets(args: &cli::dataset::list::Args) -> Result<(), Report> {
 
         let cli_version = compatibility.cli.version.unwrap_or(String::new());
         let min_date = if let Some(min_date) = compatibility.dataset.min_date {
-            min_date
-                .to_rfc3339_opts(SecondsFormat::Secs, true)
-                .to_string()
+            min_date.to_rfc3339_opts(SecondsFormat::Secs, true).to_string()
         } else {
             String::new()
         };
         let max_date = if let Some(max_date) = compatibility.dataset.max_date {
-            max_date
-                .to_rfc3339_opts(SecondsFormat::Secs, true)
-                .to_string()
+            max_date.to_rfc3339_opts(SecondsFormat::Secs, true).to_string()
         } else {
             "latest".to_string()
         };
