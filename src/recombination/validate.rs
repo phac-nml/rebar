@@ -3,6 +3,7 @@ use crate::recombination::Recombination;
 use color_eyre::eyre::{eyre, Report, Result};
 use itertools::Itertools;
 use log::warn;
+use petgraph::Direction;
 use std::fmt;
 use std::str::FromStr;
 
@@ -133,6 +134,9 @@ pub fn validate(
             Vec::new()
         };
 
+        // parent validation is already done in recombination::detect_recombination
+        // to decide whether it's a novel variant or not. It seems wasteful to run it again...
+
         let validate_parent =
             compare_parents(observed_parents, &expected_parents, dataset)?;
 
@@ -186,44 +190,46 @@ pub fn compare_parents(
     expected: &Vec<String>,
     dataset: &Dataset,
 ) -> Result<bool, Report> {
-    // todo!() decide on the order, should descendants be from observed or expected?
-
+    // one is empty, other is not
     if (observed.is_empty() && !expected.is_empty())
         || (!observed.is_empty() && expected.is_empty())
     {
         return Ok(false);
     }
-    // --------------------------------------------------------------------
-    // Order Version #1, observed is a parent of expected.
-    // Example. ???: expected parents =
-    //               observed parents =
-
-    let mut observed_descendants = observed
-        .iter()
-        .flat_map(|p| dataset.phylogeny.get_descendants(p).unwrap())
-        .unique()
-        .collect_vec();
-
-    observed_descendants.retain(|p| expected.contains(p));
-
-    let parents_match = observed_descendants.len() == expected.len();
-
-    if parents_match {
-        return Ok(parents_match);
+    // exact match
+    let mut observed_exact = observed.clone();
+    observed_exact.retain(|p| expected.contains(p));
+    if observed_exact.len() == expected.len() {
+        return Ok(true);
     }
 
-    // --------------------------------------------------------------------
-    // Order Version #2, observed is a descendant of expected.
-    // Example. XC: expected parents = AY.29, B.1.1.7
-    //              observed parents = AY.29.1, B.1.1.7
+    // expected is parent of observed, but no recombinant descendants
+    // Ex. XE: expected = BA.1,BA.2; observed=BA.1.17.2.1,BA.2
+    // for each observed parent, walk towards the root, stopping a path
+    // if a recombinant node is encountered
+    let mut observed_parents = Vec::new();
+    observed.iter().for_each(|pop| {
+        // get all possible paths from parent population to root
+        // ex. BA.1 (single path), XE, (two paths, through BA.1, BA.2), XBL (four paths, recursive)
+        let paths = dataset
+            .phylogeny
+            .get_paths(pop, "root", Direction::Incoming)
+            .unwrap_or(Vec::new());
+        paths.iter().for_each(|populations| {
+            for p in populations {
+                // once we hit the first recombinant, break
+                if dataset.phylogeny.is_recombinant(p).unwrap_or(false) {
+                    break;
+                } else {
+                    observed_parents.push(p.clone());
+                }
+            }
+        });
+    });
+    observed_parents.retain(|p| expected.contains(p));
+    if observed_parents.len() == expected.len() {
+        return Ok(true);
+    }
 
-    let mut expected_descendants = expected
-        .iter()
-        .flat_map(|p| dataset.phylogeny.get_descendants(p).unwrap())
-        .unique()
-        .collect_vec();
-    expected_descendants.retain(|p| observed.contains(p));
-
-    let parents_match = expected_descendants.len() == observed.len();
-    Ok(parents_match)
+    Ok(false)
 }

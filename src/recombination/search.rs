@@ -1,11 +1,12 @@
 use crate::cli::run;
 use crate::dataset::{Dataset, SearchResult};
-use crate::recombination::{detect_recombination, Recombination};
+use crate::recombination::{detect_recombination, Hypothesis, Recombination};
 use crate::sequence::Sequence;
 use color_eyre::eyre::{eyre, Report, Result};
 use itertools::Itertools;
 use log::debug;
 use std::collections::BTreeMap;
+use strum::IntoEnumIterator;
 
 // ----------------------------------------------------------------------------
 // Functions
@@ -26,18 +27,26 @@ pub fn all_parents<'seq>(
     sequence: &'seq Sequence,
     dataset: &Dataset,
     best_match: &SearchResult,
-    _allow_recursion: bool,
     args: &run::Args,
-) -> Result<(Vec<SearchResult>, Recombination<'seq>), Report> {
+) -> Result<Recombination<'seq>, Report> {
+    //let parents = Vec::new();
+    //let mut recombination = Recombination::new(sequence);
+
+    // copy args, we don't want to modify the original global parameters
     let mut args = args.clone();
-    let mut exclude_populations: Vec<String> = Vec::new();
-    let mut include_populations = dataset.populations.keys().cloned().collect_vec();
-    let mut edge_case = false;
-    let best_match_pop = best_match.consensus_population.to_string();
 
     // ------------------------------------------------------------------------
-    // Edge Case : Low Priority
+    // Filters
+    // ------------------------------------------------------------------------
 
+    // Restrict the parent search to particular populations.
+    let mut exclude_populations: Vec<String> = Vec::new();
+    let mut include_populations = dataset.populations.keys().cloned().collect_vec();
+
+    // Edge Cases : Low Priority
+    // Manualy specified in the organism's dataset.
+    let mut edge_case = false;
+    let best_match_pop = best_match.consensus_population.to_string();
     let edge_case_search = dataset
         .edge_cases
         .iter()
@@ -56,127 +65,193 @@ pub fn all_parents<'seq>(
         }
     }
 
-    // ------------------------------------------------------------------------
     // Parents : Medium Priority
-    // args.parents supplied on the CLI overrides edge case
+    // args.parents supplied on the CLI can override edge case
 
     if let Some(populations) = &args.parents {
         include_populations = populations.clone();
     }
 
-    // ------------------------------------------------------------------------
     // Knockout : High Priority
-    // args.knockout supplied on the CLI overrides edge cases and args.parents
-
+    // args.knockout supplied on the CLI can override edge cases and args.parents
     if let Some(populations) = &args.knockout {
         exclude_populations = populations.clone();
     }
 
+    // make include/exclude mutually exclusive
     include_populations.retain(|p| !exclude_populations.contains(p));
     exclude_populations.retain(|p| !include_populations.contains(p));
 
     // ----------------------------------------------------------------------------
-    // Hypotheses Testing
+    // Hypothesis Testing
     // ----------------------------------------------------------------------------
 
-    // ----------------------------------------------------------------------------
-    // Hypothesis #1. Designated Recombinant.
+    // Store the results of our hypothesis testing
+    let mut hypotheses: BTreeMap<Hypothesis, (isize, Option<Recombination>)> =
+        BTreeMap::new();
 
-    if let Some(recombinant) = &best_match.recombinant {
-        let mut hyp_1_parents = Vec::new();
-        let designated_parents = dataset.phylogeny.get_parents(recombinant)?;
-        debug!("Hypothesis #1. Designated Recombinant: {recombinant}, {designated_parents:?}");
+    // iterate through the potential hypotheses
+    for hypothesis in Hypothesis::iter() {
+        debug!("Testing Hypothesis: {hypothesis:?}");
 
+        let mut hyp_include = include_populations.clone();
+        let mut hyp_exclude = exclude_populations.clone();
+        let mut hyp_args = args.clone();
+
+        // ----------------------------------------------------------------------------
+        // Hypothesis: Non-Recombinant
+        // The sequence is simply it's best match (consensus population)
+        // + conflict_alt mutations and + conflict_ref reversions
+        if hypothesis == Hypothesis::NonRecombinant {
+            if best_match.recombinant.is_none() {
+                let parsimony_score = best_match
+                    .score
+                    .get(&best_match.consensus_population)
+                    .unwrap();
+                hypotheses.insert(Hypothesis::NonRecombinant, (*parsimony_score, None));
+            }
+            continue;
+        }
+
+        // ----------------------------------------------------------------------------
+        // Hypothesis: Designated Recombinant.
+        // The best match (consensus) population is a known recombinant (or descendant of)
+        // Search for parents based on the known list of parents.
+
+        if hypothesis == Hypothesis::DesignatedRecombinant {
+            if let Some(recombinant) = &best_match.recombinant {
+                hyp_include = dataset.phylogeny.get_parents(recombinant)?;
+                debug!("Designated Parents: {hyp_include:?}");
+                hyp_args.parents = Some(hyp_include.clone());
+
+                // Exclude all populations that are not the designated parents
+                hyp_exclude = dataset.populations.keys().cloned().collect_vec();
+                hyp_exclude.retain(|p| !hyp_include.contains(p));
+            }
+        }
+
+        // ----------------------------------------------------------------------------
+        // Hypothesis: Novel Recombinant, Allow Recursion.
+        // One or more parent(s) are recombinants or recombinant descendants
+        if hypothesis == Hypothesis::NovelRecursiveRecombinant {}
+
+        // ----------------------------------------------------------------------------
+        // Hypothesis: Novel Recombinant, Allow Recursion.
+        // No parent(s) are recombinants or recombinant descendants
+        if hypothesis == Hypothesis::NovelNonRecursiveRecombinant {
+            // skip this hypothesis if
+            if hypotheses.contains_key(&Hypothesis::NovelNonRecursiveRecombinant) {
+                continue;
+            }
+            let all_recombinants = dataset.phylogeny.get_recombinants_all()?;
+            hyp_include.retain(|p| !all_recombinants.contains(p));
+            hyp_args.parents = Some(hyp_include.clone());
+            hyp_exclude.retain(|p| !hyp_include.contains(p));
+        }
+
+        // ----------------------------------------------------------------------------
+        // Hypothesis Test Time!
         // Search for primary and scondary parents
-        debug!("Hypothesis #1. Primary Parent Search.");
-        let hyp_1_primary = dataset.search(sequence, Some(&designated_parents), None)?;
-        hyp_1_parents.push(hyp_1_primary);
+        let mut parents = Vec::new();
 
-        debug!("Hypothesis #1. Secondary Parent(s) Search.");
-        let mut hyp_1_exclude = exclude_populations.clone();
-        hyp_1_exclude.retain(|p| designated_parents.contains(p));
-        let _hyp_1_result = secondary_parents(
-            sequence,
-            dataset,
-            best_match,
-            &hyp_1_parents,
-            &hyp_1_exclude,
-            &args,
-        );
+        debug!("Primary Parent Search.");
+        let primary_search = dataset.search(sequence, Some(&hyp_include), None);
+
+        // Check if primary search found anything
+        if let Ok(primary_parent) = primary_search {
+            debug!("Primary Parent Search was successful.");
+            parents.push(primary_parent);
+            debug!("Secondary Parent(s) Search.");
+            let secondary_search = secondary_parents(
+                sequence,
+                dataset,
+                best_match,
+                &parents,
+                &hyp_exclude,
+                &hyp_args,
+            );
+
+            if let Ok(recombination) = secondary_search {
+                debug!("Secondary Parent(s) Search was successful.");
+                let parsimony_score: isize = recombination.score.values().sum();
+
+                // adjust the hypothesis, in case it wasn't actually recursive
+                let hypothesis = if hypothesis == Hypothesis::NovelRecursiveRecombinant {
+                    let mut is_recursive = false;
+                    recombination.parents.iter().for_each(|pop| {
+                        let recombinant_ancestor = dataset
+                            .phylogeny
+                            .get_recombinant_ancestor(pop)
+                            .unwrap_or(None);
+                        if recombinant_ancestor.is_some() {
+                            is_recursive = true
+                        }
+                    });
+
+                    if is_recursive {
+                        Hypothesis::NovelRecursiveRecombinant
+                    } else {
+                        Hypothesis::NovelNonRecursiveRecombinant
+                    }
+                } else {
+                    hypothesis
+                };
+
+                hypotheses.insert(hypothesis, (parsimony_score, Some(recombination)));
+            } else {
+                debug!("Secondary Parent(s) Search was unsuccessful.");
+            }
+        } else {
+            debug!("Primary Parent Search was unsuccessful.");
+        }
     }
 
     // ----------------------------------------------------------------------------
-    // Hypothesis #2a. Novel Recombinant, all parents.
+    // Best Hypothesis (highest parsimony score = support - conflict)
 
-    debug!("Hypothesis #2a. Novel Recombinant, all possible parents.");
-    let mut hyp_2a_parents = Vec::new();
-
-    debug!("Hypothesis #2a. Primary Parent Search.");
-    let hyp_2a_primary = dataset.search(sequence, Some(&include_populations), None)?;
-    hyp_2a_parents.push(hyp_2a_primary);
-
-    debug!("Hypothesis #2a. Secondary Parent(s) Search.");
-    let result = secondary_parents(
-        sequence,
-        dataset,
-        best_match,
-        &hyp_2a_parents,
-        &exclude_populations,
-        &args,
+    debug!(
+        "Hypotheses: {}",
+        hypotheses
+            .iter()
+            .map(|(hyp, (score, _))| format!("{hyp:?}: {score}"))
+            .join(", ")
     );
 
-    // ----------------------------------------------------------------------------
-    // Hypothesis #2b. Novel Recombinant, non-recombinant parents.
+    if hypotheses.is_empty() {
+        return Err(eyre!("No evidence for any recombination hypotheses."));
+    }
 
-    debug!("Hypothesis #2b. Novel Recombinant, non-recombinant parents.");
-    let mut hyp_2b_parents = Vec::new();
+    let max_score = hypotheses
+        .iter()
+        .map(|(_hyp, (score, _recombination))| score)
+        .max()
+        .unwrap();
 
-    // Update the include/exclude lists
-    let mut hyp_2b_include = include_populations.clone();
-    let mut hyp_2b_exclude = exclude_populations.clone();
-    hyp_2b_include.retain(|p| !dataset.phylogeny.recombinants.contains(p));
-    hyp_2b_exclude.retain(|p| hyp_2b_include.contains(p));
+    let best_hypothesis = hypotheses
+        .iter()
+        .filter_map(
+            |(hyp, (score, _recombination))| {
+                if score == max_score {
+                    Some(hyp)
+                } else {
+                    None
+                }
+            },
+        )
+        .next()
+        .unwrap();
 
-    // Search for primary and scondary parents
-    debug!("Hypothesis #2b. Primary Parent Search.");
-    let hyp_2b_primary = dataset.search(sequence, Some(&hyp_2b_include), None)?;
-    hyp_2b_parents.push(hyp_2b_primary);
-
-    debug!("Hypothesis #2b.Secondary Parent(s) Search.");
-    let _hyp_2b_result = secondary_parents(
-        sequence,
-        dataset,
-        best_match,
-        &hyp_2b_parents,
-        &hyp_2b_exclude,
-        &args,
-    );
-
-    // // If first time failed, try again, this time don't let the consensus
-    // // population be a parent
-    // // ex. XA will fail, remov
-    // if result.is_err() && allow_recursion {
-    //     if let Some(recombinant) = &best_match.recombinant {
-    //         debug!(
-    //             "Attempting another search, recombinant {best_match_pop} cannot be parent."
-    //         );
-    //         // Add descendants to the knockout
-    //         let descendants = dataset.phylogeny.get_descendants(recombinant)?;
-    //         args.knockout = if let Some(mut populations) = args.knockout {
-    //             populations.extend(descendants);
-    //             Some(populations)
-    //         } else {
-    //             Some(descendants)
-    //         };
-    //         result = all_parents(sequence, dataset, best_match, false, &args);
-    //     }
-    // }
-
-    let (parents, mut recombination) = result?;
-
+    if best_hypothesis == &Hypothesis::NonRecombinant {
+        return Err(eyre!("Best hypothesis is Non-Recombinant."));
+    } else {
+        debug!("best_hypothesis: {best_hypothesis:?}");
+    }
+    // 0: score, 1: recombination
+    let mut recombination = hypotheses.get(best_hypothesis).unwrap().1.clone().unwrap();
     recombination.edge_case = edge_case;
+    recombination.hypothesis = Some(best_hypothesis.to_owned());
 
-    Ok((parents, recombination))
+    Ok(recombination)
 }
 
 // Search for the secondary recombination parent(s).
@@ -187,13 +262,14 @@ pub fn secondary_parents<'seq>(
     parents: &[SearchResult],
     exclude_populations: &[String],
     args: &run::Args,
-) -> Result<(Vec<SearchResult>, Recombination<'seq>), Report> {
+) -> Result<Recombination<'seq>, Report> {
     // Initialize our 'Recombination' result, that we will modify and update
     // as we iterate through potential parents
     let mut recombination = Recombination::new(sequence);
 
     // All the parents we know of when the function is starting
     // Will probably just be the primary parent (1)?
+    // todo!() test with more than 2 parents
     let mut parents = parents.to_vec();
     let mut num_parents = parents.len();
 
@@ -220,14 +296,14 @@ pub fn secondary_parents<'seq>(
         if num_parents >= args.max_parents {
             // Maxing out the number of parents is a SUCCESS
             debug!("Maximum parents reached ({num_parents}).");
-            return Ok((parents, recombination));
+            return Ok(recombination);
         }
         if num_iter >= args.max_iter {
             debug!("Maximum iterations reached ({num_iter}).");
 
             // Finding minimum parents is a SUCCESS
             if num_parents >= args.min_parents {
-                return Ok((parents, recombination));
+                return Ok(recombination);
             }
             // otherwise FAILURE
             else {
@@ -271,7 +347,7 @@ pub fn secondary_parents<'seq>(
             debug!("Sufficient conflict_alt resolution reached, stopping parent search.");
             // Finding minimum parents is a SUCCESS
             if num_parents >= args.min_parents {
-                return Ok((parents, recombination));
+                return Ok(recombination);
             }
             // Otherwise FAILURE
             else {
@@ -357,6 +433,13 @@ pub fn secondary_parents<'seq>(
             }
         }
 
+        // If every single population in the dataset has been excluded, exit here
+        // This might because we supplied args.parents that were not actually
+        // good hypotheses.
+        if exclude_populations.len() == dataset.populations.len() {
+            return Err(eyre!("No populations left to search."));
+        }
+
         // --------------------------------------------------------------------
         // INCLUDE POPULATIONS
 
@@ -366,7 +449,7 @@ pub fn secondary_parents<'seq>(
         // ex. No parents supplied with args.parents) we'll prioritize
         // populations with conflict_ref
         include_populations = if !include_populations.is_empty() {
-            debug!("Prioritizing parents: {:?}", &include_populations);
+            debug!("Prioritizing parents:");
             include_populations
         }
         // prioritize populations that have min_subs conflict_alt
@@ -393,16 +476,17 @@ pub fn secondary_parents<'seq>(
                 .cloned()
                 .collect_vec();
 
-            // trunclate list for display
-            let display_populations = if conflict_alt_populations.len() <= 10 {
-                conflict_alt_populations.iter().join(", ")
-            } else {
-                format!("{} ...", conflict_alt_populations[0..10].iter().join(", "),)
-            };
-
-            debug!("Prioritizing conflict_alt resolution: {display_populations:?}");
+            debug!("Prioritizing conflict_alt resolution.");
             conflict_alt_populations
         };
+
+        // trunclate list for display
+        let display_populations = if include_populations.len() <= 10 {
+            include_populations.iter().join(", ")
+        } else {
+            format!("{} ...", include_populations[0..10].iter().join(", "),)
+        };
+        debug!("Populations: {display_populations:?}");
 
         // --------------------------------------------------------------------
         // Search Dataset #1 (Full Coordinate Range)

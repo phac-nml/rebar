@@ -150,12 +150,12 @@ pub async fn dataset(args: &mut cli::dataset::download::Args) -> Result<(), Repo
     for recombinant in problematic_recombinants {
         let parents = phylogeny.get_parents(&recombinant)?;
         warn!(
-            "The parents of recombinant {recombinant} are not sister taxa: {parents:?}"
+            "Recombinant {recombinant} is problematic. Parents are not sister taxa: {parents:?}"
         );
         if manual_populations.contains(&recombinant) {
-            info!("Manual edge case exists: {recombinant:?}");
+            warn!("Manual edge case exists: {recombinant:?}");
         } else {
-            info!("Creating auto edge case: {recombinant:?}");
+            warn!("Creating auto edge case: {recombinant:?}");
             let edge_case = cli::run::Args {
                 population: Some(recombinant),
                 parents: Some(parents),

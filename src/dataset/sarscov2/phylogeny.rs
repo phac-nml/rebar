@@ -46,10 +46,15 @@ pub async fn build(
     // ------------------------------------------------------------------------
 
     // read alias key into Map
-    let alias_key = read_alias_key(&summary.misc["alias_key"].local_path)?;
+    let alias_key_path = &summary.misc["alias_key"].local_path;
+    let alias_key_file_name = alias_key_path.file_name().unwrap().to_str().unwrap();
+    let alias_key = read_alias_key(alias_key_path)?;
 
     // read lineage notes into Table
-    let lineage_table = Table::read(&summary.misc["lineage_notes"].local_path)?;
+    let lineage_notes_path = &summary.misc["lineage_notes"].local_path;
+    let lineage_notes_file_name =
+        lineage_notes_path.file_name().unwrap().to_str().unwrap();
+    let lineage_table = Table::read(lineage_notes_path)?;
     // identify which column is 'Lineage'
     let lineage_col_i = lineage_table.header_position("Lineage")?;
     // get a list of lineages in the notes
@@ -62,21 +67,78 @@ pub async fn build(
 
     // read populations fasta, to check if any lineages are missing in notes
     let populations_path = &summary.populations.local_path;
+    let populations_file_name = populations_path.file_name().unwrap().to_str().unwrap();
     let alignment_reader = fasta::Reader::from_file(populations_path)
         .map_err(|e| eyre!(e))
         .wrap_err("Failed to read file: {populations_path:?}")?;
 
+    // keep track of population names in alignment, cross-reference against
+    // lineage notes + alias_key later
+    let mut alignment_populations = Vec::new();
     for result in alignment_reader.records() {
         let record =
             result.wrap_err(eyre!("Failed to parse file: {populations_path:?}"))?;
         let lineage = record.id().to_string();
-        if !notes_lineages.contains(&lineage) {
-            warn!(
-                "Lineage {lineage} is in {populations_path:?} but not in {:?}.",
-                &summary.misc["lineage_notes"].local_path
-            );
-        }
+        alignment_populations.push(lineage);
     }
+
+    // ------------------------------------------------------------------------
+    // Consistency Check
+    // ------------------------------------------------------------------------
+
+    // All population names in all files
+    let mut all_populations = alignment_populations.clone();
+    all_populations.extend(notes_lineages.clone());
+    all_populations.extend(alias_key.keys().cloned().collect_vec());
+    all_populations.sort();
+    all_populations.dedup();
+
+    // create table to store consistency info
+    let inconsistency_table_path = output_dir.join("inconsistency.tsv");
+    let mut inconsistency_table = Table::new();
+
+    warn!("Writing dataset inconsistency table: {inconsistency_table_path:?}");
+
+    inconsistency_table.headers = vec!["population", "present", "absent"]
+        .into_iter()
+        .map(String::from)
+        .collect_vec();
+
+    let population_col_i = inconsistency_table.header_position("population")?;
+    let present_col_i = inconsistency_table.header_position("present")?;
+    let absent_col_i = inconsistency_table.header_position("absent")?;
+
+    // check consistency between populations fasta, lineage_notes, and alias_key
+    all_populations.iter().for_each(|pop| {
+        let mut present_file_names = Vec::new();
+        let mut absent_file_names = Vec::new();
+
+        if alias_key.contains_key(pop) {
+            present_file_names.push(&alias_key_file_name)
+        } else {
+            absent_file_names.push(&alias_key_file_name)
+        }
+
+        if notes_lineages.contains(pop) {
+            present_file_names.push(&lineage_notes_file_name)
+        } else {
+            absent_file_names.push(&lineage_notes_file_name)
+        }
+
+        if alignment_populations.contains(pop) {
+            present_file_names.push(&populations_file_name)
+        } else {
+            absent_file_names.push(&populations_file_name)
+        }
+
+        let mut row = vec![String::new(); inconsistency_table.headers.len()];
+        row[population_col_i] = pop.to_string();
+        row[present_col_i] = present_file_names.iter().join(",");
+        row[absent_col_i] = absent_file_names.iter().join(",");
+        inconsistency_table.rows.push(row);
+    });
+
+    inconsistency_table.write(&inconsistency_table_path)?;
 
     // ------------------------------------------------------------------------
     // Parent Child Relationships
@@ -92,6 +154,11 @@ pub async fn build(
         if lineage.starts_with('*') || lineage == String::new() {
             continue;
         }
+
+        // warn if a lineage has notes but no sequence.
+        // this might be because there are insufficient (<=3) sequences
+        // available in open data repositories (ex. Genbank)
+        // ex. XCU on 2023-11-16
 
         let parents = get_lineage_parents(&lineage, &alias_key)?;
         graph_order.push(lineage.clone());

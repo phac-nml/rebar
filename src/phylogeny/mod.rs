@@ -65,6 +65,7 @@ impl Phylogeny {
         }
     }
 
+    /// Get recombinant node names.
     pub fn get_recombinants(&self) -> Result<Vec<String>, Report> {
         let mut recombinants: Vec<String> = Vec::new();
 
@@ -79,6 +80,20 @@ impl Phylogeny {
         Ok(recombinants)
     }
 
+    /// Get recombinant node names and all descendants.
+    pub fn get_recombinants_all(&self) -> Result<Vec<String>, Report> {
+        let mut recombinants: Vec<String> = Vec::new();
+
+        for node in self.graph.node_indices() {
+            let name = self.get_name(&node)?;
+            let result = self.get_recombinant_ancestor(&name)?;
+            if result.is_some() {
+                recombinants.push(name)
+            }
+        }
+
+        Ok(recombinants)
+    }
     /// Prune a clade from the graph.
     pub fn prune(&self, name: &str) -> Result<Phylogeny, Report> {
         let mut phylogeny = self.clone();

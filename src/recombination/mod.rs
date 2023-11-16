@@ -12,6 +12,7 @@ use itertools::Itertools;
 use log::debug;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
+use strum::{EnumIter, EnumProperty};
 
 // ----------------------------------------------------------------------------
 // Structs
@@ -30,6 +31,7 @@ pub struct Recombination<'seq> {
     pub regions: BTreeMap<usize, Region>,
     pub genome_length: usize,
     pub edge_case: bool,
+    pub hypothesis: Option<Hypothesis>,
     pub support: BTreeMap<String, Vec<Substitution>>,
     pub conflict_ref: BTreeMap<String, Vec<Substitution>>,
     pub conflict_alt: BTreeMap<String, Vec<Substitution>>,
@@ -50,6 +52,7 @@ impl<'seq> Recombination<'seq> {
             table: Table::new(),
             genome_length: sequence.genome_length,
             edge_case: false,
+            hypothesis: None,
             support: BTreeMap::new(),
             conflict_ref: BTreeMap::new(),
             conflict_alt: BTreeMap::new(),
@@ -65,8 +68,10 @@ impl<'seq> Recombination<'seq> {
 
         self.parents.iter().for_each(|pop| {
             // score
-            let subs = self.support.get(pop).unwrap();
-            let msg = format!("  - {pop}:\n    - count: {}\n", subs.len(),);
+            let msg = format!(
+                "  - {pop}:\n    - count: {}\n",
+                self.score.get(pop).unwrap(),
+            );
             score.push_str(&msg);
 
             // support
@@ -103,6 +108,40 @@ impl<'seq> Recombination<'seq> {
             conflict_ref:\n{conflict_ref}
             conflict_alt:\n{conflict_alt}"
         )
+    }
+}
+
+// ----------------------------------------------------------------------------
+// Hypthoses
+
+#[derive(
+    Clone,
+    Debug,
+    Deserialize,
+    Eq,
+    EnumIter,
+    EnumProperty,
+    Ord,
+    PartialOrd,
+    PartialEq,
+    Serialize,
+)]
+pub enum Hypothesis {
+    NonRecombinant,
+    DesignatedRecombinant,
+    NovelRecursiveRecombinant,
+    NovelNonRecursiveRecombinant,
+}
+
+impl std::fmt::Display for Hypothesis {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        let hypothesis = match self {
+            Hypothesis::NonRecombinant => "non_recombinant",
+            Hypothesis::DesignatedRecombinant => "designated_recombinant",
+            Hypothesis::NovelRecursiveRecombinant => "novel_recursive_recombinant",
+            Hypothesis::NovelNonRecursiveRecombinant => "novel_non_recursive_recombinant",
+        };
+        write!(f, "{hypothesis}")
     }
 }
 
@@ -476,10 +515,10 @@ pub fn detect_recombination<'seq>(
             Some(recombinant.to_string())
         }
         // use the "-like" nomenclature to indicate this novel recombinant is
-        // a mimic of another known kind
+        // a mimic of another known kind?
         else {
-            Some(format!("{recombinant}-like"))
-            //Some("novel".to_string())
+            //Some(format!("{recombinant}-like"))
+            Some("novel".to_string())
         }
     }
     // otherwise its totally novel
