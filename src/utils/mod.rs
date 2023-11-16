@@ -120,10 +120,8 @@ pub async fn download_github(
     }
 
     // convert to string
-    let mut query = query
-        .into_iter()
-        .map(|(k, v)| (String::from(k), String::from(v)))
-        .collect_vec();
+    let mut query =
+        query.into_iter().map(|(k, v)| (String::from(k), String::from(v))).collect_vec();
 
     // Note: the reqwest::RequestBuilder doesn't implement Clone for the
     // non-blocking (asynchronous) version :( we're going to have to full
@@ -167,9 +165,7 @@ pub async fn download_github(
     }
 
     let sha = body[0]["sha"].to_string().replace('"', "");
-    let commit_date = body[0]["commit"]["author"]["date"]
-        .to_string()
-        .replace('"', "");
+    let commit_date = body[0]["commit"]["author"]["date"].to_string().replace('"', "");
     let date_created: DateTime<Utc> = DateTime::parse_from_rfc3339(&commit_date)?.into();
 
     // --------------------------------------------------------------------------

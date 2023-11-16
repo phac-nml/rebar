@@ -118,9 +118,8 @@ pub fn validate(
         // exactly as expected?
 
         let observed_recombinant = &recombination.recombinant;
-        let expected_recombinant = dataset
-            .phylogeny
-            .get_recombinant_ancestor(&expected_population)?;
+        let expected_recombinant =
+            dataset.phylogeny.get_recombinant_ancestor(&expected_population)?;
 
         let validate_recombinant = expected_recombinant == *observed_recombinant;
 

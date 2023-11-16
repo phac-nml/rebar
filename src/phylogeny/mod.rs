@@ -23,6 +23,8 @@ pub struct Phylogeny {
     pub graph: Graph<String, isize>,
     pub order: Vec<String>,
     pub recombinants: Vec<String>,
+    pub recombinants_all: Vec<String>,
+    pub non_recombinants_all: Vec<String>,
 }
 
 impl Default for Phylogeny {
@@ -37,6 +39,8 @@ impl Phylogeny {
             graph: Graph::new(),
             order: Vec::new(),
             recombinants: Vec::new(),
+            recombinants_all: Vec::new(),
+            non_recombinants_all: Vec::new(),
         }
     }
 
@@ -47,10 +51,7 @@ impl Phylogeny {
     /// Return true if a node name is a recombinant.
     pub fn is_recombinant(&self, name: &str) -> Result<bool, Report> {
         let node = self.get_node(name)?;
-        let mut edges = self
-            .graph
-            .neighbors_directed(node, Direction::Incoming)
-            .detach();
+        let mut edges = self.graph.neighbors_directed(node, Direction::Incoming).detach();
 
         // Recombinants have more than 1 incoming edge
         let mut num_edges = 0;
@@ -94,6 +95,22 @@ impl Phylogeny {
 
         Ok(recombinants)
     }
+
+    /// Get non-recombinants
+    pub fn get_non_recombinants_all(&self) -> Result<Vec<String>, Report> {
+        let mut non_recombinants: Vec<String> = Vec::new();
+
+        for node in self.graph.node_indices() {
+            let name = self.get_name(&node)?;
+            let result = self.get_recombinant_ancestor(&name)?;
+            if result.is_none() {
+                non_recombinants.push(name)
+            }
+        }
+
+        Ok(non_recombinants)
+    }
+
     /// Prune a clade from the graph.
     pub fn prune(&self, name: &str) -> Result<Phylogeny, Report> {
         let mut phylogeny = self.clone();
@@ -200,10 +217,8 @@ impl Phylogeny {
         let mut parents = Vec::new();
 
         let node = self.get_node(name)?;
-        let mut neighbors = self
-            .graph
-            .neighbors_directed(node, Direction::Incoming)
-            .detach();
+        let mut neighbors =
+            self.graph.neighbors_directed(node, Direction::Incoming).detach();
         while let Some(parent_node) = neighbors.next_node(&self.graph) {
             let parent_name = self.get_name(&parent_node)?;
             parents.push(parent_name);
@@ -261,10 +276,8 @@ impl Phylogeny {
         }
         // Otherwise, continue the search!
         else {
-            let mut neighbors = self
-                .graph
-                .neighbors_directed(origin_node, direction)
-                .detach();
+            let mut neighbors =
+                self.graph.neighbors_directed(origin_node, direction).detach();
             while let Some(parent_node) = neighbors.next_node(&self.graph) {
                 // convert the parent graph index to a string name
                 let parent_name = self.get_name(&parent_node)?;
@@ -273,9 +286,7 @@ impl Phylogeny {
                 let mut parent_paths = self.get_paths(&parent_name, dest, direction)?;
 
                 // prepend the origin to the paths
-                parent_paths
-                    .iter_mut()
-                    .for_each(|p| p.insert(0, origin.to_string()));
+                parent_paths.iter_mut().for_each(|p| p.insert(0, origin.to_string()));
 
                 // update the paths container to return at end of function
                 for p in parent_paths {

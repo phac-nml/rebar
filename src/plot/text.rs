@@ -52,9 +52,8 @@ pub fn to_image(
     let metrics = font.v_metrics(scale);
 
     // layout the glyphs in the text horizontally
-    let glyphs: Vec<_> = font
-        .layout(text, scale, rusttype::point(0., 0. + metrics.ascent))
-        .collect();
+    let glyphs: Vec<_> =
+        font.layout(text, scale, rusttype::point(0., 0. + metrics.ascent)).collect();
 
     // get output image height from the font metrics, since height is only dependent on font
     let height = (metrics.ascent - metrics.descent).ceil();
@@ -219,8 +218,7 @@ pub fn draw_raqote(
         height: image.height() as i32,
         data: &data,
     };
-    args.canvas
-        .draw_image_at(point.x, point.y, &draw_image, &raqote::DrawOptions::new());
+    args.canvas.draw_image_at(point.x, point.y, &draw_image, &raqote::DrawOptions::new());
 
     Ok(image)
 }

@@ -85,10 +85,7 @@ pub fn simulate(args: &cli::simulate::Args) -> Result<(), Report> {
     let unique_key = format!(
         "simulate_{}_{}",
         &parents.iter().join("_"),
-        &breakpoints
-            .iter()
-            .map(|start| format!("{start}-{}", start + 1))
-            .join("_"),
+        &breakpoints.iter().map(|start| format!("{start}-{}", start + 1)).join("_"),
     );
     info!("Unique Key: {unique_key:?}");
 
@@ -119,9 +116,7 @@ pub fn simulate(args: &cli::simulate::Args) -> Result<(), Report> {
         .map(|region| {
             let sequence = dataset.populations.get(&region.origin).unwrap();
             // Reminder, -1 to coordinates since they are 1-based
-            sequence.seq[region.start - 1..=region.end - 1]
-                .iter()
-                .collect::<String>()
+            sequence.seq[region.start - 1..=region.end - 1].iter().collect::<String>()
         })
         .collect();
 
@@ -159,10 +154,7 @@ pub fn run(args: &mut cli::run::Args) -> Result<(), Report> {
 
     // configure the global thread pool
     info!("Using {} thread(s).", num_threads);
-    rayon::ThreadPoolBuilder::new()
-        .num_threads(num_threads)
-        .build_global()
-        .unwrap();
+    rayon::ThreadPoolBuilder::new().num_threads(num_threads).build_global().unwrap();
 
     // configure progress bar style
     let progress_bar_style = ProgressStyle::with_template(
@@ -195,20 +187,17 @@ pub fn run(args: &mut cli::run::Args) -> Result<(), Report> {
     if let Some(populations) = &args.input.populations {
         info!("Parsing input populations: {populations:?}");
 
-        dataset
-            .expand_populations(populations)?
-            .into_iter()
-            .for_each(|p| {
-                if !dataset.populations.contains_key(&p) {
-                    warn!("Population {p} is not in the dataset populations fasta.");
-                } else {
-                    debug!("Adding population {p} to query sequences.");
-                    let mut sequence = dataset.populations[&p].clone();
-                    sequence.id = format!("population_{}", sequence.id);
-                    ids_seen.push(sequence.id.clone());
-                    sequences.push(sequence);
-                }
-            });
+        dataset.expand_populations(populations)?.into_iter().for_each(|p| {
+            if !dataset.populations.contains_key(&p) {
+                warn!("Population {p} is not in the dataset populations fasta.");
+            } else {
+                debug!("Adding population {p} to query sequences.");
+                let mut sequence = dataset.populations[&p].clone();
+                sequence.id = format!("population_{}", sequence.id);
+                ids_seen.push(sequence.id.clone());
+                sequences.push(sequence);
+            }
+        });
     }
 
     // ------------------------------------------------------------------------
@@ -266,9 +255,7 @@ pub fn run(args: &mut cli::run::Args) -> Result<(), Report> {
 
             // remove from populations
             debug!("Removing {p}* from the populations fasta.");
-            dataset
-                .populations
-                .retain(|id, _| !exclude_populations.contains(id));
+            dataset.populations.retain(|id, _| !exclude_populations.contains(id));
 
             // remove from mutations
             debug!("Removing {p}* from the mutations.");
@@ -305,6 +292,17 @@ pub fn run(args: &mut cli::run::Args) -> Result<(), Report> {
     let progress_bar = ProgressBar::new(sequences.len() as u64);
     progress_bar.set_style(progress_bar_style);
 
+    // adjust search populations based on args.parents and args.knockout
+    let mut parent_search_populations = dataset.populations.keys().collect_vec();
+    // if args.parents supplied on the CLI
+    if let Some(populations) = &args.parents {
+        parent_search_populations.retain(|pop| populations.contains(pop))
+    }
+    // if args.knockout supplied on the CLI
+    if let Some(populations) = &args.knockout {
+        parent_search_populations.retain(|pop| !populations.contains(pop))
+    }
+
     // Search for the best match and recombination parents for each sequence.
     // This loop/closure is structured weirdly for rayon compatability, and the
     // fact that we need to return multiple types of objects
@@ -336,6 +334,7 @@ pub fn run(args: &mut cli::run::Args) -> Result<(), Report> {
                     sequence,
                     &dataset,
                     &best_match,
+                    &parent_search_populations,
                     args,
                 );
                 match parent_search {

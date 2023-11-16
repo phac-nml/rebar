@@ -141,10 +141,8 @@ pub async fn dataset(args: &mut cli::dataset::download::Args) -> Result<(), Repo
         Name::SarsCov2 => dataset::sarscov2::edge_cases::default()?,
         _ => todo!(),
     };
-    let manual_populations = edge_cases
-        .iter()
-        .filter_map(|e| e.population.clone())
-        .collect_vec();
+    let manual_populations =
+        edge_cases.iter().filter_map(|e| e.population.clone()).collect_vec();
 
     let problematic_recombinants = phylogeny.get_problematic_recombinants()?;
     for recombinant in problematic_recombinants {

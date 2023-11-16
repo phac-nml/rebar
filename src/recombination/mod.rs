@@ -245,10 +245,8 @@ pub fn detect_recombination<'seq>(
     // coord, parent, Reference, <parents...>, <parent_candidate> <sequence>
 
     let mut table = Table::new();
-    table.headers = vec!["coord", "origin", "Reference"]
-        .into_iter()
-        .map(String::from)
-        .collect_vec();
+    table.headers =
+        vec!["coord", "origin", "Reference"].into_iter().map(String::from).collect_vec();
     for parent in &parents {
         table.headers.push(parent.consensus_population.to_string());
     }
@@ -485,15 +483,9 @@ pub fn detect_recombination<'seq>(
 
         let summary = dataset.parsimony_summary(pop, sequence, Some(&coordinates))?;
         // update recombination with support and conflicts found
-        recombination
-            .support
-            .insert(pop.to_owned(), summary.support);
-        recombination
-            .conflict_ref
-            .insert(pop.to_owned(), summary.conflict_ref);
-        recombination
-            .conflict_alt
-            .insert(pop.to_owned(), summary.conflict_alt);
+        recombination.support.insert(pop.to_owned(), summary.support);
+        recombination.conflict_ref.insert(pop.to_owned(), summary.conflict_ref);
+        recombination.conflict_alt.insert(pop.to_owned(), summary.conflict_alt);
         recombination.score.insert(pop.to_owned(), summary.score);
     }
 
@@ -619,9 +611,7 @@ pub fn filter_regions(
                 Direction::Forward => {
                     if let Some(start_prev) = start_prev {
                         let region_update = regions_filter.get_mut(&start_prev).unwrap();
-                        region_update
-                            .substitutions
-                            .extend(region.substitutions.clone());
+                        region_update.substitutions.extend(region.substitutions.clone());
                         region_update.end = region.end;
                     }
                 }
@@ -630,9 +620,7 @@ pub fn filter_regions(
                     if let Some(start_prev) = start_prev {
                         let mut region_new =
                             regions_filter.get(&start_prev).unwrap().to_owned();
-                        region_new
-                            .substitutions
-                            .extend(region.substitutions.clone());
+                        region_new.substitutions.extend(region.substitutions.clone());
                         region_new.substitutions.sort();
                         region_new.start = region.start;
 
@@ -746,17 +734,10 @@ pub fn combine_tables(
     }
 
     // identify sequence IDs to combine
-    let sequence_ids = recombinations
-        .iter()
-        .map(|rec| &rec.sequence.id)
-        .collect_vec();
+    let sequence_ids = recombinations.iter().map(|rec| &rec.sequence.id).collect_vec();
 
     // identify parents to combine, just use first, since we verified all same
-    let parents = recombinations
-        .iter()
-        .map(|rec| &rec.parents)
-        .next()
-        .unwrap();
+    let parents = recombinations.iter().map(|rec| &rec.parents).next().unwrap();
 
     // ------------------------------------------------------------------------
     // Construct Table Headers
@@ -767,10 +748,8 @@ pub fn combine_tables(
     // Mandatory headers
     // convert to String, &str won't work here, since we're going to create
     // table row values within a for loop scope later
-    combine_table.headers = vec!["coord", "origin", "Reference"]
-        .into_iter()
-        .map(String::from)
-        .collect_vec();
+    combine_table.headers =
+        vec!["coord", "origin", "Reference"].into_iter().map(String::from).collect_vec();
 
     // Dynamic headers (parents and sequence IDs)
     for parent in parents {
