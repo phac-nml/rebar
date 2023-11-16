@@ -71,6 +71,10 @@ impl Dataset {
                 if p == "*" {
                     Ok(self.populations.keys().cloned().collect_vec())
                 }
+                // if population is 'X*', use all recombinants in dataset
+                else if p == "X*" {
+                    Ok(self.phylogeny.get_recombinants_all()?)
+                }
                 // if population ends with '*' expand descendants
                 else if p.ends_with('*') {
                     let p = p.replace('*', "");
@@ -217,9 +221,13 @@ impl Dataset {
             .max()
             .unwrap_or(0);
 
+        // todo!() decide how much wiggle room we want to give in max support
+        // if we want to do max_support - 10, we might need to alter pretty_print
+        // so that it only displays the first N candidates (ex. 5,10)
         let population_matches = population_support_counts
             .into_iter()
-            .filter(|(_pop, count)| *count == max_support)
+            //.filter(|(_pop, count)| *count == max_support)
+            .filter(|(_pop, count)| *count >= (max_support - 10))
             .map(|(pop, _count)| pop)
             .cloned()
             .collect_vec();
@@ -249,6 +257,8 @@ impl Dataset {
         // --------------------------------------------------------------------
         // Top Populations
         // Tie breaking, prefer matches with the highest score (support - conflict)
+        // beyond that, prefer matches with highest support or lowest conflict?
+        // Ex. XCU parent #1 could be FL.23 (highest support) or XBC.1 (lowest conflict)
 
         // which population(s) has the highest score?
         let max_score = search_result.score.values().max().unwrap();
@@ -258,6 +268,26 @@ impl Dataset {
             .iter()
             .filter(|(_pop, count)| *count == max_score)
             .map(|(pop, _count)| pop)
+            .cloned()
+            .collect_vec();
+
+        // break additional ties by max support
+        let max_support = search_result
+            .support
+            .iter()
+            .filter(|(pop, _subs)| search_result.top_populations.contains(pop))
+            .map(|(_pop, subs)| subs.len())
+            .max()
+            .unwrap();
+
+        search_result.top_populations = search_result
+            .score
+            .iter()
+            .zip(search_result.support.iter())
+            .filter(|((_, score), (_, subs))| {
+                *score == max_score && subs.len() == max_support
+            })
+            .map(|((pop, _score), _)| pop)
             .cloned()
             .collect_vec();
 
