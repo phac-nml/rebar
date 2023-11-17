@@ -27,17 +27,6 @@ pub fn default() -> Result<Vec<run::Args>, Report> {
     // --------------------------------------------------------------------
     // Manual
 
-    // // XB: B.1.631 and B.1.634 are exactly tied for the first parent
-    // // which makes the consensus call (undesirably) B.1
-    // let recombinant = "XB".to_string();
-    // debug!("Creating manual edge case: {recombinant:?}");
-    // let edge_case = run::Args {
-    //     parents: Some(vec!["B.1.631".to_string(), "B.1.634".to_string()]),
-    //     population: Some(recombinant),
-    //     ..Default::default()
-    // };
-    // edge_cases.push(edge_case);
-
     // XR: BA.2 and BA.1 with no unique subs from BA.1
     let recombinant = "XR".to_string();
     debug!("Creating manual edge case: {recombinant:?}");
@@ -58,12 +47,47 @@ pub fn default() -> Result<Vec<run::Args>, Report> {
     };
     edge_cases.push(edge_case);
 
+    // XAZ: BA.5 and BA.2.5 with a single sub from BA.2.5
+    let recombinant = "XAZ".to_string();
+    debug!("Creating manual edge case: {recombinant:?}");
+    let edge_case = run::Args {
+        min_consecutive: 1,
+        min_length: 1,
+        min_subs: 0,
+        parents: Some(vec!["BA.5".to_string(), "BA.2.5".to_string()]),
+        population: Some(recombinant),
+        ..Default::default()
+    };
+    edge_cases.push(edge_case);
+
+    // XBK: BA.5.2 and CJ.2 with only 2 consecutive alleles from BA.5.2
+    let recombinant = "XBK".to_string();
+    debug!("Creating manual edge case: {recombinant:?}");
+    let edge_case = run::Args {
+        min_consecutive: 2,
+        population: Some(recombinant),
+        parents: Some(vec!["BA.5.2".to_string(), "CJ.1".to_string()]),
+        ..Default::default()
+    };
+    edge_cases.push(edge_case);
+    // XBQ: BA.5.2 and CJ.2 with only 2 consecutive alleles from BA.5.2
+    let recombinant = "XBQ".to_string();
+    debug!("Creating manual edge case: {recombinant:?}");
+    let edge_case = run::Args {
+        min_consecutive: 2,
+        population: Some(recombinant),
+        parents: Some(vec!["BA.5.2".to_string(), "CJ.1".to_string()]),
+        ..Default::default()
+    };
+    edge_cases.push(edge_case);
+
     // XCF: XBB and FE.1 (XBB.1.18.1) with no unique subs from XBB
     let recombinant = "XCF".to_string();
     debug!("Creating manual edge case: {recombinant:?}");
     let edge_case = run::Args {
         min_subs: 0,
         min_consecutive: 2,
+        parents: Some(vec!["XBB".to_string(), "FE.1".to_string()]),
         population: Some(recombinant),
         ..Default::default()
     };
@@ -77,6 +101,18 @@ pub fn default() -> Result<Vec<run::Args>, Report> {
     let edge_case = run::Args {
         min_subs: 1,
         min_consecutive: 2,
+        population: Some(recombinant),
+        ..Default::default()
+    };
+    edge_cases.push(edge_case);
+
+    // --------------------------------------------------------------------
+    // XCW: XBB.2.3.20 and XBB.1.16.15
+
+    let recombinant = "XCW".to_string();
+    debug!("Creating manual edge case: {recombinant:?}");
+    let edge_case = run::Args {
+        parents: Some(vec!["XBB.2.3.20".to_string(), "XBB.1.16.15".to_string()]),
         population: Some(recombinant),
         ..Default::default()
     };

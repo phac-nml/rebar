@@ -2,6 +2,7 @@ use crate::dataset::{Dataset, SearchResult};
 use crate::recombination::Recombination;
 use color_eyre::eyre::{eyre, Report, Result};
 use itertools::Itertools;
+//use log::debug;
 use log::warn;
 use petgraph::Direction;
 use std::fmt;
@@ -189,6 +190,9 @@ pub fn compare_parents(
     expected: &Vec<String>,
     dataset: &Dataset,
 ) -> Result<bool, Report> {
+    //debug!("observed: {observed:?}");
+    //debug!("expected: {expected:?}");
+
     // one is empty, other is not
     if (observed.is_empty() && !expected.is_empty())
         || (!observed.is_empty() && expected.is_empty())
@@ -225,8 +229,34 @@ pub fn compare_parents(
             }
         });
     });
+    observed_parents = observed_parents.into_iter().unique().collect();
     observed_parents.retain(|p| expected.contains(p));
+    //debug!("observed_parents: {observed_parents:?}");
     if observed_parents.len() == expected.len() {
+        return Ok(true);
+    }
+
+    // expected is child of observed, but no recombinant descendants
+    let mut observed_children = observed
+        .iter()
+        .flat_map(|pop| dataset.phylogeny.get_children(pop).unwrap_or(Vec::new()))
+        .unique()
+        .collect_vec();
+    observed_children.retain(|p| expected.contains(p));
+    //debug!("observed_children: {observed_children:?}");
+    if observed_children.len() == expected.len() {
+        return Ok(true);
+    }
+
+    // combine
+    // XBE: expected ["BA.5.2","BE.4.1"], observed: ["BA.5.2.6","BE.4"]
+    let mut observed_combine = observed.clone();
+    observed_combine.append(&mut observed_parents);
+    observed_combine.append(&mut observed_children);
+    observed_combine = observed_combine.into_iter().unique().collect();
+    observed_combine.retain(|pop| expected.contains(pop));
+    //debug!("observed_combine: {observed_combine:?}");
+    if observed_combine.len() == expected.len() {
         return Ok(true);
     }
 

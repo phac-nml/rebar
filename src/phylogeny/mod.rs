@@ -227,6 +227,21 @@ impl Phylogeny {
         Ok(parents)
     }
 
+    /// Get children names of node
+    pub fn get_children(&self, name: &str) -> Result<Vec<String>, Report> {
+        let mut children = Vec::new();
+
+        let node = self.get_node(name)?;
+        let mut neighbors =
+            self.graph.neighbors_directed(node, Direction::Outgoing).detach();
+        while let Some(child_node) = neighbors.next_node(&self.graph) {
+            let child_name = self.get_name(&child_node)?;
+            children.push(child_name);
+        }
+
+        Ok(children)
+    }
+
     /// Get problematic recombinants, where the parents are not sister taxa.
     /// They might be parent-child instead.
     pub fn get_problematic_recombinants(&self) -> Result<Vec<String>, Report> {
