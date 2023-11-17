@@ -132,12 +132,7 @@ pub async fn download_github(
 
     // Use the Archive Tag as a maximum date filter (&until=...)
     if matches!(tag, Tag::Archive(_)) {
-        // Convert tag to DateTime object
-        let tag_date: DateTime<Utc> =
-            DateTime::parse_from_rfc3339(&tag.to_string())?.into();
-        let tag_date = tag_date.format("%Y-%m-%d").to_string();
-
-        query.push(("until".to_string(), tag_date));
+        query.push(("until".to_string(), tag.to_string()));
     }
 
     let request = client

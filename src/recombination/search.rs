@@ -379,22 +379,23 @@ pub fn secondary_parents<'seq>(
         include_populations.retain(|pop| !current_parents.contains(pop));
 
         // Exclude populations that have substitutions at ALL of the conflict_ref
-        let conflict_ref_populations = dataset
-            .populations
-            .iter()
-            .filter(|(pop, _seq)| include_populations.contains(pop))
-            .filter_map(|(pop, seq)| {
-                let count = seq
-                    .substitutions
-                    .iter()
-                    .filter(|sub| conflict_ref.contains(sub))
-                    .collect_vec()
-                    .len();
-                (count == conflict_ref.len()).then_some(pop)
-            })
-            .collect_vec();
-        include_populations.retain(|pop| !conflict_ref_populations.contains(pop));
-
+        if !conflict_ref.is_empty() {
+            let conflict_ref_populations = dataset
+                .populations
+                .iter()
+                .filter(|(pop, _seq)| include_populations.contains(pop))
+                .filter_map(|(pop, seq)| {
+                    let count = seq
+                        .substitutions
+                        .iter()
+                        .filter(|sub| conflict_ref.contains(sub))
+                        .collect_vec()
+                        .len();
+                    (count == conflict_ref.len()).then_some(pop)
+                })
+                .collect_vec();
+            include_populations.retain(|pop| !conflict_ref_populations.contains(pop));
+        }
         // --------------------------------------------------------------------
         // INCLUDE POPULATIONS
 
@@ -452,11 +453,15 @@ pub fn secondary_parents<'seq>(
                 (coord_min.to_owned()..coord_max.to_owned()).collect_vec()
             };
 
+            debug!("dataset.search");
+
             let parent_candidate = dataset.search(
                 sequence,
                 Some(&include_populations),
                 Some(&search_coords),
             );
+
+            debug!("detect_recombination");
 
             // if the search found parents, check for recombination
             if let Ok(parent_candidate) = parent_candidate {

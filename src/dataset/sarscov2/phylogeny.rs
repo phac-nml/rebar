@@ -113,7 +113,7 @@ pub async fn build(
 
         if alias_key.contains_key(pop) {
             present_file_names.push(&alias_key_file_name)
-        } else {
+        } else if !pop.contains('.') {
             absent_file_names.push(&alias_key_file_name)
         }
 
@@ -129,11 +129,13 @@ pub async fn build(
             absent_file_names.push(&populations_file_name)
         }
 
-        let mut row = vec![String::new(); inconsistency_table.headers.len()];
-        row[population_col_i] = pop.to_string();
-        row[present_col_i] = present_file_names.iter().join(",");
-        row[absent_col_i] = absent_file_names.iter().join(",");
-        inconsistency_table.rows.push(row);
+        if !absent_file_names.is_empty() {
+            let mut row = vec![String::new(); inconsistency_table.headers.len()];
+            row[population_col_i] = pop.to_string();
+            row[present_col_i] = present_file_names.iter().join(",");
+            row[absent_col_i] = absent_file_names.iter().join(",");
+            inconsistency_table.rows.push(row);
+        }
     });
 
     inconsistency_table.write(&inconsistency_table_path)?;
