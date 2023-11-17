@@ -113,7 +113,7 @@ pub fn parse_populations(
         populations.insert(sequence.id.clone(), sequence.clone());
 
         for sub in sequence.substitutions {
-            mutations.entry(sub.clone()).or_insert(Vec::new()).push(sequence.id.clone());
+            mutations.entry(sub).or_insert(Vec::new()).push(sequence.id.clone());
         }
     }
 

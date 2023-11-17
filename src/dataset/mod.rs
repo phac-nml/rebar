@@ -196,11 +196,7 @@ impl Dataset {
             .iter()
             .filter(|(pop, _seq)| {
                 if let Some(populations) = populations {
-                    if populations.contains(pop) {
-                        true
-                    } else {
-                        false
-                    }
+                    populations.contains(pop)
                 } else {
                     true
                 }
@@ -215,7 +211,7 @@ impl Dataset {
                 if count >= max_support {
                     max_support = count
                 }
-                (count > 0).then(|| (pop, count))
+                (count > 0).then_some((pop, count))
             })
             .collect();
 
@@ -225,7 +221,7 @@ impl Dataset {
         // this will also cause slow downs
         let population_matches = population_support_counts
             .into_iter()
-            .filter_map(|(pop, count)| (count == max_support).then(|| pop))
+            .filter_map(|(pop, count)| (count == max_support).then_some(pop))
             //.filter(|(_pop, count)| *count >= (max_support - 10))
             .collect_vec();
 
@@ -259,7 +255,7 @@ impl Dataset {
         let max_score_populations = search_result
             .score
             .iter()
-            .filter_map(|(pop, count)| (count == max_score).then(|| pop))
+            .filter_map(|(pop, count)| (count == max_score).then_some(pop))
             .collect_vec();
 
         // break additional ties by max support
@@ -267,7 +263,7 @@ impl Dataset {
             .support
             .iter()
             .filter_map(|(pop, subs)| {
-                (max_score_populations.contains(&pop)).then(|| subs.len())
+                (max_score_populations.contains(&pop)).then_some(subs.len())
             })
             .max()
             .unwrap_or(0);
@@ -277,7 +273,7 @@ impl Dataset {
             .iter()
             .zip(search_result.support.iter())
             .filter_map(|((pop, score), (_, subs))| {
-                (score == max_score && subs.len() == max_support).then(|| pop)
+                (score == max_score && subs.len() == max_support).then_some(pop)
             })
             .cloned()
             .collect_vec();
@@ -342,17 +338,27 @@ impl Dataset {
             })
             .collect_vec();
 
+        // set  private subs relative to consensus population (conflict_ref, conflict_alt)
+
         // Filter out non-top populations from the debug log.
         // helps cut down on verbosity and data stored
         // Ex. XE, lots of BA.2 candidates
-        search_result.score.retain(|p, _| search_result.top_populations.contains(p));
-        search_result.support.retain(|p, _| search_result.top_populations.contains(p));
-        search_result
-            .conflict_ref
-            .retain(|p, _| search_result.top_populations.contains(p));
-        search_result
-            .conflict_alt
-            .retain(|p, _| search_result.top_populations.contains(p));
+        search_result.score.retain(|p, _| {
+            search_result.top_populations.contains(p)
+                || *p == search_result.consensus_population
+        });
+        search_result.support.retain(|p, _| {
+            search_result.top_populations.contains(p)
+                || *p == search_result.consensus_population
+        });
+        search_result.conflict_ref.retain(|p, _| {
+            search_result.top_populations.contains(p)
+                || *p == search_result.consensus_population
+        });
+        search_result.conflict_alt.retain(|p, _| {
+            search_result.top_populations.contains(p)
+                || *p == search_result.consensus_population
+        });
 
         debug!("Search Result:\n{}", search_result.pretty_print());
         Ok(search_result)
@@ -435,24 +441,29 @@ impl SearchResult {
         }
     }
 
-    fn pretty_print(&self) -> String {
+    pub fn pretty_print(&self) -> String {
         // Order the population lists from 'best' to 'worst'
+
+        let max_display_items = 10;
 
         // score
         let mut score_order = self.score.iter().collect::<Vec<(_, _)>>();
         score_order.sort_by(|a, b| b.1.cmp(a.1));
+
+        // restrict display items for brevity
+        let display_suffix = if score_order.len() > max_display_items {
+            score_order = score_order[1..=max_display_items].to_vec();
+            "\n  ..."
+        } else {
+            ""
+        };
 
         // support
         let mut support_order: Vec<String> = Vec::new();
         for (pop, _count) in &score_order {
             let subs = &self.support[*pop];
             let count = subs.len();
-            support_order.push(format!(
-                "{}:\n    - count: {}\n    - substitutions: {}",
-                pop,
-                count,
-                subs.iter().join(", ")
-            ));
+            support_order.push(format!("- {pop} ({count}): {}", subs.iter().join(", ")));
         }
 
         // conflict_ref
@@ -460,12 +471,8 @@ impl SearchResult {
         for (pop, _count) in &score_order {
             let subs = &self.conflict_ref[*pop];
             let count = subs.len();
-            conflict_ref_order.push(format!(
-                "{}:\n    - count: {}\n    - substitutions: {}",
-                pop,
-                count,
-                subs.iter().join(", ")
-            ));
+            conflict_ref_order
+                .push(format!("- {pop} ({count}): {}", subs.iter().join(", ")));
         }
 
         // conflict_alt
@@ -473,50 +480,45 @@ impl SearchResult {
         for (pop, _count) in &score_order {
             let subs = &self.conflict_alt[*pop];
             let count = subs.len();
-            conflict_alt_order.push(format!(
-                "{}:\n    - count: {}\n    - substitutions: {}",
-                pop,
-                count,
-                subs.iter().join(", ")
-            ));
+            conflict_alt_order
+                .push(format!("- {pop} ({count}): {}", subs.iter().join(", ")));
         }
 
         // Pretty string formatting for yaml
         let score_order = score_order
             .iter()
-            .map(|(pop, count)| format!("{}:\n    - count: {}", &pop, &count))
+            .map(|(pop, count)| format!("- {}: {}", &pop, &count))
             .collect::<Vec<_>>();
 
-        // private count and list
-        let private_order = format!(
-            "  - count: {}\n    - substitutions: {}",
-            self.private.len(),
-            self.private.iter().join(", ")
-        );
+        // // private count and list
+        // let private_order = format!(
+        //     " {}\n    - substitutions: {}",
+        //     self.private.len(),
+        //     self.private.iter().join(", ")
+        // );
 
         formatdoc!(
             "sequence_id: {}
             consensus_population: {}
-            top_populations:\n  - {}
-            diagnostic:\n  - {}
+            top_populations: {}
+            diagnostic: {}
             recombinant: {}
             substitutions: {}
-            score:\n  {}
-            support:\n  {}
-            conflict_ref:\n  {}
-            conflict_alt:\n  {}
-            private:\n  {}",
+            score:\n  {}{display_suffix}
+            support:\n  {}{display_suffix}
+            conflict_ref:\n  {}{display_suffix}
+            conflict_alt:\n  {}{display_suffix}",
             self.sequence_id,
             self.consensus_population,
-            self.top_populations.join("\n  - "),
-            self.diagnostic.join("\n  - "),
+            self.top_populations.join(", "),
+            self.diagnostic.join(", "),
             self.recombinant.clone().unwrap_or("None".to_string()),
             self.substitutions.iter().join(", "),
             score_order.join("\n  "),
             support_order.join("\n  "),
             conflict_ref_order.join("\n  "),
             conflict_alt_order.join("\n  "),
-            private_order,
+            //private_order,
         )
     }
 }

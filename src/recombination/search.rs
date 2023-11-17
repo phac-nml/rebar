@@ -16,13 +16,6 @@ use strum::IntoEnumIterator;
 ///
 /// Uses a recursion_limit for safety. It is not intended to
 /// run this wrapper function more than once recursively.
-///
-/// Compares 3 different hypotheses concerning recombination:
-/// 1. Designated (known) Recombinant.
-/// 2. Novel Recombinant.
-///     2a. (Recursive) Recombinant parent.
-///     2b. Non-recombinant parent.
-/// 3. No Recombination.
 pub fn all_parents<'seq>(
     sequence: &'seq Sequence,
     dataset: &Dataset,
@@ -33,7 +26,7 @@ pub fn all_parents<'seq>(
     // copy args, we don't want to modify the original global parameters
     let mut args = args.clone();
     // copy search populations, we will refine these based on edge cases and
-    // different hypotheses
+    // different hypotheses concerning the mechanism of recombination
     let mut populations = populations.to_vec();
 
     // ------------------------------------------------------------------------
@@ -85,8 +78,7 @@ pub fn all_parents<'seq>(
             continue;
         }
 
-        let mut hyp_args = args.clone();
-        let mut hyp_populations = populations.clone();
+        let mut hyp_populations: Vec<&String> = populations.clone();
 
         // ----------------------------------------------------------------------------
         // Hypothesis: Designated Recombinant.
@@ -105,6 +97,7 @@ pub fn all_parents<'seq>(
         // Hypothesis: Novel Recombinant, Allow Recursion.
         // One or more parent(s) are recombinants or recombinant descendants
         // This is a default search, no filter edits needed
+        if hypothesis == Hypothesis::NovelRecursiveRecombinant {}
 
         // ----------------------------------------------------------------------------
         // Hypothesis: Novel Recombinant, Disallow Recursion.
@@ -123,66 +116,80 @@ pub fn all_parents<'seq>(
         // Search for primary and scondary parents
 
         debug!("Primary Parent Search.");
-        if populations.is_empty() {
-            return Err(eyre!("No parent populations provided for search."));
+        if hyp_populations.is_empty() {
+            return Err(eyre!("No parent populations fit the hypothesis."));
         }
-        let primary_search = dataset.search(sequence, Some(&hyp_populations), None);
+        // we only need to rerun the primary parent search if the search populations
+        // DOES NOT contain the hyp_populations
+        let primary_search: Result<SearchResult, Report> =
+            if hyp_populations.contains(&&best_match.consensus_population) {
+                Ok(best_match.clone())
+            } else {
+                dataset.search(sequence, Some(&hyp_populations), None)
+            };
 
-        // // Check if primary search found anything
-        // if let Ok(primary_parent) = primary_search {
-        //     debug!("Primary Parent Search was successful.");
-        //     debug!("Secondary Parent(s) Search.");
-        //     let secondary_search = secondary_parents(
-        //         sequence,
-        //         dataset,
-        //         best_match,
-        //         &[primary_parent],
-        //         &hyp_exclude,
-        //         &hyp_args,
-        //     );
+        // exclude is inverse of
+        //let hyp_exclude = dataset.populations.keys().filter(|pop| !hyp_populations.contains(collect_vec()
+        let mut hyp_args = args.clone();
+        hyp_args.parents = Some(hyp_populations.into_iter().cloned().collect_vec());
 
-        //     if let Ok(recombination) = secondary_search {
-        //         debug!("Secondary Parent(s) Search was successful.");
-        //         let parsimony_score: isize = recombination.score.values().sum();
+        // Check if primary search found anything
+        if let Ok(primary_parent) = primary_search {
+            debug!("Primary Parent Search was successful.");
+            debug!("Secondary Parent(s) Search.");
+            let secondary_search = secondary_parents(
+                sequence,
+                dataset,
+                best_match,
+                &[primary_parent],
+                &hyp_args,
+            );
 
-        //         // adjust the hypothesis, in case it wasn't actually recursive
-        //         let hypothesis = if hypothesis == Hypothesis::NovelRecursiveRecombinant {
-        //             let mut is_recursive = false;
-        //             recombination.parents.iter().for_each(|pop| {
-        //                 let recombinant_ancestor = dataset
-        //                     .phylogeny
-        //                     .get_recombinant_ancestor(pop)
-        //                     .unwrap_or(None);
-        //                 if recombinant_ancestor.is_some() {
-        //                     is_recursive = true
-        //                 }
-        //             });
+            if let Ok(recombination) = secondary_search {
+                debug!("Secondary Parent(s) Search was successful.");
+                let parsimony_score: isize = recombination.score.values().sum();
 
-        //             if is_recursive {
-        //                 Hypothesis::NovelRecursiveRecombinant
-        //             } else {
-        //                 Hypothesis::NovelNonRecursiveRecombinant
-        //             }
-        //         } else {
-        //             hypothesis
-        //         };
+                // adjust the hypothesis, in case it wasn't actually recursive
+                let hypothesis = if hypothesis == Hypothesis::NovelRecursiveRecombinant {
+                    let mut is_recursive = false;
+                    recombination.parents.iter().for_each(|pop| {
+                        let recombinant_ancestor = dataset
+                            .phylogeny
+                            .get_recombinant_ancestor(pop)
+                            .unwrap_or(None);
+                        if recombinant_ancestor.is_some() {
+                            is_recursive = true
+                        }
+                    });
 
-        //         hypotheses.insert(hypothesis, (parsimony_score, Some(recombination)));
-        //     } else {
-        //         debug!("Secondary Parent(s) Search was unsuccessful.");
-        //     }
-        // } else {
-        //     debug!("Primary Parent Search was unsuccessful.");
-        // }
+                    if is_recursive {
+                        Hypothesis::NovelRecursiveRecombinant
+                    } else {
+                        Hypothesis::NovelNonRecursiveRecombinant
+                    }
+                } else {
+                    hypothesis
+                };
+
+                hypotheses.insert(hypothesis, (parsimony_score, Some(recombination)));
+            } else {
+                debug!("Secondary Parent(s) Search was unsuccessful.");
+            }
+        } else {
+            debug!("Primary Parent Search was unsuccessful.");
+        }
+
+        debug!(
+            "Hypotheses: {}",
+            hypotheses
+                .iter()
+                .map(|(hyp, (score, _))| format!("{hyp:?}: {score}"))
+                .join(", ")
+        );
     }
 
     // ----------------------------------------------------------------------------
     // Best Hypothesis (highest parsimony score = support - conflict)
-
-    debug!(
-        "Hypotheses: {}",
-        hypotheses.iter().map(|(hyp, (score, _))| format!("{hyp:?}: {score}")).join(", ")
-    );
 
     if hypotheses.is_empty() {
         return Err(eyre!("No evidence for any recombination hypotheses."));
@@ -224,7 +231,6 @@ pub fn secondary_parents<'seq>(
     dataset: &Dataset,
     best_match: &SearchResult,
     parents: &[SearchResult],
-    exclude_populations: &[String],
     args: &run::Args,
 ) -> Result<Recombination<'seq>, Report> {
     // Initialize our 'Recombination' result, that we will modify and update
@@ -237,13 +243,12 @@ pub fn secondary_parents<'seq>(
     let mut parents = parents.to_vec();
     let mut num_parents = parents.len();
 
-    // Control which populations we will/will not examine as candidate parents
-    let mut exclude_populations = exclude_populations.to_vec();
     // The inclusion parents may have been set by the args
+    // Otherwise, use all populations in dataset
     let mut include_populations = if let Some(parents) = &args.parents {
         parents.iter().collect_vec()
     } else {
-        Vec::new()
+        dataset.populations.keys().collect_vec()
     };
 
     // Keep track of how many parent search iterations we've done
@@ -327,8 +332,8 @@ pub fn secondary_parents<'seq>(
 
         // Conflict ref is slightly more complicated, because we don't store
         // REF bases in the dataset. Instead we assume lack of ALT bases means
-        // the REF base is present. This is problematic, as it doesn't account
-        // for indels or missing data yet.
+        // the REF base is present. This is problematic, as it doesn't yet
+        // account for indels, missing data, multiallelic sites, etc.
 
         let conflict_ref = parents
             .iter()
@@ -346,9 +351,6 @@ pub fn secondary_parents<'seq>(
             })
             .collect_vec();
         debug!("conflict_ref: {}", conflict_ref.iter().join(", "));
-
-        // No loop break checks for conflict_ref.
-        // todo!() add examples of why we don't break on conflict_ref resolution.
 
         // --------------------------------------------------------------------
         // Conflict Combine
@@ -371,77 +373,49 @@ pub fn secondary_parents<'seq>(
         // --------------------------------------------------------------------
         // EXCLUDE POPULATIONS
 
-        // Add currently known parents to search exclusion
-        // Exclude their descendants?
-        for p in &parents {
-            if exclude_populations.contains(&p.consensus_population) {
-                exclude_populations.push(p.consensus_population.clone());
-            }
-        }
-        // Exclude populations that have substitutions at ALL of the conflict_ref
-        let mut conflict_ref_count = BTreeMap::new();
-        conflict_ref
-            .iter()
-            // Make sure this mutation is in the dataset (not private)
-            .filter(|sub| dataset.mutations.contains_key(sub))
-            // Identify populations that have ALT base
-            .for_each(|sub| {
-                dataset.mutations[sub]
-                    .iter()
-                    // Keep track of how many ALT bases each population has
-                    .for_each(|p| *conflict_ref_count.entry(p).or_insert(0) += 1);
-            });
-        for (p, count) in conflict_ref_count.into_iter() {
-            if !exclude_populations.contains(p) && count == conflict_ref.len() {
-                exclude_populations.push(p.to_string());
-            }
-        }
+        // Remove currently known parents from the search list
+        let current_parents =
+            parents.iter().map(|result| &result.consensus_population).collect_vec();
+        include_populations.retain(|pop| !current_parents.contains(pop));
 
-        // If every single population in the dataset has been excluded, exit here
-        // This might because we supplied args.parents that were not actually
-        // good hypotheses.
-        if exclude_populations.len() == dataset.populations.len() {
-            return Err(eyre!("No populations left to search."));
-        }
+        // Exclude populations that have substitutions at ALL of the conflict_ref
+        let conflict_ref_populations = dataset
+            .populations
+            .iter()
+            .filter(|(pop, _seq)| include_populations.contains(pop))
+            .filter_map(|(pop, seq)| {
+                let count = seq
+                    .substitutions
+                    .iter()
+                    .filter(|sub| conflict_ref.contains(sub))
+                    .collect_vec()
+                    .len();
+                (count == conflict_ref.len()).then_some(pop)
+            })
+            .collect_vec();
+        include_populations.retain(|pop| !conflict_ref_populations.contains(pop));
 
         // --------------------------------------------------------------------
         // INCLUDE POPULATIONS
 
-        include_populations.retain(|p| !exclude_populations.contains(p));
-
-        // If the include_populations list is empty at this point
-        // ex. No parents supplied with args.parents) we'll prioritize
-        // populations with conflict_ref
-        include_populations = if !include_populations.is_empty() {
-            debug!("Prioritizing parents:");
-            include_populations
-        }
         // prioritize populations that have min_subs conflict_alt
         // ie. help resolve the conflict_alt
-        else {
-            // count up the number of conflict_alt by population
-            let mut conflict_alt_count = BTreeMap::new();
-            for sub in conflict_alt {
-                if dataset.mutations.contains_key(sub) {
-                    let populations = dataset.mutations[sub]
-                        .iter()
-                        .filter(|pop| !exclude_populations.contains(pop))
-                        .collect_vec();
-                    for pop in populations {
-                        *conflict_alt_count.entry(pop).or_insert(0) += 1
-                    }
-                }
-            }
 
-            let conflict_alt_populations = conflict_alt_count
-                .into_iter()
-                .filter(|(_pop, count)| *count >= args.min_subs)
-                .map(|(pop, _count)| pop)
-                .collect_vec();
-
-            debug!("Prioritizing conflict_alt resolution.");
-            conflict_alt_populations
-        };
+        let conflict_alt_populations = dataset
+            .populations
+            .iter()
+            .filter(|(pop, _seq)| include_populations.contains(pop))
+            .filter_map(|(pop, seq)| {
+                let count = seq
+                    .substitutions
+                    .iter()
+                    .filter(|sub| conflict_alt.contains(sub))
+                    .collect_vec()
+                    .len();
+                (count >= args.min_subs).then_some(pop)
+            })
+            .collect_vec();
+        include_populations.retain(|pop| conflict_alt_populations.contains(pop));
 
         // trunclate list for display
         let display_populations = if include_populations.len() <= 10 {
@@ -449,87 +423,68 @@ pub fn secondary_parents<'seq>(
         } else {
             format!("{} ...", include_populations[0..10].iter().join(", "),)
         };
-        debug!("Populations: {display_populations:?}");
+        debug!("Prioritizing conflict_alt resolution: {display_populations:?}");
 
-        // --------------------------------------------------------------------
-        // Search Dataset #1 (Full Coordinate Range)
-        // --------------------------------------------------------------------
-
-        // In what cases do we want to search the full coordinate range first vs
-        // after the specific coordinates
-        // Example. XD (tag: 2023-10-26), search specific first
-
-        // find the next parent candidate based on the full coordinate range
-        let coord_min = coordinates.iter().min().unwrap();
-        let coord_max = coordinates.iter().max().unwrap();
-        let coord_range = (coord_min.to_owned()..coord_max.to_owned()).collect_vec();
-
-        debug!("Searching based on coordinate range: {coord_min} - {coord_max}");
-
-        let parent_candidate =
-            dataset.search(sequence, Some(&include_populations), Some(&coord_range));
-
-        // if the search found parents, check for recombination
-        if let Ok(parent_candidate) = parent_candidate {
-            // remove this parent from future searches
-            exclude_populations.push(parent_candidate.consensus_population.clone());
-            //designated_parents.retain(|p| p != &parent_candidate.consensus_population);
-
-            // check for recombination
-            let detect_result = detect_recombination(
-                sequence,
-                dataset,
-                best_match,
-                &parents,
-                Some(&parent_candidate),
-                &dataset.reference,
-                args,
-            );
-
-            // if successful, add this parent to the list and update recombination
-            if let Ok(detect_result) = detect_result {
-                num_parents += 1;
-                // reset the iter counter
-                num_iter = 0;
-                parents.push(parent_candidate);
-                recombination = detect_result;
-                continue;
-            }
+        // If every single population in the dataset has been excluded, exit here
+        // This might because we supplied args.parents that were not actually
+        // good hypotheses.
+        if include_populations.is_empty() {
+            return Err(eyre!("No populations left to search."));
         }
 
         // --------------------------------------------------------------------
-        // Search Dataset #2 (Precise Coordinates)
+        // Search Dataset #1 and #2 (Coordinate Range vs Precise)
+        // --------------------------------------------------------------------
 
-        debug!("Searching based on precise coordinates: {coordinates:?}");
+        //let search_modes = vec!["range", "precise"];
+        let search_modes = vec!["precise"];
+        // In what cases do we want to search the full coordinate range first vs
+        // after the specific coordinates?
 
-        let parent_candidate =
-            dataset.search(sequence, Some(&include_populations), Some(&coordinates));
+        for mode in search_modes {
+            let search_coords = if mode == "precise" {
+                debug!("Searching based on precise coordinates: {coordinates:?}");
+                coordinates.clone()
+            } else {
+                let coord_min = coordinates.iter().min().unwrap();
+                let coord_max = coordinates.iter().max().unwrap();
+                debug!("Searching based on coordinate range: {coord_min} - {coord_max}");
+                (coord_min.to_owned()..coord_max.to_owned()).collect_vec()
+            };
 
-        // if the search found parents, check for recombination
-        if let Ok(parent_candidate) = parent_candidate {
-            // remove this parent from future searches
-            exclude_populations.push(parent_candidate.consensus_population.clone());
-            //designated_parents.retain(|p| p != &parent_candidate.consensus_population);
-
-            // check for recombination
-            let detect_result = detect_recombination(
+            let parent_candidate = dataset.search(
                 sequence,
-                dataset,
-                best_match,
-                &parents,
-                Some(&parent_candidate),
-                &dataset.reference,
-                args,
+                Some(&include_populations),
+                Some(&search_coords),
             );
 
-            // if successful, add this parent to the list and update recombination
-            if let Ok(detect_result) = detect_result {
-                num_parents += 1;
-                // reset the iter counter
-                num_iter = 0;
-                parents.push(parent_candidate);
-                recombination = detect_result;
-                continue;
+            // if the search found parents, check for recombination
+            if let Ok(parent_candidate) = parent_candidate {
+                // remove this parent from future searches
+                include_populations
+                    .retain(|pop| **pop != parent_candidate.consensus_population);
+
+                // check for recombination
+                let detect_result = detect_recombination(
+                    sequence,
+                    dataset,
+                    best_match,
+                    &parents,
+                    Some(&parent_candidate),
+                    &dataset.reference,
+                    args,
+                );
+
+                // if successful, add this parent to the list and update recombination
+                // break out of the search mode loop
+                if let Ok(detect_result) = detect_result {
+                    num_parents += 1;
+                    // reset the iter counter
+                    num_iter = 0;
+                    parents.push(parent_candidate);
+                    recombination = detect_result;
+                    break;
+                }
             }
         }
     }

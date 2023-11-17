@@ -68,37 +68,22 @@ impl<'seq> Recombination<'seq> {
 
         self.parents.iter().for_each(|pop| {
             // score
-            let msg = format!(
-                "  - {pop}:\n    - count: {}\n",
-                self.score.get(pop).unwrap(),
-            );
+            let msg = format!("  - {pop}: {}\n", &self.score[pop]);
             score.push_str(&msg);
 
             // support
             let subs = self.support.get(pop).unwrap();
-            let msg = format!(
-                "  - {pop}:\n    - count: {}\n    - substitutions: {}\n",
-                subs.len(),
-                subs.iter().join(", ")
-            );
+            let msg = format!("  - {pop} ({}): {}\n", subs.len(), subs.iter().join(", "));
             support.push_str(&msg);
 
             // conflict_ref
             let subs = self.conflict_ref.get(pop).unwrap();
-            let msg = format!(
-                "  - {pop}:\n    - count: {}\n    - substitutions: {}\n",
-                subs.len(),
-                subs.iter().join(", ")
-            );
+            let msg = format!("  - {pop} ({}): {}\n", subs.len(), subs.iter().join(", "));
             conflict_ref.push_str(&msg);
 
             // conflict_alt
             let subs = self.conflict_alt.get(pop).unwrap();
-            let msg = format!(
-                "  - {pop}:\n    - count: {}\n    - substitutions: {}\n",
-                subs.len(),
-                subs.iter().join(", ")
-            );
+            let msg = format!("  - {pop} ({}): {}\n", subs.len(), subs.iter().join(", "));
             conflict_alt.push_str(&msg);
         });
 
