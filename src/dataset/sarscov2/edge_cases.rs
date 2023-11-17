@@ -48,6 +48,16 @@ pub fn default() -> Result<Vec<run::Args>, Report> {
     };
     edge_cases.push(edge_case);
 
+    // XP: BA.1 and BA.2 with a single sub from BA.2
+    let recombinant = "XP".to_string();
+    debug!("Creating manual edge case: {recombinant:?}");
+    let edge_case = run::Args {
+        min_consecutive: 1,
+        population: Some(recombinant),
+        ..Default::default()
+    };
+    edge_cases.push(edge_case);
+
     // XCF: XBB and FE.1 (XBB.1.18.1) with no unique subs from XBB
     let recombinant = "XCF".to_string();
     debug!("Creating manual edge case: {recombinant:?}");

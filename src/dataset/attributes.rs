@@ -42,7 +42,7 @@ impl Name {
         match self {
             Name::SarsCov2 => {
                 compatibility.dataset.min_date =
-                    Some(DateTime::parse_from_rfc3339("2023-02-09T12:00:00Z")?.into());
+                    Some(NaiveDate::parse_from_str("2023-02-09", "%Y-%m-%d")?);
             }
             _ => compatibility.cli.version = Some(">=1.0.0".to_string()),
         }
@@ -115,11 +115,9 @@ impl FromStr for Tag {
             "custom" => Tag::Custom,
             _ => {
                 // check if it's an archival date string
-                let tag_date = DateTime::parse_from_rfc3339(tag)
-                    .wrap_err_with(|| eyre!("Archive tag date has invalid format: {tag:?}. Example of a valid Archive tag: 2023-08-17T12:00:00Z"))?;
-                let tag_utc: DateTime<Utc> = tag_date.into();
-                let tag_reformat = tag_utc.to_rfc3339_opts(SecondsFormat::Secs, true);
-                Tag::Archive(tag_reformat)
+                NaiveDate::parse_from_str(tag, "%Y-%m-%d")
+                    .wrap_err_with(|| eyre!("Archive tag date has invalid format: {tag:?}. Example of a valid Archive tag: 2023-08-17"))?;
+                Tag::Archive(tag.to_string())
             }
         };
 
@@ -147,8 +145,7 @@ pub fn check_compatibility(name: &Name, tag: &Tag) -> Result<(), Report> {
     }
     // Check Tag Dates
     if matches!(tag, Tag::Archive(_)) {
-        let tag_date: DateTime<Utc> =
-            DateTime::parse_from_rfc3339(&tag.to_string())?.into();
+        let tag_date = NaiveDate::parse_from_str(&tag.to_string(), "%Y-%m-%d")?;
 
         // Minimum Date
         if let Some(min_date) = compatibility.dataset.min_date {
@@ -199,8 +196,8 @@ impl Compatibility {
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct DateCompatibility {
-    pub min_date: Option<DateTime<Utc>>,
-    pub max_date: Option<DateTime<Utc>>,
+    pub min_date: Option<NaiveDate>,
+    pub max_date: Option<NaiveDate>,
 }
 
 impl Default for DateCompatibility {
