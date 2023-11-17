@@ -2,6 +2,7 @@ edition = "2021"
 
 tab_spaces = 4
 max_width = 90
+chain_width = 90
 
 newline_style = "Unix"
 reorder_imports = true
