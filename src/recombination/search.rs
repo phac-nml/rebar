@@ -38,7 +38,7 @@ pub fn all_parents<'seq>(
     let edge_case_search = dataset
         .edge_cases
         .iter()
-        .find(|e| e.population.as_ref() == Some(&best_match.consensus_population));
+        .find(|e| e.population.as_ref() == best_match.recombinant.as_ref());
 
     if let Some(edge_case_args) = edge_case_search {
         debug!("Applying edge case parameters: {edge_case_args:?}");
@@ -117,7 +117,8 @@ pub fn all_parents<'seq>(
 
         debug!("Primary Parent Search.");
         if hyp_populations.is_empty() {
-            return Err(eyre!("No parent populations fit the hypothesis."));
+            debug!("No parent populations fit this hypothesis.");
+            continue;
         }
         // we only need to rerun the primary parent search if the search populations
         // DOES NOT contain the hyp_populations
@@ -198,6 +199,10 @@ pub fn all_parents<'seq>(
     let max_score =
         hypotheses.iter().map(|(_hyp, (score, _recombination))| score).max().unwrap();
 
+    // might want to consider the best_hypothesis as the one with the least conflict
+    // rather than best support?
+    // Ex. XBB* recursive recombinants, the original recombination (BJ.1 x CJ.1) has
+    // super high support, but lots of conflict
     let best_hypothesis = hypotheses
         .iter()
         .filter_map(
@@ -453,7 +458,7 @@ pub fn secondary_parents<'seq>(
                 (coord_min.to_owned()..coord_max.to_owned()).collect_vec()
             };
 
-            debug!("dataset.search");
+            //debug!("dataset.search");
 
             let parent_candidate = dataset.search(
                 sequence,
@@ -461,7 +466,7 @@ pub fn secondary_parents<'seq>(
                 Some(&search_coords),
             );
 
-            debug!("detect_recombination");
+            //debug!("detect_recombination");
 
             // if the search found parents, check for recombination
             if let Ok(parent_candidate) = parent_candidate {
