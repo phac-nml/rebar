@@ -58,7 +58,7 @@ pub fn all_parents<'seq>(
     // ----------------------------------------------------------------------------
 
     // Store the results of our hypothesis testing
-    let mut hypotheses: BTreeMap<Hypothesis, (isize, Option<Recombination>)> =
+    let mut hypotheses: BTreeMap<Hypothesis, (isize, usize, Option<Recombination>)> =
         BTreeMap::new();
 
     // iterate through the potential hypotheses
@@ -73,7 +73,12 @@ pub fn all_parents<'seq>(
             if best_match.recombinant.is_none() {
                 let parsimony_score =
                     best_match.score.get(&best_match.consensus_population).unwrap();
-                hypotheses.insert(Hypothesis::NonRecombinant, (*parsimony_score, None));
+                let conflict =
+                    best_match.conflict_alt.len() + best_match.conflict_ref.len();
+                hypotheses.insert(
+                    Hypothesis::NonRecombinant,
+                    (*parsimony_score, conflict, None),
+                );
             }
             continue;
         }
@@ -149,6 +154,11 @@ pub fn all_parents<'seq>(
             if let Ok(recombination) = secondary_search {
                 debug!("Secondary Parent(s) Search was successful.");
                 let parsimony_score: isize = recombination.score.values().sum();
+                let conflict_alt: usize =
+                    recombination.conflict_alt.values().map(|subs| subs.len()).sum();
+                let conflict_ref: usize =
+                    recombination.conflict_ref.values().map(|subs| subs.len()).sum();
+                let conflict = conflict_alt + conflict_ref;
 
                 // adjust the hypothesis, in case it wasn't actually recursive
                 let hypothesis = if hypothesis == Hypothesis::NovelRecursiveRecombinant {
@@ -172,7 +182,8 @@ pub fn all_parents<'seq>(
                     hypothesis
                 };
 
-                hypotheses.insert(hypothesis, (parsimony_score, Some(recombination)));
+                hypotheses
+                    .insert(hypothesis, (parsimony_score, conflict, Some(recombination)));
             } else {
                 debug!("Secondary Parent(s) Search was unsuccessful.");
             }
@@ -184,7 +195,9 @@ pub fn all_parents<'seq>(
             "Hypotheses: {}",
             hypotheses
                 .iter()
-                .map(|(hyp, (score, _))| format!("{hyp:?}: {score}"))
+                .map(|(hyp, (score, conflict, _))| format!(
+                    "{hyp:?}: score={score}, conflict={conflict}"
+                ))
                 .join(", ")
         );
     }
@@ -196,8 +209,16 @@ pub fn all_parents<'seq>(
         return Err(eyre!("No evidence for any recombination hypotheses."));
     }
 
-    let max_score =
-        hypotheses.iter().map(|(_hyp, (score, _recombination))| score).max().unwrap();
+    let _max_score = hypotheses
+        .iter()
+        .map(|(_hyp, (score, _conflict, _recombination))| score)
+        .max()
+        .unwrap();
+    let min_conflict = hypotheses
+        .iter()
+        .map(|(_hyp, (_score, conflict, _recombination))| conflict)
+        .min()
+        .unwrap();
 
     // might want to consider the best_hypothesis as the one with the least conflict
     // rather than best support?
@@ -205,15 +226,10 @@ pub fn all_parents<'seq>(
     // super high support, but lots of conflict
     let best_hypothesis = hypotheses
         .iter()
-        .filter_map(
-            |(hyp, (score, _recombination))| {
-                if score == max_score {
-                    Some(hyp)
-                } else {
-                    None
-                }
-            },
-        )
+        //.filter_map(|(hyp, (score, _conflict, _recombination))| (score == max_score).then_some(hyp))
+        .filter_map(|(hyp, (_score, conflict, _recombination))| {
+            (conflict == min_conflict).then_some(hyp)
+        })
         .next()
         .unwrap();
 
@@ -222,8 +238,8 @@ pub fn all_parents<'seq>(
     } else {
         debug!("best_hypothesis: {best_hypothesis:?}");
     }
-    // 0: score, 1: recombination
-    let mut recombination = hypotheses.get(best_hypothesis).unwrap().1.clone().unwrap();
+    // 0: score, 1: conflict, 2: recombination
+    let mut recombination = hypotheses.get(best_hypothesis).unwrap().2.clone().unwrap();
     recombination.edge_case = edge_case;
     recombination.hypothesis = Some(best_hypothesis.to_owned());
 
