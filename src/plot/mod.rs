@@ -97,7 +97,9 @@ pub fn create(
 
     // If multiple parents weren't confidently identified
     if parents.is_empty() {
-        return Err(eyre!("No parents (origin) were confidently identified in barcodes file: {barcodes_path:?}"));
+        return Err(eyre!(
+            "No parents (origin) were confidently identified in barcodes file: {barcodes_path:?}"
+        ));
     }
 
     if parents.len() > constants::PALETTE_DARK.len() {
