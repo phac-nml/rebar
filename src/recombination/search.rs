@@ -35,21 +35,25 @@ pub fn all_parents<'seq>(
 
     // // Edge Cases: Manually specified in the organism's dataset.
     let mut edge_case = false;
-    let edge_case_search = dataset
-        .edge_cases
-        .iter()
-        .find(|e| e.population.as_ref() == best_match.recombinant.as_ref());
 
-    if let Some(edge_case_args) = edge_case_search {
-        debug!("Applying edge case parameters: {edge_case_args:?}");
-        edge_case = true;
-        args = args.apply_edge_case(edge_case_args)?;
+    // only apply edge cases if the user didn't request a naive search
+    if !args.naive {
+        let edge_case_search = dataset
+            .edge_cases
+            .iter()
+            .find(|e| e.population.as_ref() == best_match.recombinant.as_ref());
 
-        if let Some(parents) = &edge_case_args.parents {
-            populations.retain(|pop| parents.contains(pop))
-        }
-        if let Some(knockout) = &edge_case_args.knockout {
-            populations.retain(|pop| !knockout.contains(pop))
+        if let Some(edge_case_args) = edge_case_search {
+            debug!("Applying edge case parameters: {edge_case_args:?}");
+            edge_case = true;
+            args = args.apply_edge_case(edge_case_args)?;
+
+            if let Some(parents) = &edge_case_args.parents {
+                populations.retain(|pop| parents.contains(pop))
+            }
+            if let Some(knockout) = &edge_case_args.knockout {
+                populations.retain(|pop| !knockout.contains(pop))
+            }
         }
     }
 
@@ -88,7 +92,8 @@ pub fn all_parents<'seq>(
         // The best match (consensus) population is a known recombinant (or descendant of)
         // Search for parents based on the known list of parents.
 
-        if hypothesis == Hypothesis::DesignatedRecombinant {
+        // only apply edge cases if the user didn't request a naive search
+        if hypothesis == Hypothesis::DesignatedRecombinant && !args.naive {
             if let Some(recombinant) = &best_match.recombinant {
                 let designated_parents = dataset.phylogeny.get_parents(recombinant)?;
                 debug!("Designated Parents: {designated_parents:?}");

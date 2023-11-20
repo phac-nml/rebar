@@ -3,15 +3,11 @@ use crate::dataset::attributes::Summary;
 use crate::dataset::Dataset;
 use crate::phylogeny::Phylogeny;
 use crate::sequence::{read_reference, Sequence, Substitution};
-use crate::utils::table::Table;
 use bio::io::fasta;
 use color_eyre::eyre::{eyre, Report, Result, WrapErr};
-use indicatif::{ProgressBar, ProgressStyle};
-use itertools::Itertools;
-use log::{debug, info, warn};
+use log::{info, warn};
 use std::collections::BTreeMap;
 use std::path::Path;
-use std::str::FromStr;
 
 // ----------------------------------------------------------------------------
 // Dataset
@@ -57,22 +53,22 @@ pub fn dataset(dataset_dir: &Path, mask: &Vec<usize>) -> Result<Dataset, Report>
     // --------------------------------------------------------------------
     // Diagnostic Mutations (Optional)
 
-    let diagnostic_path = dataset_dir.join("diagnostic_mutations.tsv");
-    dataset.diagnostic = BTreeMap::new();
+    // let diagnostic_path = dataset_dir.join("diagnostic_mutations.tsv");
+    // dataset.diagnostic = BTreeMap::new();
 
-    if diagnostic_path.exists() {
-        let diagnostic_table = Table::read(&diagnostic_path)?;
-        let mut_col_i = diagnostic_table.header_position("mutation")?;
-        let pop_col_i = diagnostic_table.header_position("population")?;
+    // if diagnostic_path.exists() {
+    //     let diagnostic_table = Table::read(&diagnostic_path)?;
+    //     let mut_col_i = diagnostic_table.header_position("mutation")?;
+    //     let pop_col_i = diagnostic_table.header_position("population")?;
 
-        for row in diagnostic_table.rows {
-            let mutation = Substitution::from_str(&row[mut_col_i])?;
-            let population = row[pop_col_i].clone();
-            dataset.diagnostic.insert(mutation, population);
-        }
-    } else {
-        warn!("No diagnostic mutations were found.");
-    }
+    //     for row in diagnostic_table.rows {
+    //         let mutation = Substitution::from_str(&row[mut_col_i])?;
+    //         let population = row[pop_col_i].clone();
+    //         dataset.diagnostic.insert(mutation, population);
+    //     }
+    // } else {
+    //     warn!("No diagnostic mutations were found.");
+    // }
 
     // --------------------------------------------------------------------
     // Done
@@ -118,56 +114,4 @@ pub fn parse_populations(
     }
 
     Ok((populations, mutations))
-}
-
-pub fn get_diagnostic_mutations(
-    mutations: &BTreeMap<Substitution, Vec<String>>,
-    phylogeny: &Phylogeny,
-) -> Result<Table, Report> {
-    let mut table = Table::new();
-    table.headers = vec!["mutation", "population", "include_descendants"]
-        .into_iter()
-        .map(String::from)
-        .collect_vec();
-
-    // configure progress bar style
-    let progress_bar_style = ProgressStyle::with_template(
-        "{bar:40} {pos}/{len} ({percent}%) | Mutations / Second: {per_sec} | Elapsed: {elapsed_precise} | ETA: {eta_precise}"
-    ).unwrap();
-    let progress_bar = ProgressBar::new(mutations.len() as u64);
-    progress_bar.set_style(progress_bar_style);
-
-    for (mutation, populations) in mutations {
-        progress_bar.inc(1);
-        let mut population = populations[0].clone();
-        debug!("{mutation:?}");
-        debug!("\tpopulations: {}", populations.len());
-        let mut is_diagnostic = false;
-        let mut include_descendants = false;
-
-        // A mutation found in only 1 population is obviously diagnostic
-        if populations.len() == 1 {
-            is_diagnostic = true;
-        } else if !phylogeny.is_empty() {
-            let common_ancestor = phylogeny.get_common_ancestor(populations)?;
-            if populations.contains(&common_ancestor) {
-                is_diagnostic = true;
-                population = common_ancestor;
-                include_descendants = true;
-            }
-        }
-
-        if is_diagnostic {
-            let row = vec![
-                mutation.to_string(),
-                population,
-                include_descendants.to_string(),
-            ];
-            table.rows.push(row);
-        }
-    }
-
-    progress_bar.inc(1);
-
-    Ok(table)
 }

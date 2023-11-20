@@ -2,11 +2,14 @@ use crate::cli;
 use crate::dataset;
 use crate::dataset::attributes::{check_compatibility, Name, Summary};
 use crate::{utils, utils::remote_file::RemoteFile};
-use color_eyre::eyre::{Report, Result};
+//use crate::sequence::Substitution;
+use color_eyre::eyre::{eyre, Report, Result};
+//use indicatif::ProgressBar;
 use itertools::Itertools;
 use log::{info, warn};
 use std::fs::create_dir_all;
 use std::path::Path;
+//use std::collections::BTreeMap;
 
 /// Download dataset
 pub async fn dataset(args: &mut cli::dataset::download::Args) -> Result<(), Report> {
@@ -110,22 +113,49 @@ pub async fn dataset(args: &mut cli::dataset::download::Args) -> Result<(), Repo
     phylogeny.write(&output_path)?;
 
     // --------------------------------------------------------------------
+    // Export Mutations
+
+    let output_path = args.output_dir.join("mutations.json");
+    info!("Mapping mutations to populations: {output_path:?}");
+    let mask = vec![0, 0];
+    let (_populations, mutations) = dataset::load::parse_populations(
+        &summary.populations.local_path,
+        &summary.reference.local_path,
+        &mask,
+    )?;
+    dataset::write_mutations(&mutations, &output_path)?;
+
+    // --------------------------------------------------------------------
     // Identify Diagnostic Mutations
     //
     // This is painfully slow, need to rethink!
 
     if args.diagnostic {
-        let output_path = args.output_dir.join("diagnostic_mutations.tsv");
-        info!("Identifying diagnostic mutations: {output_path:?}");
+        // todo!()
+        return Err(eyre!(
+            "Diagnostic mutations is not efficiently implemented yet."
+        ));
 
-        let mask = vec![0, 0];
-        let (_populations, mutations) = dataset::load::parse_populations(
-            &summary.populations.local_path,
-            &summary.reference.local_path,
-            &mask,
-        )?;
-        let diagnostic = dataset::load::get_diagnostic_mutations(&mutations, &phylogeny)?;
-        diagnostic.write(&output_path)?;
+        // let output_path = args.output_dir.join("diagnostic_mutations.tsv");
+        // info!("Identifying diagnostic mutations: {output_path:?}");
+
+        // let bar = ProgressBar::new(mutations.len() as u64);
+
+        // let diagnostic: BTreeMap<Substitution, Vec<String>> = mutations
+        //     .into_iter()
+        //     .filter_map(|(sub, pops)| {
+        //         bar.inc(1);
+        //         if pops.len() == 1 {
+        //             Some((sub, pops))
+        //         } else {
+        //             let mrca = phylogeny.get_common_ancestor(&pops).unwrap();
+        //             if pops.contains(&mrca){ Some((sub, pops)) }
+        //             else { None }
+        //         }
+        //     })
+        //     .collect();
+
+        // dataset::write_mutations(&diagnostic, &output_path)?;
     }
 
     // --------------------------------------------------------------------
@@ -147,9 +177,7 @@ pub async fn dataset(args: &mut cli::dataset::download::Args) -> Result<(), Repo
     let problematic_recombinants = phylogeny.get_problematic_recombinants()?;
     for recombinant in problematic_recombinants {
         let parents = phylogeny.get_parents(&recombinant)?;
-        warn!(
-            "Recombinant {recombinant} is problematic. Parents are not sister taxa: {parents:?}"
-        );
+        warn!("Recombinant {recombinant} is problematic. Parents are not sister taxa: {parents:?}");
         if manual_populations.contains(&recombinant) {
             warn!("Manual edge case exists: {recombinant:?}");
         } else {
