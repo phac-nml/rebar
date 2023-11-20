@@ -3,7 +3,7 @@ pub mod validate;
 
 use crate::cli::run;
 use crate::dataset::{Dataset, SearchResult};
-use crate::sequence::{Sequence, Substitution};
+use crate::sequence::{parsimony, Sequence, Substitution};
 use crate::utils::table::Table;
 use color_eyre::eyre::{eyre, Report, Result};
 use color_eyre::Help;
@@ -432,7 +432,9 @@ pub fn detect_recombination<'seq>(
         }
     }
     if min_subs_fail {
-        return Err(eyre!("No recombination detected, min_subs filter was not satisfied by all parents."));
+        return Err(eyre!(
+            "No recombination detected, min_subs filter was not satisfied by all parents."
+        ));
     }
 
     // --------------------------------------------------------------------
@@ -466,7 +468,9 @@ pub fn detect_recombination<'seq>(
             .flat_map(|(_start, region)| ((region.start)..=(region.end)).collect_vec())
             .collect_vec();
 
-        let summary = dataset.parsimony_summary(pop, sequence, Some(&coordinates))?;
+        let pop_seq = &dataset.populations[pop];
+        let summary =
+            parsimony::Summary::from_sequence(sequence, pop_seq, Some(&coordinates))?;
         // update recombination with support and conflicts found
         recombination.support.insert(pop.to_owned(), summary.support);
         recombination.conflict_ref.insert(pop.to_owned(), summary.conflict_ref);

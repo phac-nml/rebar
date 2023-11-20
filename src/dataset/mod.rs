@@ -7,8 +7,8 @@ pub mod sarscov2;
 
 use crate::cli::run;
 use crate::phylogeny::Phylogeny;
-use crate::sequence::{Sequence, Substitution};
-use color_eyre::eyre::{eyre, Report, Result};
+use crate::sequence::{parsimony, Sequence, Substitution};
+use color_eyre::eyre::{eyre, Report, Result, WrapErr};
 use indoc::formatdoc;
 use itertools::Itertools;
 use log::debug;
@@ -16,6 +16,9 @@ use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 use std::default::Default;
 use std::fmt;
+use std::fs::File;
+use std::io::Write;
+use std::path::Path;
 
 // ----------------------------------------------------------------------------
 // Dataset
@@ -58,6 +61,43 @@ impl Dataset {
         }
     }
 
+    pub fn create_consensus(
+        &self,
+        name: &str,
+        populations: &[&str],
+    ) -> Result<Sequence, Report> {
+        // collect individual population sequences
+        let sequences = populations
+            .iter()
+            .filter_map(|pop| {
+                (self.populations.contains_key(*pop)).then_some(&self.populations[*pop])
+            })
+            .collect_vec();
+
+        // construct consensus
+        let consensus = (0..self.reference.genome_length)
+            .map(|coord| {
+                let bases = sequences.iter().map(|s| s.seq[coord]).unique().collect_vec();
+                if bases.len() == 1 {
+                    bases[0]
+                } else {
+                    'N'
+                }
+            })
+            .join("");
+
+        // create bio record
+        let description = None;
+        let record =
+            bio::io::fasta::Record::with_attrs(name, description, consensus.as_bytes());
+        // parse and create Sequence record
+        // dataset is already masked, no need
+        let mask = Vec::new();
+        let sequence = Sequence::from_record(record, Some(&self.reference), &mask)?;
+
+        Ok(sequence)
+    }
+
     /// Expand list of populations with wildcarding.
     pub fn expand_populations(
         &self,
@@ -98,68 +138,6 @@ impl Dataset {
         Ok(expanded)
     }
 
-    /// Summarize population support and conflicts relative to the query sequence.
-    pub fn parsimony_summary(
-        &self,
-        population: &String,
-        sequence: &Sequence,
-        coordinates: Option<&Vec<usize>>,
-    ) -> Result<ParsimonySummary, Report> {
-        let mut parsimony_summary = ParsimonySummary::new();
-
-        if !self.populations.contains_key(population) {
-            return Err(eyre!(
-                "Dataset does not contain a sequence for population {population}"
-            ));
-        }
-
-        // get all the substitutions found in this population
-        // exclude missing and deletion coordinates
-        let mut pop_subs = self.populations[population]
-            .substitutions
-            .iter()
-            .filter(|sub| {
-                !sequence.missing.contains(&sub.coord)
-                    && !sequence.deletions.contains(&sub.to_deletion())
-            })
-            .collect_vec();
-
-        // get all the substitutions found in the sequence
-        let mut seq_subs = sequence.substitutions.clone();
-
-        // optionally filter coordinates
-        if let Some(coordinates) = coordinates {
-            pop_subs.retain(|sub| coordinates.contains(&sub.coord));
-            seq_subs.retain(|sub| coordinates.contains(&sub.coord));
-        }
-
-        // support: sub in query seq that is also in pop
-        // conflict_alt: sub in query seq that is not in pop
-        seq_subs.iter().for_each(|sub| {
-            if pop_subs.contains(&sub) {
-                parsimony_summary.support.push(*sub);
-            } else {
-                parsimony_summary.conflict_alt.push(*sub);
-            }
-        });
-
-        // conflict_ref: sub in pop that is not in query seq
-        parsimony_summary.conflict_ref = pop_subs
-            .into_iter()
-            .filter(|sub| !seq_subs.contains(sub))
-            .cloned()
-            .collect_vec();
-
-        // score: support - conflict_alt - conflict_ref
-        // why did we previously use only conflict_ref and not conflict_alt?
-        // individual isize conversion otherwise: "attempt to subtract with overflow"
-        parsimony_summary.score = parsimony_summary.support.len() as isize
-            - parsimony_summary.conflict_ref.len() as isize
-            - parsimony_summary.conflict_alt.len() as isize;
-
-        Ok(parsimony_summary)
-    }
-
     /// Search dataset for a population parsimony match to the sequence.
     pub fn search(
         &self,
@@ -168,7 +146,7 @@ impl Dataset {
         coordinates: Option<&Vec<usize>>,
     ) -> Result<SearchResult, Report> {
         // initialize an empty result, this will be the final product of this function
-        let mut search_result = SearchResult::new(sequence);
+        let mut result = SearchResult::new(sequence);
 
         // --------------------------------------------------------------------
         // Candidate Matches
@@ -235,11 +213,14 @@ impl Dataset {
         // check which populations have extra subs/lacking subs
         population_matches.into_iter().for_each(|pop| {
             // calculate the parsimony score, and store results in map by population
-            let summary = self.parsimony_summary(pop, sequence, coordinates).unwrap();
-            search_result.support.insert(pop.to_owned(), summary.support);
-            search_result.conflict_ref.insert(pop.to_owned(), summary.conflict_ref);
-            search_result.conflict_alt.insert(pop.to_owned(), summary.conflict_alt);
-            search_result.score.insert(pop.to_owned(), summary.score);
+            let pop_seq = &self.populations[pop];
+            let summary =
+                parsimony::Summary::from_sequence(sequence, pop_seq, coordinates)
+                    .unwrap();
+            result.support.insert(pop.to_owned(), summary.support);
+            result.conflict_ref.insert(pop.to_owned(), summary.conflict_ref);
+            result.conflict_alt.insert(pop.to_owned(), summary.conflict_alt);
+            result.score.insert(pop.to_owned(), summary.score);
         });
 
         // --------------------------------------------------------------------
@@ -249,17 +230,17 @@ impl Dataset {
         // Ex. XCU parent #1 could be FL.23 (highest support) or XBC.1 (lowest conflict)
 
         // which population(s) has the highest score?
-        // there is a slight possibility that it could be negative
-        let max_score = search_result.score.values().max().unwrap();
+        // reminder: it can be negative when extreme recombinant genomic size
+        let max_score = result.score.values().max().unwrap();
 
-        let max_score_populations = search_result
+        let max_score_populations = result
             .score
             .iter()
             .filter_map(|(pop, count)| (count == max_score).then_some(pop))
             .collect_vec();
 
         // break additional ties by max support
-        let max_support = search_result
+        let max_support = result
             .support
             .iter()
             .filter_map(|(pop, subs)| {
@@ -268,10 +249,10 @@ impl Dataset {
             .max()
             .unwrap_or(0);
 
-        search_result.top_populations = search_result
+        result.top_populations = result
             .score
             .iter()
-            .zip(search_result.support.iter())
+            .zip(result.support.iter())
             .filter_map(|((pop, score), (_, subs))| {
                 (score == max_score && subs.len() == max_support).then_some(pop)
             })
@@ -288,12 +269,12 @@ impl Dataset {
         //  whether there are cases where the true population
         // does not appear in the top_populations
 
-        // search_result.diagnostic = self
+        // result.diagnostic = self
         //     .diagnostic
         //     .iter()
         //     .filter(|(sub, pop)| {
         //         sequence.substitutions.contains(sub)
-        //             && search_result.top_populations.contains(pop)
+        //             && result.top_populations.contains(pop)
         //     })
         //     .map(|(_sub, pop)| pop.to_owned())
         //     .unique()
@@ -307,28 +288,59 @@ impl Dataset {
         // todo!() think about how mandatory a phylogeny is
         // summarize top populations by common ancestor
         // if we found populations with diagnostic mutations, prioritize those
-        search_result.consensus_population =
-            self.phylogeny.get_common_ancestor(&search_result.top_populations)?;
+        let consensus_population =
+            self.phylogeny.get_common_ancestor(&result.top_populations)?;
+        result.consensus_population = consensus_population.clone();
 
         // if the common_ancestor was not in the populations list, add it
         // this is repeated code from before, maybe make it a function
-        if !search_result.top_populations.contains(&search_result.consensus_population) {
-            let pop = &search_result.consensus_population;
-            let summary = self.parsimony_summary(pop, sequence, coordinates)?;
-            search_result.support.insert(pop.to_owned(), summary.support);
-            search_result.conflict_ref.insert(pop.to_owned(), summary.conflict_ref);
-            search_result.conflict_alt.insert(pop.to_owned(), summary.conflict_alt);
-            search_result.score.insert(pop.to_owned(), summary.score);
+        if !result.top_populations.contains(&consensus_population) {
+            let pop = &consensus_population;
+
+            // Option #1. Actual sequence of the internal MRCA node?
+            let pop_seq = &self.populations[pop];
+
+            // // Option #2. Consensus sequence of top populations?
+            // let top_populations = result.top_populations.iter().map(|s| s.as_ref()).collect_vec();
+            // debug!("Creating {pop} consensus genome from top populations.");
+            // let pop_seq = self.create_consensus(pop, &top_populations)?;
+
+            let summary =
+                parsimony::Summary::from_sequence(sequence, pop_seq, coordinates)?;
+            result.support.insert(pop.to_owned(), summary.support);
+            result.conflict_ref.insert(pop.to_owned(), summary.conflict_ref);
+            result.conflict_alt.insert(pop.to_owned(), summary.conflict_alt);
+            result.score.insert(pop.to_owned(), summary.score);
         }
 
+        // Filter out non-top populations
+        // helps cut down on verbosity in debug log and data stored
+        // Ex. XE, lots of BA.2 candidates
+        result.score.retain(|p, _| {
+            result.top_populations.contains(p) || p == &consensus_population
+        });
+        result.support.retain(|p, _| {
+            result.top_populations.contains(p) || p == &consensus_population
+        });
+        result.conflict_ref.retain(|p, _| {
+            result.top_populations.contains(p) || p == &consensus_population
+        });
+        result.conflict_alt.retain(|p, _| {
+            result.top_populations.contains(p) || p == &consensus_population
+        });
+
         // Check if the consensus population is a known recombinant or descendant of one
-        search_result.recombinant = self
-            .phylogeny
-            .get_recombinant_ancestor(&search_result.consensus_population)?;
+        result.recombinant =
+            self.phylogeny.get_recombinant_ancestor(&consensus_population)?;
+
+        // set  private subs relative to consensus population (conflict_ref, conflict_alt)
+
+        // --------------------------------------------------------------------
+        // Substitutions
+        //  --------------------------------------------------------------------
 
         // set consensus population subs
-        search_result.substitutions = self.populations
-            [&search_result.consensus_population]
+        result.substitutions = self.populations[&consensus_population]
             .substitutions
             .iter()
             .filter_map(|sub| {
@@ -338,71 +350,8 @@ impl Dataset {
             })
             .collect_vec();
 
-        // set  private subs relative to consensus population (conflict_ref, conflict_alt)
-
-        // Filter out non-top populations from the debug log.
-        // helps cut down on verbosity and data stored
-        // Ex. XE, lots of BA.2 candidates
-        search_result.score.retain(|p, _| {
-            search_result.top_populations.contains(p)
-                || *p == search_result.consensus_population
-        });
-        search_result.support.retain(|p, _| {
-            search_result.top_populations.contains(p)
-                || *p == search_result.consensus_population
-        });
-        search_result.conflict_ref.retain(|p, _| {
-            search_result.top_populations.contains(p)
-                || *p == search_result.consensus_population
-        });
-        search_result.conflict_alt.retain(|p, _| {
-            search_result.top_populations.contains(p)
-                || *p == search_result.consensus_population
-        });
-
-        debug!("Search Result:\n{}", search_result.pretty_print());
-        Ok(search_result)
-    }
-}
-
-// ----------------------------------------------------------------------------
-// Population Parsimony Summary
-
-#[derive(Clone, Debug, Deserialize, Serialize)]
-pub struct ParsimonySummary {
-    pub support: Vec<Substitution>,
-    pub conflict_ref: Vec<Substitution>,
-    pub conflict_alt: Vec<Substitution>,
-    pub score: isize,
-}
-
-impl ParsimonySummary {
-    pub fn new() -> Self {
-        ParsimonySummary {
-            support: Vec::new(),
-            conflict_ref: Vec::new(),
-            conflict_alt: Vec::new(),
-            score: 0,
-        }
-    }
-
-    pub fn pretty_print(&self) -> String {
-        formatdoc!(
-            "score:\n  {}
-            support:\n  {}
-            conflict_ref:\n  {}
-            conflict_alt:\n  {}",
-            self.score,
-            self.support.iter().join(", "),
-            self.conflict_ref.iter().join(", "),
-            self.conflict_alt.iter().join(", "),
-        )
-    }
-}
-
-impl Default for ParsimonySummary {
-    fn default() -> Self {
-        Self::new()
+        debug!("Search Result:\n{}", result.pretty_print());
+        Ok(result)
     }
 }
 
@@ -447,42 +396,47 @@ impl SearchResult {
         let max_display_items = 10;
 
         // score
-        let mut score_order = self.score.iter().collect::<Vec<(_, _)>>();
-        score_order.sort_by(|a, b| b.1.cmp(a.1));
+        let mut score_order: Vec<(String, isize)> =
+            self.score.clone().into_iter().collect();
+        score_order.sort_by(|a, b| b.1.cmp(&a.1));
+
+        // put consensus population first, regardless of score
+        let consensus_score: (String, isize) = score_order
+            .iter()
+            .find(|(pop, _score)| *pop == self.consensus_population)
+            .unwrap()
+            .clone();
+
+        score_order.retain(|(pop, _score)| *pop != self.consensus_population);
+        score_order.insert(0, consensus_score);
 
         // restrict display items for brevity
         let display_suffix = if score_order.len() > max_display_items {
-            score_order = score_order[1..=max_display_items].to_vec();
+            score_order = score_order[0..max_display_items].to_vec();
             "\n  ..."
         } else {
             ""
         };
 
-        // support
         let mut support_order: Vec<String> = Vec::new();
-        for (pop, _count) in &score_order {
-            let subs = &self.support[*pop];
+        let mut conflict_ref_order: Vec<String> = Vec::new();
+        let mut conflict_alt_order: Vec<String> = Vec::new();
+
+        score_order.iter().for_each(|(pop, _count)| {
+            let subs = &self.support[pop];
             let count = subs.len();
             support_order.push(format!("- {pop} ({count}): {}", subs.iter().join(", ")));
-        }
 
-        // conflict_ref
-        let mut conflict_ref_order: Vec<String> = Vec::new();
-        for (pop, _count) in &score_order {
-            let subs = &self.conflict_ref[*pop];
+            let subs = &self.conflict_ref[pop];
             let count = subs.len();
             conflict_ref_order
                 .push(format!("- {pop} ({count}): {}", subs.iter().join(", ")));
-        }
 
-        // conflict_alt
-        let mut conflict_alt_order: Vec<String> = Vec::new();
-        for (pop, _count) in &score_order {
-            let subs = &self.conflict_alt[*pop];
+            let subs = &self.conflict_alt[pop];
             let count = subs.len();
             conflict_alt_order
                 .push(format!("- {pop} ({count}): {}", subs.iter().join(", ")));
-        }
+        });
 
         // Pretty string formatting for yaml
         let score_order = score_order
@@ -521,4 +475,35 @@ impl SearchResult {
             //private_order,
         )
     }
+}
+
+// ----------------------------------------------------------------------------
+// Functions
+// ----------------------------------------------------------------------------
+
+/// Write mapping of mutations to populations, coordinate sorted.
+pub fn write_mutations(
+    mutations: &BTreeMap<Substitution, Vec<String>>,
+    path: &Path,
+) -> Result<(), Report> {
+    // convert to vector for coordinate sorting
+    let mut mutations = mutations.iter().collect_vec();
+    mutations.sort_by(|a, b| a.0.coord.cmp(&b.0.coord));
+
+    // convert substitution to string for serde pretty
+    let mutations =
+        mutations.iter().map(|(sub, pops)| (sub.to_string(), pops)).collect_vec();
+    // create output file
+    let mut file = File::create(path)
+        .wrap_err_with(|| format!("Failed to create file: {path:?}"))?;
+
+    // parse to string
+    let output = serde_json::to_string_pretty(&mutations)
+        .wrap_err_with(|| "Failed to parse mutations.".to_string())?;
+
+    // write to file
+    file.write_all(format!("{}\n", output).as_bytes())
+        .wrap_err_with(|| format!("Failed to write file: {path:?}"))?;
+
+    Ok(())
 }

@@ -1,3 +1,5 @@
+pub mod parsimony;
+
 use bio::io::fasta;
 use color_eyre::eyre::{eyre, Report, Result, WrapErr};
 use serde::{Deserialize, Serialize};

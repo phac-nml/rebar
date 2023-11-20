@@ -95,6 +95,20 @@ pub fn default() -> Result<Vec<run::Args>, Report> {
     };
     edge_cases.push(edge_case);
 
+    // // --------------------------------------------------------------------
+    // // XAV: BA.5.1.24 and BA.2 with no diagnostic BA.2 subs and only two in a row
+
+    // let recombinant = "XAV".to_string();
+    // debug!("Creating manual edge case: {recombinant:?}");
+    // let edge_case = run::Args {
+    //     min_subs: 0,
+    //     min_consecutive: 2,
+    //     parents: Some(vec!["BA.5.1.24".to_string(), "BA.2*".to_string()]),
+    //     population: Some(recombinant),
+    //     ..Default::default()
+    // };
+    // edge_cases.push(edge_case);
+
     // --------------------------------------------------------------------
     // XCG: BA.5.2 and XBB.1 with only 2 consecutive bases
 
