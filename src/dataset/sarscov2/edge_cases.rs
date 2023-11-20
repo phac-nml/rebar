@@ -42,6 +42,8 @@ pub fn default() -> Result<Vec<run::Args>, Report> {
     debug!("Creating manual edge case: {recombinant:?}");
     let edge_case = run::Args {
         min_consecutive: 1,
+        min_length: 1,
+        parents: Some(vec!["BA.1.1".to_string(), "BA.2".to_string()]),
         population: Some(recombinant),
         ..Default::default()
     };
@@ -101,18 +103,6 @@ pub fn default() -> Result<Vec<run::Args>, Report> {
     let edge_case = run::Args {
         min_subs: 1,
         min_consecutive: 2,
-        population: Some(recombinant),
-        ..Default::default()
-    };
-    edge_cases.push(edge_case);
-
-    // --------------------------------------------------------------------
-    // XCW: XBB.2.3.20 and XBB.1.16.15
-
-    let recombinant = "XCW".to_string();
-    debug!("Creating manual edge case: {recombinant:?}");
-    let edge_case = run::Args {
-        parents: Some(vec!["XBB.2.3.20".to_string(), "XBB.1.16.15".to_string()]),
         population: Some(recombinant),
         ..Default::default()
     };
