@@ -446,7 +446,9 @@ pub fn plot(args: cli::plot::Args) -> Result<(), Report> {
     }
     let barcodes_dir = &output_dir.join("barcodes");
     if !linelist.exists() {
-        return Err(eyre!("Barcodes directory {barcodes_dir:?} does not exist in --output-dir {output_dir:?}."));
+        return Err(eyre!(
+            "Barcodes directory {barcodes_dir:?} does not exist in --output-dir {output_dir:?}."
+        ));
     }
     let annotations = &dataset_dir.join("annotations.tsv");
     if !annotations.exists() {
@@ -500,7 +502,9 @@ pub fn plot(args: cli::plot::Args) -> Result<(), Report> {
             plot::create(&barcodes_file, linelist, Some(annotations), &output_path);
         match result {
             Ok(_) => info!("Plotting success."),
-            Err(e) => warn!("Plotting failure. The following error was encountered but ignored: {e:?}"),
+            Err(e) => {
+                warn!("Plotting failure. The following error was encountered but ignored: {e:?}")
+            }
         }
     }
 
