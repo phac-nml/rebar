@@ -22,6 +22,14 @@ pub struct Args {
     #[serde(skip_serializing_if = "Args::is_default_input", skip_deserializing)]
     pub input: Input,
 
+    // Hidden attribute, will be used for edge cases.
+    #[arg(hide = true)]
+    pub population: Option<String>,
+
+    /// Restrict parent search to just these candidate parents.
+    #[arg(long, value_delimiter = ',')]
+    pub parents: Option<Vec<String>>,
+
     /// Remove these populations from the dataset.
     ///
     /// Regardless of whether you use '*' or not, all descendants of the
@@ -73,14 +81,6 @@ pub struct Args {
         skip_deserializing
     )]
     pub output_dir: PathBuf,
-
-    /// Restrict parent search to just these candidate parents.
-    #[arg(long, value_delimiter = ',')]
-    pub parents: Option<Vec<String>>,
-
-    // Hidden attribute, will be used for edge cases.
-    #[arg(hide = true)]
-    pub population: Option<String>,
 
     /// Number of CPU threads to use.
     #[clap(short = 't', long, default_value_t = Args::default().threads)]

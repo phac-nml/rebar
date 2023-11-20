@@ -58,7 +58,8 @@ pub fn all_parents<'seq>(
     // ----------------------------------------------------------------------------
 
     // Store the results of our hypothesis testing
-    let mut hypotheses: BTreeMap<Hypothesis, (isize, usize, Option<Recombination>)> =
+    // Hyp: (Recombination, score, conflict)
+    let mut hypotheses: BTreeMap<Hypothesis, (Option<Recombination>, isize, usize)> =
         BTreeMap::new();
 
     // iterate through the potential hypotheses
@@ -71,14 +72,11 @@ pub fn all_parents<'seq>(
         // + conflict_alt mutations and + conflict_ref reversions
         if hypothesis == Hypothesis::NonRecombinant {
             if best_match.recombinant.is_none() {
-                let parsimony_score =
+                let score =
                     best_match.score.get(&best_match.consensus_population).unwrap();
                 let conflict =
                     best_match.conflict_alt.len() + best_match.conflict_ref.len();
-                hypotheses.insert(
-                    Hypothesis::NonRecombinant,
-                    (*parsimony_score, conflict, None),
-                );
+                hypotheses.insert(Hypothesis::NonRecombinant, (None, *score, conflict));
             }
             continue;
         }
@@ -153,7 +151,7 @@ pub fn all_parents<'seq>(
 
             if let Ok(recombination) = secondary_search {
                 debug!("Secondary Parent(s) Search was successful.");
-                let parsimony_score: isize = recombination.score.values().sum();
+                let score: isize = recombination.score.values().sum();
                 let conflict_alt: usize =
                     recombination.conflict_alt.values().map(|subs| subs.len()).sum();
                 let conflict_ref: usize =
@@ -182,8 +180,7 @@ pub fn all_parents<'seq>(
                     hypothesis
                 };
 
-                hypotheses
-                    .insert(hypothesis, (parsimony_score, conflict, Some(recombination)));
+                hypotheses.insert(hypothesis, (Some(recombination), score, conflict));
             } else {
                 debug!("Secondary Parent(s) Search was unsuccessful.");
             }
@@ -195,7 +192,7 @@ pub fn all_parents<'seq>(
             "Hypotheses: {}",
             hypotheses
                 .iter()
-                .map(|(hyp, (score, conflict, _))| format!(
+                .map(|(hyp, (_, score, conflict))| format!(
                     "{hyp:?}: score={score}, conflict={conflict}"
                 ))
                 .join(", ")
@@ -203,45 +200,62 @@ pub fn all_parents<'seq>(
     }
 
     // ----------------------------------------------------------------------------
-    // Best Hypothesis (highest parsimony score = support - conflict)
+    // Best Hypothesis
 
+    // No evidence at all, return error
     if hypotheses.is_empty() {
         return Err(eyre!("No evidence for any recombination hypotheses."));
     }
+    // single hypothesis
+    let best_hypothesis = if hypotheses.len() == 1 {
+        hypotheses.first_key_value().unwrap().0.clone()
+    }
+    // evidence for multiple hypotheses
+    else {
+        // max_score:    Sometimes the hypothesis with the highest score is 'correct'
+        // Ex. XBB.1.18: DesignatedRecombinant: score=77, conflict=5, NovelNonRecursiveRecombinant: score=64, conflict=4
 
-    let _max_score = hypotheses
-        .iter()
-        .map(|(_hyp, (score, _conflict, _recombination))| score)
-        .max()
-        .unwrap();
-    let min_conflict = hypotheses
-        .iter()
-        .map(|(_hyp, (_score, conflict, _recombination))| conflict)
-        .min()
-        .unwrap();
+        // min_conflict:  Sometimes the hypothesis with the least conflict is 'correct'
+        //                This seems to be generally the XBB* recursive recombinants,
+        //                the original recombination (BJ.1 x CJ.1) has high support,
+        //                but lots of conflict.
+        // Ex. XCW:       DesignatedRecombinant: score=55, conflict=6, NovelNonRecursiveRecombinant: score=65, conflict=17
 
-    // might want to consider the best_hypothesis as the one with the least conflict
-    // rather than best support?
-    // Ex. XBB* recursive recombinants, the original recombination (BJ.1 x CJ.1) has
-    // super high support, but lots of conflict
-    let best_hypothesis = hypotheses
-        .iter()
-        //.filter_map(|(hyp, (score, _conflict, _recombination))| (score == max_score).then_some(hyp))
-        .filter_map(|(hyp, (_score, conflict, _recombination))| {
-            (conflict == min_conflict).then_some(hyp)
-        })
-        .next()
-        .unwrap();
+        let min_conflict = hypotheses.iter().map(|(_hyp, (_, _, c))| c).min().unwrap();
+        let max_conflict = hypotheses.iter().map(|(_hyp, (_, _, c))| c).max().unwrap();
+        let conflict_range = max_conflict - min_conflict;
+        let conflict_threshold = 10;
 
-    if best_hypothesis == &Hypothesis::NonRecombinant {
+        // if the conflict range between hypotheses is large (>=10), prefer min_conflict
+        // otherwise, prefer max_score
+        let best_hypothesis = if conflict_range >= conflict_threshold {
+            debug!("Best hypothesis selected by MIN CONFLICT. Conflict range ({conflict_range}) >= threshold ({conflict_threshold}).");
+            hypotheses
+                .iter()
+                .filter_map(|(hyp, (_, _, c))| (c == min_conflict).then_some(hyp))
+                .next()
+                .unwrap()
+        } else {
+            debug!("Best hypothesis selected by MAX SCORE. Conflict range ({conflict_range}) < threshold ({conflict_threshold})");
+            let max_score = hypotheses.iter().map(|(_hyp, (_, s, _))| s).max().unwrap();
+            hypotheses
+                .iter()
+                .filter_map(|(hyp, (_, s, _))| (s == max_score).then_some(hyp))
+                .next()
+                .unwrap()
+        };
+
+        best_hypothesis.clone()
+    };
+
+    if best_hypothesis == Hypothesis::NonRecombinant {
         return Err(eyre!("Best hypothesis is Non-Recombinant."));
     } else {
         debug!("best_hypothesis: {best_hypothesis:?}");
     }
-    // 0: score, 1: conflict, 2: recombination
-    let mut recombination = hypotheses.get(best_hypothesis).unwrap().2.clone().unwrap();
+    let mut recombination = hypotheses.remove(&best_hypothesis).unwrap().0.unwrap();
     recombination.edge_case = edge_case;
-    recombination.hypothesis = Some(best_hypothesis.to_owned());
+    recombination.hypothesis = Some(best_hypothesis);
 
     Ok(recombination)
 }
