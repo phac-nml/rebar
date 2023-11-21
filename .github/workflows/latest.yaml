@@ -64,7 +64,7 @@ jobs:
       - name: validate
         run: |
           rebar run  --dataset-dir dataset/sars-cov-2/$tag --output-dir validate --populations "*" --threads 2
-          if [[ $(grep "pass" validate/linelist.tsv) ]]; then exit 1; fi
+          if [[ $(grep "fail" validate/linelist.tsv) ]]; then exit 1; fi
 
       - name: plot
         run: |
