@@ -47,10 +47,13 @@ pub async fn build(
     let alias_key_path = &summary.misc["alias_key"].local_path;
     let alias_key_file_name = alias_key_path.file_name().unwrap().to_str().unwrap();
     let mut alias_key = read_alias_key(alias_key_path)?;
-    
-    // MANUAL!
-    //alias_key.insert("XBF".to_string(), vec!["BA.5.2", "CJ.1"]);
 
+    // MANUAL!
+    warn!("Relaxing XBF designated parent from BA.5.2.3 to BA.5.2");
+    alias_key.insert(
+        "XBF".to_string(),
+        vec!["BA.5.2".to_string(), "CJ.1".to_string()],
+    );
 
     // read lineage notes into Table
     let lineage_notes_path = &summary.misc["lineage_notes"].local_path;

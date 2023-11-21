@@ -217,7 +217,7 @@ pub fn compare_parents(
         let paths = dataset
             .phylogeny
             .get_paths(pop, "root", Direction::Incoming)
-            .unwrap_or(Vec::new());
+            .unwrap_or_default();
         paths.iter().for_each(|populations| {
             for p in populations {
                 observed_parents.push(p.clone());
@@ -238,7 +238,7 @@ pub fn compare_parents(
     // expected is child of observed, but no recombinant descendants
     let mut observed_children = observed
         .iter()
-        .flat_map(|pop| dataset.phylogeny.get_children(pop).unwrap_or(Vec::new()))
+        .flat_map(|pop| dataset.phylogeny.get_children(pop).unwrap_or_default())
         .unique()
         .collect_vec();
     observed_children.retain(|p| expected.contains(p));

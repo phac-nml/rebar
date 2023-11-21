@@ -35,7 +35,7 @@ jobs:
       - name: setup rust
         uses: actions-rs/toolchain@v1
         with:
-          toolchain: 1.69.0
+          toolchain: 1.74.0
 
       # - name: install windows dependencies
       #   if: ${{ matrix.arch == 'x86_64-pc-windows-gnu' }}

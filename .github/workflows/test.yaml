@@ -10,6 +10,10 @@ on:
   release:
     types: [published]
 
+env:
+  tag: "2023-11-17"
+  toolchain: "1.74.0"
+
 jobs:
 
   build:
@@ -35,23 +39,31 @@ jobs:
       - name: setup rust
         uses: actions-rs/toolchain@v1
         with:
-          toolchain: 1.69.0
+          toolchain: $toolchain
 
       - name: build
         run: |
           cargo build --release --all-features --target ${{ matrix.arch }}
-          cp target/${{ matrix.arch }}/release/rebar .
+          cp target/${{ matrix.arch }}/release/rebar ~/.local/bin
 
       - name: compress with upx
         uses: crazy-max/ghaction-upx@v3
         with:
           version: v4.1.0
           files: |
-            rebar
+            ~/.local/bin/rebar
           args: --best --lzma
+
+      - name: dataset download
+        run: |
+          rebar dataset download --name sars-cov-2 --tag $tag --output-dir dataset/sars-cov-2/$tag
 
       - name: example 1
         run: |
-          ./rebar dataset download --name sars-cov-2 --tag 2023-09-21 --output-dir dataset/sars-cov-2/2023-09-21
-          ./rebar run  --dataset-dir dataset/sars-cov-2/2023-09-21 --output-dir example1 --populations "AY.4.2*,BA.5.2,XBC*,XBB.1.5.1,XBL"
-          ./rebar plot --dataset-dir dataset/sars-cov-2/2023-09-21 --output-dir example1 --plot-dir example1/plots
+          rebar run  --dataset-dir dataset/sars-cov-2/$tag --output-dir example1 --populations "AY.4.2*,BA.5.2,XBC.1.6*,XBB.1.5.1,XBL"
+          rebar plot --dataset-dir dataset/sars-cov-2/$tag --output-dir example1 --plot-dir example1/plots
+
+      - name: example 2
+        run: |
+          rebar run  --dataset-dir dataset/sars-cov-2/$tag --output-dir example2 --alignment data/example2.fasta
+          rebar plot --dataset-dir dataset/sars-cov-2/$tag --output-dir example2 --plot-dir example2/plots
