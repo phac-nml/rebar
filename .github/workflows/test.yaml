@@ -1,14 +1,10 @@
 name: Test
 
 on:
-  push:
-    branches:
-      - '*'
-  pull_request:
-    branches:
-      - '*'
-  release:
-    types: [published]
+  workflow_run:
+    workflows: [Build]
+    types:
+      - completed
 
 env:
   tag: "2023-11-17"
@@ -40,7 +36,7 @@ jobs:
         uses: dawidd6/action-download-artifact@v2
         with:
           name: rebar-${{ matrix.arch }}
-          path: target/${{ matrix.arch }}/release/rebar
+          path: target/${{ matrix.arch }}/release/
           workflow: build.yaml
           workflow_conclusion: success
           # Verify this works on PR too...
