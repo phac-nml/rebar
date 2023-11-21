@@ -43,6 +43,7 @@ Download a sars-cov-2 dataset, version-controlled to a specific date.
   ```
 
 - `--tag` can be any date (YYYY-MM-DD)!
+- Run `rebar dataset list` to check dataset-specific date constraints.
 
 ### Example 1
 
