@@ -17,7 +17,7 @@ env:
 jobs:
 
   build:
-    uses: ${{ github.repository }}/.github/workflows/build.yaml@${{ github.event.workflow_run.head_sha }}
+    uses: ${{github.repository}}/.github/workflows/build.yaml@${{github.sha}}
 
   # ---------------------------------------------------------------------------
   test:
