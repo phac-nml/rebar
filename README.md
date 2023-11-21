@@ -20,9 +20,9 @@
 
 ## Install
 
-1. Binary: \*\*Coming Soon\*\*
+1. Binary: \*\*Coming Soon!\*\*
 
-1. Conda: \*\*Coming Soon\*\*
+1. Conda: \*\*Coming Soon!\*\*
 
 1. Compile from source:
 

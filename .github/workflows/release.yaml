@@ -1,0 +1,78 @@
+# name: Release
+
+# on:
+#   push:
+#     tags:
+#       - 'v*' # Push events to matching v*, i.e. v1.0, v20.15.10
+
+# jobs:
+#   # ---------------------------------------------------------------------------
+#   build:
+
+#     runs-on: ubuntu-latest
+
+#     strategy:
+#       fail-fast: false
+#       matrix:
+#         arch:
+#           - x86_64-unknown-linux-gnu
+#           #- x86_64-unknown-linux-musl
+
+#     steps:
+#       - name: checkout repo
+#         uses: actions/checkout@v3
+
+#       - name: setup rust
+#         uses: actions-rs/toolchain@v1
+#         with:
+#           toolchain: 1.74.0
+
+#       - name: build
+#         run: |
+#           cargo build --release --all-features --target ${{ matrix.arch }}
+#           cp target/${{ matrix.arch }}/release/rebar .
+
+#       - name: compress with upx
+#         uses: crazy-max/ghaction-upx@v3
+#         with:
+#           version: v4.1.0
+#           files: |
+#             rebar
+#           args: --best --lzma
+
+#       - name: install
+#         run: |
+#           mkdir -p /home/runner/.local/bin
+#           mv rebar /home/runner/.local/bin/rebar
+#           rebar --help
+
+#       - name: upload binary
+#         uses: actions/upload-artifact@v3
+#         with:
+#           name: rebar-${{ matrix.arch }}
+#           path: ~/.local/bin/rebar
+
+#   #----------------------------------------------------------------------------
+#   tagged-release:
+#     name: Tagged Release
+#     needs: [release-notes]
+#     runs-on: ubuntu-latest
+
+#     steps:
+
+#       - name: Download Release Notes
+#         uses: actions/download-artifact@v2
+#         with:
+#           name: release-notes
+
+#       - name: Create Release
+#         id: create_release
+#         uses: actions/create-release@v1
+#         env:
+#           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+#         with:
+#           tag_name: ${{ github.ref }}
+#           release_name: Release ${{ github.ref }}
+#           draft: true
+#           prerelease: true
+#           body_path: release-notes.md
