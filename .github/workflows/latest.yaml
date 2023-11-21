@@ -18,6 +18,7 @@ env:
 
 jobs:
 
+  # ---------------------------------------------------------------------------
   build:
 
     runs-on: ubuntu-latest
@@ -46,15 +47,56 @@ jobs:
       - name: build
         run: |
           cargo build --release --all-features --target ${{ matrix.arch }}
-          cp target/${{ matrix.arch }}/release/rebar ~/.local/bin
+          cp target/${{ matrix.arch }}/release/rebar .
 
       - name: compress with upx
         uses: crazy-max/ghaction-upx@v3
         with:
           version: v4.1.0
           files: |
-            ~/.local/bin/rebar
+            rebar
           args: --best --lzma
+
+      - name: install
+        run: |
+          mkdir -p /home/runner/.local/bin
+          mv rebar /home/runner/.local/bin/rebar
+          rebar --help
+
+      - name: upload binary
+        uses: actions/upload-artifact@v3
+        with:
+          name: rebar-${{ matrix.arch }}
+          path: ~/.local/bin/rebar
+
+  # ---------------------------------------------------------------------------
+  latest:
+
+    needs: build
+
+    runs-on: ubuntu-latest
+
+    strategy:
+      fail-fast: false
+      matrix:
+        arch:
+          #- aarch64-apple-darwin
+          #- aarch64-unknown-linux-gnu
+          #- aarch64-unknown-linux-musl
+          #- x86_64-apple-darwin
+          #- x86_64-pc-windows-gnu
+          - x86_64-unknown-linux-gnu
+          #- x86_64-unknown-linux-musl
+
+    steps:
+      - name: checkout repo
+        uses: actions/checkout@v3
+
+      - name: download binary from build
+        uses: actions/download-artifact@v3
+        with:
+          name: rebar-${{ matrix.arch }}
+          path: ~/.local/bin/rebar
 
       - name: dataset download
         run: |
