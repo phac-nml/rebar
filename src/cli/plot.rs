@@ -1,7 +1,7 @@
 use clap::Parser;
 use std::path::PathBuf;
 
-/// Plot Rebar output from input barcodes tsv or barcodes directory.
+/// Plot recombination from 'run' output.
 #[derive(Clone, Debug, Parser)]
 #[clap(verbatim_doc_comment)]
 pub struct Args {

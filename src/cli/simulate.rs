@@ -2,7 +2,7 @@ use clap::Parser;
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 
-/// Run on input alignment or dataset population.
+/// Simulate recombination.
 #[derive(Clone, Debug, Deserialize, Parser, Serialize)]
 #[clap(verbatim_doc_comment)]
 pub struct Args {

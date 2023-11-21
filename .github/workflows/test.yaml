@@ -54,7 +54,7 @@ jobs:
           args: --best --lzma
 
       - name: install
-        run:
+        run: |
           mv rebar /home/runner/.local/bin/rebar
           rebar --help
 
