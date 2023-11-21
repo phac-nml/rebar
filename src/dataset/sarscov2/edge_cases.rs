@@ -158,7 +158,7 @@ pub fn default() -> Result<Vec<run::Args>, Report> {
         parents: Some(vec!["XBB.1.16.19".to_string(), "XBB".to_string()]),
         ..Default::default()
     };
-    edge_cases.push(edge_case);     
+    edge_cases.push(edge_case);
 
     // --------------------------------------------------------------------
     // Finish

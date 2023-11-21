@@ -35,7 +35,7 @@ jobs:
       - name: setup rust
         uses: actions-rs/toolchain@v1
         with:
-          toolchain: 1.69.0
+          toolchain: 1.74.0
 
       - name: build
         run: |
@@ -53,11 +53,11 @@ jobs:
       - name: validate
         run: |
           ./rebar dataset download --name sars-cov-2 --tag latest --output-dir dataset/sars-cov-2/latest
-          ./rebar run  --dataset-dir dataset/sars-cov-2/latest --output-dir validate --populations "*"
+          ./rebar run  --dataset-dir dataset/sars-cov-2/latest --output-dir validate --populations "*" --threads 2
           ./rebar plot --dataset-dir dataset/sars-cov-2/latest --output-dir validate --plot-dir validate/plots
 
       - name: upload
         uses: actions/upload-artifact@v3
         with:
           name: validate-${{ matrix.arch }}
-          path: validate          
+          path: validate

@@ -24,27 +24,34 @@
 
 1. Conda: \*\*Coming Soon\*\*
 
-## Usage
+1. Compile from source:
+
+    - Clone repository: `git clone https://github.com/phac-nml/rebar.git && cd rebar`
+    - Install the rust compiler: [official](https://doc.rust-lang.org/cargo/getting-started/installation.html) or [conda](https://anaconda.org/conda-forge/rust).
+    - Compile: `cargo build --release --all-features --target x86_64-unknown-linux-gnu`
+    - Output binary: `target/x86_64-unknown-linux-gnu/release/rebar`
+
+## Quick Start
+
+Download a sars-cov-2 dataset, version-controlled to a specific date.
+
+  ```bash
+  rebar dataset download \
+    --name sars-cov-2 \
+    --tag 2023-11-17 \
+    --output-dir dataset/sars-cov-2/2023-11-17
+  ```
+
+- `--tag` can be any date (YYYY-MM-DD)!
 
 ### Example 1
-
-1. Download the sars-cov-2 dataset snapshotted to the date 2023-09-21.
-
-    ```bash
-    rebar dataset download \
-      --name sars-cov-2 \
-      --tag 2023-11-17 \
-      --output-dir dataset/sars-cov-2/2023-09-21
-    ```
-
-    - `--tag` can be `latest` or a date.
 
 1. Detect recombination in user-specified populations.
 
     ```bash
     rebar run \
       --dataset-dir dataset/sars-cov-2/2023-11-17  \
-      --populations "AY.4.2*,BA.5.2,XBC*,XBB.1.5.1,XBL" \
+      --populations "AY.4.2*,BA.5.2,XBC.1.6*,XBB.1.5.1,XBL" \
       --output-dir example1
     ```
 
@@ -52,7 +59,7 @@
     - The wildcard character ("\*") will include the lineage and all its descendants.
     - **NOTE**: If using "\*", make sure to use quotes (ex. `--lineages "XBC*,XBB.1.16*"`)!
 
-1. Visualize breakpoints and parental regions.
+1. Plot breakpoints and parental regions.
 
     ```bash
     rebar plot \
@@ -63,16 +70,25 @@
 
 ### Example 2
 
-Detect recombination from an input alignment.
+1. Detect recombination from an input alignment.
 
-```bash
-rebar run \
-  --dataset dataset/sars-cov-2/latest \
-  --alignment test/alignment.fasta \
-  --output-dir example2
-```
+    ```bash
+    rebar run \
+      --dataset dataset/sars-cov-2/2023-11-17 \
+      --alignment data/example2.fasta \
+      --output-dir example2
+    ```
 
-The `--alignment` must be aligned to the same reference as in the dataset `reference.fasta` (we strongly recommend [nextclade](https://github.com/nextstrain/nextclade)).
+    - The `--alignment` must be aligned to the same reference as in the dataset `reference.fasta` (we strongly recommend [nextclade](https://clades.nextstrain.org/)).
+
+1. Plot breakpoints and parental regions.
+
+    ```bash
+    rebar plot \
+      --dataset-dir dataset/sars-cov-2/2023-11-17 \
+      --output-dir example2 \
+      --plot-dir example2/plots
+    ```
 
 ## Validate
 
@@ -83,7 +99,7 @@ rebar run \
   --dataset-dir dataset/sars-cov-2/latest \
   --output-dir validate \
   --populations "*" \
-  --threads 8
+  --threads 4
 ```
 
 ## Output

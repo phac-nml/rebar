@@ -49,7 +49,7 @@ impl Ord for Deletion {
 
 impl PartialOrd for Deletion {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        self.coord.partial_cmp(&other.coord)
+        Some(self.cmp(other))
     }
 }
 
@@ -97,7 +97,7 @@ impl Ord for Substitution {
 
 impl PartialOrd for Substitution {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        self.coord.partial_cmp(&other.coord)
+        Some(self.cmp(other))
     }
 }
 

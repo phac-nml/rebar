@@ -115,8 +115,13 @@ impl FromStr for Tag {
             "custom" => Tag::Custom,
             _ => {
                 // check if it's an archival date string
-                NaiveDate::parse_from_str(tag, "%Y-%m-%d")
-                    .wrap_err_with(|| eyre!("Archive tag date has invalid format: {tag:?}. Example of a valid Archive tag: 2023-08-17"))?;
+                let tag_date = NaiveDate::parse_from_str(tag, "%Y-%m-%d")
+                    .wrap_err_with(|| eyre!("Archive tag date is invalid: {tag:?}. Example of a valid Archive tag: 2023-08-17"))?;
+                // is it in the future?
+                let today = Local::now().date_naive();
+                if tag_date > today {
+                    return Err(eyre!("Archive tag date is in the future: {tag:?}. Please pick a date on or before today: {today:?}"))?;
+                }
                 Tag::Archive(tag.to_string())
             }
         };

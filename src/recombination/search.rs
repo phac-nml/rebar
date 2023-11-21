@@ -16,6 +16,7 @@ use strum::IntoEnumIterator;
 ///
 /// Uses a recursion_limit for safety. It is not intended to
 /// run this wrapper function more than once recursively.
+#[allow(clippy::needless_if)]
 pub fn all_parents<'seq>(
     sequence: &'seq Sequence,
     dataset: &Dataset,
@@ -53,7 +54,7 @@ pub fn all_parents<'seq>(
                 populations.retain(|pop| parents_expand.contains(pop));
             }
             if let Some(knockout) = &edge_case_args.knockout {
-                let knockout = dataset.expand_populations(knockout)?;                
+                let knockout = dataset.expand_populations(knockout)?;
                 populations.retain(|pop| !knockout.contains(pop));
             }
         }
@@ -96,7 +97,9 @@ pub fn all_parents<'seq>(
 
         if hypothesis == Hypothesis::DesignatedRecombinant {
             // skip this hypothesis if user requested naive search
-            if args.naive { continue }
+            if args.naive {
+                continue;
+            }
             if let Some(recombinant) = &best_match.recombinant {
                 let designated_parents = dataset.phylogeny.get_parents(recombinant)?;
                 debug!("Designated Parents: {designated_parents:?}");
