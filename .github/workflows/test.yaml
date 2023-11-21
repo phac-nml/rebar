@@ -55,8 +55,13 @@ jobs:
 
       - name: install
         run: |
+          echo $PATH
           mv rebar /home/runner/.local/bin/rebar
           rebar --help
+
+      - name: dataset list
+        run: |
+          rebar dataset list
 
       - name: dataset download
         run: |
