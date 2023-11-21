@@ -12,7 +12,7 @@ pub struct Args {
 
     /// Dataset tag.
     ///
-    /// can be 'latest' or a date in RFC 3339 format (2023-09-01T12:00:00T)
+    /// can be 'latest' or a date (YYYY-MM-DD)
     #[clap(short = 't', long)]
     #[clap(default_value_t=Tag::default())]
     pub tag: Tag,

@@ -46,7 +46,11 @@ pub async fn build(
     // read alias key into Map
     let alias_key_path = &summary.misc["alias_key"].local_path;
     let alias_key_file_name = alias_key_path.file_name().unwrap().to_str().unwrap();
-    let alias_key = read_alias_key(alias_key_path)?;
+    let mut alias_key = read_alias_key(alias_key_path)?;
+    
+    // MANUAL!
+    //alias_key.insert("XBF".to_string(), vec!["BA.5.2", "CJ.1"]);
+
 
     // read lineage notes into Table
     let lineage_notes_path = &summary.misc["lineage_notes"].local_path;

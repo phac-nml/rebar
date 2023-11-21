@@ -50,8 +50,14 @@ jobs:
             rebar
           args: --best --lzma
 
-      - name: example 1
+      - name: validate
         run: |
           ./rebar dataset download --name sars-cov-2 --tag latest --output-dir dataset/sars-cov-2/latest
-          ./rebar run  --dataset-dir dataset/sars-cov-2/latest --output-dir example1 --populations "AY.4.2*,BA.5.2,XBC*,XBB.1.5.1,XBL"
-          ./rebar plot --dataset-dir dataset/sars-cov-2/latest --output-dir example1 --plot-dir example1/plots
+          ./rebar run  --dataset-dir dataset/sars-cov-2/latest --output-dir validate --populations "*"
+          ./rebar plot --dataset-dir dataset/sars-cov-2/latest --output-dir validate --plot-dir validate/plots
+
+      - name: upload
+        uses: actions/upload-artifact@v3
+        with:
+          name: validate-${{ matrix.arch }}
+          path: validate          

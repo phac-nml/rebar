@@ -1,7 +1,5 @@
 # rebar
 
-> ❗❗❗ This is the temporary `rust` rewrite branch. ❗❗❗
-
 [![All Contributors](https://img.shields.io/badge/all_contributors-11-orange.svg?style=flat-square)](#credits)
 
 [![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](https://github.com/phac-nml/rebar/blob/master/LICENSE)
@@ -32,36 +30,36 @@
 
 1. Download the sars-cov-2 dataset snapshotted to the date 2023-09-21.
 
-  ```bash
-  rebar dataset download \
-    --name sars-cov-2 \
-    --tag 2023-09-21T12:00:00Z \
-    --output-dir dataset/sars-cov-2/2023-09-21T12:00:00Z
-  ```
+    ```bash
+    rebar dataset download \
+      --name sars-cov-2 \
+      --tag 2023-11-17 \
+      --output-dir dataset/sars-cov-2/2023-09-21
+    ```
 
-- `--tag` can be `latest` or a date in [RFC 3339 format](https://utcc.utoronto.ca/~cks/space/blog/unix/GNUDateAndRFC3339).
+    - `--tag` can be `latest` or a date.
 
 1. Detect recombination in user-specified populations.
 
-  ```bash
-  rebar run \
-    --dataset-dir dataset/sars-cov-2/2023-09-21T12:00:00Z  \
-    --populations "AY.4.2*,BA.5.2,XBC*,XBB.1.5.1,XBL" \
-    --output-dir example1
-  ```
+    ```bash
+    rebar run \
+      --dataset-dir dataset/sars-cov-2/2023-11-17  \
+      --populations "AY.4.2*,BA.5.2,XBC*,XBB.1.5.1,XBL" \
+      --output-dir example1
+    ```
 
-- `--populations` can include any sequence name found in the dataset `populations.fasta`. For sars-cov-2, sequence names are the designated lineages.
-- The wildcard character ("\*") will include the lineage and all its descendants.
-- **NOTE**: If using "\*", make sure to use quotes (ex. `--lineages "XBC*,XBB.1.16*"`)!
+    - `--populations` can include any sequence name found in the dataset `populations.fasta`. For sars-cov-2, sequence names are the designated lineages.
+    - The wildcard character ("\*") will include the lineage and all its descendants.
+    - **NOTE**: If using "\*", make sure to use quotes (ex. `--lineages "XBC*,XBB.1.16*"`)!
 
 1. Visualize breakpoints and parental regions.
 
-  ```bash
-  rebar plot \
-    --dataset-dir dataset/sars-cov-2/latest \
-    --output-dir example1 \
-    --plot-dir example1/plots
-  ```
+    ```bash
+    rebar plot \
+      --dataset-dir dataset/sars-cov-2/2023-11-17 \
+      --output-dir example1 \
+      --plot-dir example1/plots
+    ```
 
 ### Example 2
 
@@ -108,44 +106,6 @@ A linelist summary of detection results.
 |:---------|:---------|:----|:------------|:----------|:---------|:-------|:--------------|:------------|:--------------------|:----------|:--------------------------------|:------------|:-----------|:----------|:------------|:-----------|:---------|:-------|:-------------|:------------|
 |XBB.1.16  |XBB.1.16  |23B  |XBB.1.16     |XBB        |XBB.1.16  |positive|BJ.1,CJ.1      |21L,22D      |BA.2,BA.2.75         |22897:22941|261-22896\|BJ.1,22942-29118\|CJ.1|29903        |sars-cov-2  |latest     |2023-04-28   |c728b480    |2023-04-28|b2794397|2023-04-28    |6f36a61a     |
 |XBB.1.16.1|XBB.1.16.1|23B  |XBB.1.16     |XBB        |XBB.1.16.1|positive|BJ.1,CJ.1      |21L,22D      |BA.2,BA.2.75         |22897:22941|261-22896\|BJ.1,22942-29118\|CJ.1|29903        |sars-cov-2  |latest     |2023-04-28   |c728b480    |2023-04-28|b2794397|2023-04-28    |6f36a61a     |
-
-### Summary YAML
-
-A super-detailed YAML summary of recombination detection results.
-
-- Output path: `<outdir>/summary.yaml`
-
-```yaml
-XBB.1.16:
-  substitutions: C241T,A405G,T670G,C2790T,C3037T,G4184A,...
-  deletions: 11288-11296,21633-21641,21992-21994,28362-28370
-  missing: 1-200,29704-29903
-  lineage:
-    lineage: XBB.1.16
-    definition: XBB.1.16
-    clade: 23B
-    clade_lineage: XBB.1.16
-    top_lineages: XBB.1.16.3,XBB.1.16.2,XBB.1.16.1,XBB.1.16,FU.2,FU.1
-    top_lineages_subsample: XBB.1.16.3,XBB.1.16.2,XBB.1.16.1,XBB.1.16,FU.2,FU.1
-    outlier_lineages:
-    barcode: A1G,C44T,C241T,A405G,T670G,C2790T,C3037T,G4184A,...
-    support: C241T,A405G,T670G,C2790T,C3037T,G4184A,...
-    missing: A1G,C44T
-    conflict_ref:
-    conflict_alt:
-    recombinant: XBB
-    recursive: None
-    edge_case: 'False'
-  recombination:
-    breakpoints: 22897:22941
-    regions: 261-22896|BJ.1,22942-29118|CJ.1
-    parent_1:
-      lineage: BJ.1
-      definition: BJ.1
-      clade: 21L
-      clade_lineage: BA.2
-      ...
-```
 
 ## Credits
 

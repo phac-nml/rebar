@@ -293,25 +293,29 @@ impl Dataset {
         result.consensus_population = consensus_population.clone();
 
         // if the common_ancestor was not in the populations list, add it
-        // this is repeated code from before, maybe make it a function
-        if !result.top_populations.contains(&consensus_population) {
+        let consensus_sequence = if !result.top_populations.contains(&consensus_population) {
             let pop = &consensus_population;
 
-            // Option #1. Actual sequence of the internal MRCA node?
-            let pop_seq = &self.populations[pop];
+            // // Option #1. Actual sequence of the internal MRCA node?
+            // let pop_seq = &self.populations[pop];
+            // let summary = parsimony::Summary::from_sequence(sequence, pop_seq, coordinates)?;
 
-            // // Option #2. Consensus sequence of top populations?
-            // let top_populations = result.top_populations.iter().map(|s| s.as_ref()).collect_vec();
-            // debug!("Creating {pop} consensus genome from top populations.");
-            // let pop_seq = self.create_consensus(pop, &top_populations)?;
+            // Option #2. Consensus sequence of top populations?
+            let top_populations = result.top_populations.iter().map(|s| s.as_ref()).collect_vec();
+            debug!("Creating {pop} consensus genome from top populations.");
+            let pop_seq = self.create_consensus(pop, &top_populations)?;
+            let summary = parsimony::Summary::from_sequence(sequence, &pop_seq, coordinates)?;
 
-            let summary =
-                parsimony::Summary::from_sequence(sequence, pop_seq, coordinates)?;
+            // Add consensus summary to search result
             result.support.insert(pop.to_owned(), summary.support);
             result.conflict_ref.insert(pop.to_owned(), summary.conflict_ref);
             result.conflict_alt.insert(pop.to_owned(), summary.conflict_alt);
             result.score.insert(pop.to_owned(), summary.score);
-        }
+
+            pop_seq
+        } else {
+            self.populations[&consensus_population].clone()
+        };
 
         // Filter out non-top populations
         // helps cut down on verbosity in debug log and data stored
@@ -333,20 +337,20 @@ impl Dataset {
         result.recombinant =
             self.phylogeny.get_recombinant_ancestor(&consensus_population)?;
 
-        // set  private subs relative to consensus population (conflict_ref, conflict_alt)
+        // set private subs relative to consensus population (conflict_ref, conflict_alt)
 
         // --------------------------------------------------------------------
         // Substitutions
         //  --------------------------------------------------------------------
 
         // set consensus population subs
-        result.substitutions = self.populations[&consensus_population]
+        result.substitutions = consensus_sequence
             .substitutions
-            .iter()
+            .into_iter()
             .filter_map(|sub| {
                 (!sequence.missing.contains(&sub.coord)
                     && !sequence.deletions.contains(&sub.to_deletion()))
-                .then(|| sub.to_owned())
+                .then(|| sub)
             })
             .collect_vec();
 

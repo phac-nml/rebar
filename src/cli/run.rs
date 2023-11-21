@@ -68,7 +68,7 @@ pub struct Args {
     #[arg(short = 's', long, default_value_t = Args::default().min_subs)]
     pub min_subs: usize,
 
-    /// Run a naive search, which does not use information about designated recombinant parents.
+    /// Run a naive search, which does not use information about edge cases or known recombinant parents.
     #[arg(short = 'u', long, default_value_t = Args::default().naive)]
     pub naive: bool,
 
