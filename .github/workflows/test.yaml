@@ -95,6 +95,11 @@ jobs:
           name: rebar-${{ matrix.arch }}
           path: ~/.local/bin/rebar
 
+      - name: test install
+        run: |
+          ls -l /home/runner/.local/bin/
+          ls -l /home/runner/.local/bin/rebar
+
       - name: dataset list
         run: |
           rebar dataset list
