@@ -1,111 +1,65 @@
-# name: Latest
+name: Latest
 
-# on:
-#   push:
-#     branches:
-#       - '*'
-#   pull_request:
-#     branches:
-#       - '*'
-#   release:
-#     types: [published]
+on:
+  push:
+    branches:
+      - '*'
+  pull_request:
+    branches:
+      - '*'
+  release:
+    types: [published]
 
-#   schedule:
-#   - cron: '0 0 * * *'
+  schedule:
+  - cron: '0 0 * * *'
 
-# env:
-#   tag: "latest"
+env:
+  tag: "latest"
 
-# jobs:
+jobs:
 
-# # ---------------------------------------------------------------------------
-#   build:
+  # ---------------------------------------------------------------------------
+  latest:
 
-#     runs-on: ubuntu-latest
+    runs-on: ubuntu-latest
 
-#     strategy:
-#       fail-fast: false
-#       matrix:
-#         arch:
-#           #- aarch64-apple-darwin
-#           #- aarch64-unknown-linux-gnu
-#           #- aarch64-unknown-linux-musl
-#           #- x86_64-apple-darwin
-#           #- x86_64-pc-windows-gnu
-#           - x86_64-unknown-linux-gnu
-#           #- x86_64-unknown-linux-musl
+    strategy:
+      fail-fast: false
+      matrix:
+        arch:
+          #- aarch64-apple-darwin
+          #- aarch64-unknown-linux-gnu
+          #- aarch64-unknown-linux-musl
+          #- x86_64-apple-darwin
+          #- x86_64-pc-windows-gnu
+          - x86_64-unknown-linux-gnu
+          #- x86_64-unknown-linux-musl
 
-#     steps:
-#       - name: checkout repo
-#         uses: actions/checkout@v3
+    steps:
+      - name: checkout repo
+        uses: actions/checkout@v3
 
-#       - name: setup rust
-#         uses: actions-rs/toolchain@v1
-#         with:
-#           toolchain: 1.74.0
+      # - name: download binary from build
+      #   uses: actions/download-artifact@v3
+      #   with:
+      #     name: rebar-${{ matrix.arch }}
+      #     path: ~/.local/bin/rebar
 
-#       - name: build
-#         run: |
-#           cargo build --release --all-features --target ${{ matrix.arch }}
+      # - name: dataset download
+      #   run: |
+      #     rebar dataset download --name sars-cov-2 --tag $tag --output-dir dataset/sars-cov-2/$tag
 
-#       - name: compress with upx
-#         uses: crazy-max/ghaction-upx@v3
-#         with:
-#           version: v4.1.0
-#           files: |
-#             target/${{ matrix.arch }}/release/rebar
-#           args: --best --lzma
+      # - name: validate
+      #   run: |
+      #     rebar run  --dataset-dir dataset/sars-cov-2/$tag --output-dir validate --populations "*" --threads 2
+      #     if [[ $(grep "fail" output/validate/linelist.tsv) ]]; then exit 1; fi
 
-#       - name: upload binary
-#         uses: actions/upload-artifact@v3
-#         with:
-#           name: rebar-${{ matrix.arch }}
-#           path: target/${{ matrix.arch }}/release/rebar
+      # - name: plot
+      #   run: |
+      #     rebar plot --dataset-dir dataset/sars-cov-2/$tag --output-dir validate --plot-dir validate/plots
 
-#   # ---------------------------------------------------------------------------
-#   latest:
-
-#     needs: build
-
-#     runs-on: ubuntu-latest
-
-#     strategy:
-#       fail-fast: false
-#       matrix:
-#         arch:
-#           #- aarch64-apple-darwin
-#           #- aarch64-unknown-linux-gnu
-#           #- aarch64-unknown-linux-musl
-#           #- x86_64-apple-darwin
-#           #- x86_64-pc-windows-gnu
-#           - x86_64-unknown-linux-gnu
-#           #- x86_64-unknown-linux-musl
-
-#     steps:
-#       - name: checkout repo
-#         uses: actions/checkout@v3
-
-#       - name: download binary from build
-#         uses: actions/download-artifact@v3
-#         with:
-#           name: rebar-${{ matrix.arch }}
-#           path: ~/.local/bin/rebar
-
-#       - name: dataset download
-#         run: |
-#           rebar dataset download --name sars-cov-2 --tag $tag --output-dir dataset/sars-cov-2/$tag
-
-#       - name: validate
-#         run: |
-#           rebar run  --dataset-dir dataset/sars-cov-2/$tag --output-dir validate --populations "*" --threads 2
-#           if [[ $(grep "fail" output/validate/linelist.tsv) ]]; then exit 1; fi
-
-#       - name: plot
-#         run: |
-#           rebar plot --dataset-dir dataset/sars-cov-2/$tag --output-dir validate --plot-dir validate/plots
-
-#       - name: upload
-#         uses: actions/upload-artifact@v3
-#         with:
-#           name: validate-${{ matrix.arch }}
-#           path: validate
+      # - name: upload
+      #   uses: actions/upload-artifact@v3
+      #   with:
+      #     name: validate-${{ matrix.arch }}
+      #     path: validate
