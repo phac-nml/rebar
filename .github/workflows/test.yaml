@@ -43,15 +43,20 @@ jobs:
       - name: build
         run: |
           cargo build --release --all-features --target ${{ matrix.arch }}
-          cp target/${{ matrix.arch }}/release/rebar ~/.local/bin
+          cp target/${{ matrix.arch }}/release/rebar .
 
       - name: compress with upx
         uses: crazy-max/ghaction-upx@v3
         with:
           version: v4.1.0
           files: |
-            ~/.local/bin/rebar
+            rebar
           args: --best --lzma
+
+      - name: install
+        run:
+          mv rebar /home/runner/.local/bin/rebar
+          rebar --help
 
       - name: dataset download
         run: |
