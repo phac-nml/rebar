@@ -32,19 +32,26 @@ jobs:
       - name: download binaries from build
         uses: actions/download-artifact@v3
         with:
-          path: target/release
+          path: target
 
-      - name: check
+      - name: rename binaries by architecture
         run: |
-          ls -l target/release
-          ls -l target/release/*
+          mkdir target/release
+          mv target/rebar-x86_64-unknown-linux-gnu/rebar target/release/rebar-x86_64-unknown-linux-gnu
 
-      # - name: create release
-      #   uses: ncipollo/release-action@v1
-      #   with:
-      #     artifacts: target/x86_64-unknown-linux-gnu/release/rebar
-      #     artifactErrorsFailBuild: true
-      #     draft: true
-      #     generateReleaseNotes: true
-      #     makeLatest: true
-      #     prerelease: true
+      - name: create release
+        uses: ncipollo/release-action@v1
+        with:
+          artifacts:
+            # - aarch64-apple-darwin
+            # - aarch64-unknown-linux-gnu
+            # - aarch64-unknown-linux-musl
+            # - x86_64-apple-darwin
+            # - x86_64-pc-windows-gnu
+            - target/release/rebar-x86_64-unknown-linux-gnu
+            # - x86_64-unknown-linux-musl
+          artifactErrorsFailBuild: true
+          draft: true
+          generateReleaseNotes: true
+          makeLatest: true
+          prerelease: true
