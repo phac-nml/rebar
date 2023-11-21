@@ -38,6 +38,7 @@ jobs:
         run: |
           mkdir target/release
           mv target/rebar-x86_64-unknown-linux-gnu/rebar target/release/rebar-x86_64-unknown-linux-gnu
+          ls -l target/release/
 
       - name: create release
         uses: ncipollo/release-action@v1
@@ -55,3 +56,4 @@ jobs:
           generateReleaseNotes: true
           makeLatest: true
           prerelease: true
+          tag: "test"
