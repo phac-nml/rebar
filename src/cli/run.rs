@@ -6,7 +6,7 @@ use std::fs::File;
 use std::io::Write;
 use std::path::{Path, PathBuf};
 
-/// Run on input alignment or dataset population.
+/// Detect recombination in a dataset population and/or input alignment.
 #[derive(Clone, Debug, Deserialize, Parser, Serialize)]
 #[clap(verbatim_doc_comment)]
 pub struct Args {
