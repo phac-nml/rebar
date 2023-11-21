@@ -39,6 +39,7 @@ jobs:
         with:
           name: rebar-${{ matrix.arch }}
           path: target/${{ matrix.arch }}/release/
+          branch: ${{ github.ref_name }}
           workflow: build.yaml
           workflow_conclusion: success
           # Verify this works on PR too...
