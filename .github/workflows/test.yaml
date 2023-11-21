@@ -1,18 +1,23 @@
 name: Test
 
 on:
-  workflow_run:
-    workflows: [Build]
-    types:
-      - completed
+  push:
     branches:
-      - rustify
-      #- ${{ github.ref_name }}
+      - '*'
+  pull_request:
+    branches:
+      - '*'
+  release:
+    types: [published]
+
 
 env:
   tag: "2023-11-17"
 
 jobs:
+
+  build:
+    uses: ${{ github.repository }}/.github/workflows/build.yaml@${{ github.event.workflow_run.head_sha }}
 
   # ---------------------------------------------------------------------------
   test:
@@ -36,15 +41,10 @@ jobs:
         uses: actions/checkout@v3
 
       - name: download binary from build
-        uses: dawidd6/action-download-artifact@v2
+        uses: actions/download-artifact@v3
         with:
           name: rebar-${{ matrix.arch }}
-          path: target/${{ matrix.arch }}/release/
-          branch: ${{ github.ref_name }}
-          workflow: build.yaml
-          workflow_conclusion: success
-          # Verify this works on PR too...
-          commit: ${{github.event.workflow_run.head_sha}}
+          path: target/${{ matrix.arch }}/release
 
       - name: install
         run: |
