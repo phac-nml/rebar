@@ -6,7 +6,8 @@ on:
     types:
       - completed
     branches:
-      - ${{ github.ref_name }}
+      - rustify
+      #- ${{ github.ref_name }}
 
 env:
   tag: "2023-11-17"
