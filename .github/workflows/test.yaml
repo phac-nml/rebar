@@ -44,27 +44,20 @@ jobs:
       - name: build
         run: |
           cargo build --release --all-features --target ${{ matrix.arch }}
-          cp target/${{ matrix.arch }}/release/rebar .
 
       - name: compress with upx
         uses: crazy-max/ghaction-upx@v3
         with:
           version: v4.1.0
           files: |
-            rebar
+            target/${{ matrix.arch }}/release/rebar
           args: --best --lzma
-
-      - name: install
-        run: |
-          mkdir -p /home/runner/.local/bin
-          mv rebar /home/runner/.local/bin/rebar
-          rebar --help
 
       - name: upload binary
         uses: actions/upload-artifact@v3
         with:
           name: rebar-${{ matrix.arch }}
-          path: ~/.local/bin/rebar
+          path: target/${{ matrix.arch }}/release/rebar
 
   # ---------------------------------------------------------------------------
   test:
@@ -95,9 +88,11 @@ jobs:
           name: rebar-${{ matrix.arch }}
           path: ~/.local/bin
 
-      - name: test install
+      - name: install
         run: |
-          ls -l /home/runner/.local/bin/
+          mkdir -p /home/runner/.local/bin
+          mv target/${{ matrix.arch }}/release/rebar ~/.local/bin/rebar
+          rebar --help
 
       - name: dataset list
         run: |
