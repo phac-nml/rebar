@@ -1,9 +1,20 @@
-name: Release
+name: Release-Test
+
+# on:
+#   push:
+#     tags:
+#       - 'v*' # Push events to matching v*, i.e. v1.0, v20.15.10
 
 on:
   push:
-    tags:
-      - 'v*' # Push events to matching v*, i.e. v1.0, v20.15.10
+    branches:
+      - '*'
+  pull_request:
+    branches:
+      - '*'
+  release:
+    types: [published]
+
 
 jobs:
 
@@ -11,25 +22,29 @@ jobs:
     uses: ./.github/workflows/build.yaml
 
   #----------------------------------------------------------------------------
-  tagged-release:
-    name: Tagged Release
+  release:
+
     needs: build
     runs-on: ubuntu-latest
 
     steps:
 
-      - name: download binary from build
+      - name: download binaries from build
         uses: actions/download-artifact@v3
         with:
-          name: rebar
-          path: target/x86_64-unknown-linux-gnu/release
+          path: target/release
 
-      - name: create release
-        uses: ncipollo/release-action@v1
-        with:
-          artifacts: target/x86_64-unknown-linux-gnu/release/rebar
-          artifactErrorsFailBuild: true
-          draft: true
-          generateReleaseNotes: true
-          makeLatest: true
-          prerelease: true
+      - name: check
+        run: |
+          ls -l target/release
+          ls -l target/release/*
+
+      # - name: create release
+      #   uses: ncipollo/release-action@v1
+      #   with:
+      #     artifacts: target/x86_64-unknown-linux-gnu/release/rebar
+      #     artifactErrorsFailBuild: true
+      #     draft: true
+      #     generateReleaseNotes: true
+      #     makeLatest: true
+      #     prerelease: true
