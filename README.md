@@ -4,9 +4,9 @@
 
 [![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](https://github.com/phac-nml/rebar/blob/master/LICENSE)
 [![GitHub issues](https://img.shields.io/github/issues/phac-nml/rebar.svg)](https://github.com/phac-nml/rebar/issues)
-[![Install CI](https://github.com/phac-nml/rebar/actions/workflows/install.yaml/badge.svg)](https://github.com/phac-nml/rebar/actions/workflows/install.yaml)
-[![Examples CI](https://github.com/phac-nml/rebar/actions/workflows/examples.yaml/badge.svg)](https://github.com/phac-nml/rebar/actions/workflows/examples.yaml)
-[![Validate CI](https://github.com/phac-nml/rebar/actions/workflows/validate.yaml/badge.svg)](https://github.com/phac-nml/rebar/actions/workflows/validate.yaml)
+[![Build CI](https://github.com/phac-nml/rebar/actions/workflows/build.yaml/badge.svg)](https://github.com/phac-nml/rebar/actions/workflows/build.yaml)
+[![Test CI](https://github.com/phac-nml/rebar/actions/workflows/test.yaml/badge.svg)](https://github.com/phac-nml/rebar/actions/workflows/test.yaml)
+[![Latest CI](https://github.com/phac-nml/rebar/actions/workflows/latest.yaml/badge.svg)](https://github.com/phac-nml/rebar/actions/workflows/latest.yaml)
 
 **RE**combination **BAR**code detector.
 
