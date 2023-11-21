@@ -86,12 +86,13 @@ jobs:
         uses: actions/download-artifact@v3
         with:
           name: rebar-${{ matrix.arch }}
-          path: ~/.local/bin
+          path: target/${{ matrix.arch }}/release/rebar
 
       - name: install
         run: |
           mkdir -p /home/runner/.local/bin
           mv target/${{ matrix.arch }}/release/rebar ~/.local/bin/rebar
+          chmod +x ~/.local/bin/rebar
           rebar --help
 
       - name: dataset list
