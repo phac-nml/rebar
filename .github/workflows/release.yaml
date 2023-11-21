@@ -42,14 +42,14 @@ jobs:
       - name: create release
         uses: ncipollo/release-action@v1
         with:
-          artifacts:
-            # - aarch64-apple-darwin
-            # - aarch64-unknown-linux-gnu
-            # - aarch64-unknown-linux-musl
-            # - x86_64-apple-darwin
-            # - x86_64-pc-windows-gnu
-            - target/release/rebar-x86_64-unknown-linux-gnu
-            # - x86_64-unknown-linux-musl
+          # comma-separated
+          artifacts: "target/release/rebar-x86_64-unknown-linux-gnu,"
+          # aarch64-apple-darwin
+          # aarch64-unknown-linux-gnu
+          # aarch64-unknown-linux-musl
+          # x86_64-apple-darwin
+          # x86_64-pc-windows-gnu
+          # x86_64-unknown-linux-musl
           artifactErrorsFailBuild: true
           draft: true
           generateReleaseNotes: true
