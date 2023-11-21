@@ -49,10 +49,12 @@ pub fn all_parents<'seq>(
             args = args.apply_edge_case(edge_case_args)?;
 
             if let Some(parents) = &edge_case_args.parents {
-                populations.retain(|pop| parents.contains(pop))
+                let parents_expand = dataset.expand_populations(parents)?;
+                populations.retain(|pop| parents_expand.contains(pop));
             }
             if let Some(knockout) = &edge_case_args.knockout {
-                populations.retain(|pop| !knockout.contains(pop))
+                let knockout = dataset.expand_populations(knockout)?;                
+                populations.retain(|pop| !knockout.contains(pop));
             }
         }
     }
@@ -92,8 +94,9 @@ pub fn all_parents<'seq>(
         // The best match (consensus) population is a known recombinant (or descendant of)
         // Search for parents based on the known list of parents.
 
-        // only apply edge cases if the user didn't request a naive search
-        if hypothesis == Hypothesis::DesignatedRecombinant && !args.naive {
+        if hypothesis == Hypothesis::DesignatedRecombinant {
+            // skip this hypothesis if user requested naive search
+            if args.naive { continue }
             if let Some(recombinant) = &best_match.recombinant {
                 let designated_parents = dataset.phylogeny.get_parents(recombinant)?;
                 debug!("Designated Parents: {designated_parents:?}");
@@ -229,7 +232,7 @@ pub fn all_parents<'seq>(
         let min_conflict = hypotheses.iter().map(|(_hyp, (_, _, c))| c).min().unwrap();
         let max_conflict = hypotheses.iter().map(|(_hyp, (_, _, c))| c).max().unwrap();
         let conflict_range = max_conflict - min_conflict;
-        let conflict_threshold = 10;
+        let conflict_threshold = 5;
 
         // if the conflict range between hypotheses is large (>=10), prefer min_conflict
         // otherwise, prefer max_score
@@ -456,6 +459,7 @@ pub fn secondary_parents<'seq>(
                 (count >= args.min_subs).then_some(pop)
             })
             .collect_vec();
+
         include_populations.retain(|pop| conflict_alt_populations.contains(pop));
 
         // trunclate list for display
@@ -478,9 +482,11 @@ pub fn secondary_parents<'seq>(
         // --------------------------------------------------------------------
 
         //let search_modes = vec!["range", "precise"];
-        let search_modes = vec!["precise"];
+        let search_modes = vec!["precise", "range"];
         // In what cases do we want to search the full coordinate range first vs
         // after the specific coordinates?
+        // When there is a very small number of subs to check, a precise search
+        // actually takes a very long time, because there are so many matches.
 
         for mode in search_modes {
             let search_coords = if mode == "precise" {

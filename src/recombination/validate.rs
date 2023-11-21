@@ -190,8 +190,8 @@ pub fn compare_parents(
     expected: &Vec<String>,
     dataset: &Dataset,
 ) -> Result<bool, Report> {
-    //debug!("observed: {observed:?}");
-    //debug!("expected: {expected:?}");
+    // debug!("observed: {observed:?}");
+    // debug!("expected: {expected:?}");
 
     // one is empty, other is not
     if (observed.is_empty() && !expected.is_empty())
@@ -220,18 +220,17 @@ pub fn compare_parents(
             .unwrap_or(Vec::new());
         paths.iter().for_each(|populations| {
             for p in populations {
-                // once we hit the first recombinant, break
+                observed_parents.push(p.clone());
+                // after we hit the first recombinant, break
                 if dataset.phylogeny.is_recombinant(p).unwrap_or(false) {
                     break;
-                } else {
-                    observed_parents.push(p.clone());
                 }
             }
         });
     });
     observed_parents = observed_parents.into_iter().unique().collect();
     observed_parents.retain(|p| expected.contains(p));
-    //debug!("observed_parents: {observed_parents:?}");
+    // debug!("observed_parents: {observed_parents:?}");
     if observed_parents.len() == expected.len() {
         return Ok(true);
     }
@@ -243,7 +242,7 @@ pub fn compare_parents(
         .unique()
         .collect_vec();
     observed_children.retain(|p| expected.contains(p));
-    //debug!("observed_children: {observed_children:?}");
+    // debug!("observed_children: {observed_children:?}");
     if observed_children.len() == expected.len() {
         return Ok(true);
     }
@@ -255,7 +254,7 @@ pub fn compare_parents(
     observed_combine.append(&mut observed_children);
     observed_combine = observed_combine.into_iter().unique().collect();
     observed_combine.retain(|pop| expected.contains(pop));
-    //debug!("observed_combine: {observed_combine:?}");
+    // debug!("observed_combine: {observed_combine:?}");
     if observed_combine.len() == expected.len() {
         return Ok(true);
     }
