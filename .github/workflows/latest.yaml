@@ -18,8 +18,13 @@ env:
 
 jobs:
 
+  build:
+    uses: ./.github/workflows/build.yaml
+
   # ---------------------------------------------------------------------------
   latest:
+
+    needs: build
 
     runs-on: ubuntu-latest
 
@@ -39,27 +44,34 @@ jobs:
       - name: checkout repo
         uses: actions/checkout@v3
 
-      # - name: download binary from build
-      #   uses: actions/download-artifact@v3
-      #   with:
-      #     name: rebar-${{ matrix.arch }}
-      #     path: ~/.local/bin/rebar
+      - name: download binary from build
+        uses: actions/download-artifact@v3
+        with:
+          name: rebar-${{ matrix.arch }}
+          path: target/${{ matrix.arch }}/release
 
-      # - name: dataset download
-      #   run: |
-      #     rebar dataset download --name sars-cov-2 --tag $tag --output-dir dataset/sars-cov-2/$tag
+      - name: install
+        run: |
+          mkdir -p /home/runner/.local/bin
+          mv target/${{ matrix.arch }}/release/rebar ~/.local/bin
+          chmod +x ~/.local/bin/rebar
+          rebar --help
 
-      # - name: validate
-      #   run: |
-      #     rebar run  --dataset-dir dataset/sars-cov-2/$tag --output-dir validate --populations "*" --threads 2
-      #     if [[ $(grep "fail" output/validate/linelist.tsv) ]]; then exit 1; fi
+      - name: dataset download
+        run: |
+          rebar dataset download --name sars-cov-2 --tag $tag --output-dir dataset/sars-cov-2/$tag
 
-      # - name: plot
-      #   run: |
-      #     rebar plot --dataset-dir dataset/sars-cov-2/$tag --output-dir validate --plot-dir validate/plots
+      - name: validate
+        run: |
+          rebar run  --dataset-dir dataset/sars-cov-2/$tag --output-dir validate --populations "*" --threads 2
+          if [[ $(grep "fail" output/validate/linelist.tsv) ]]; then exit 1; fi
 
-      # - name: upload
-      #   uses: actions/upload-artifact@v3
-      #   with:
-      #     name: validate-${{ matrix.arch }}
-      #     path: validate
+      - name: plot
+        run: |
+          rebar plot --dataset-dir dataset/sars-cov-2/$tag --output-dir validate --plot-dir validate/plots
+
+      - name: upload
+        uses: actions/upload-artifact@v3
+        with:
+          name: validate-${{ matrix.arch }}
+          path: validate

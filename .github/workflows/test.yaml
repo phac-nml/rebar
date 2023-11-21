@@ -52,8 +52,6 @@ jobs:
         run: |
           mkdir -p /home/runner/.local/bin
           mv target/${{ matrix.arch }}/release/rebar ~/.local/bin
-          ls -l ~/.local/bin/
-          ls -l ~/.local/bin/rebar
           chmod +x ~/.local/bin/rebar
           rebar --help
 
