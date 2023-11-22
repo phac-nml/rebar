@@ -24,6 +24,7 @@ raqote = { version = "0.8.2", default-features = false, features = ["png"]}
 rand = "0.8.5"
 rayon = "1.7.0"
 regex = "1.9.5"
+rustix = "0.38.25"
 rusttype = "0.9.3"
 semver = "1.0.19"
 serde = { version = "1.0.163", features = ["derive"] }
