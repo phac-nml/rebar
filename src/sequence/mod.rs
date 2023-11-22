@@ -2,6 +2,7 @@ pub mod parsimony;
 
 use bio::io::fasta;
 use color_eyre::eyre::{eyre, Report, Result, WrapErr};
+use color_eyre::Help;
 use serde::{Deserialize, Serialize};
 use std::cmp::Ordering;
 use std::default::Default;
@@ -147,6 +148,16 @@ impl Sequence {
         let mut sample = Sequence::new();
         sample.id = record.id().to_string();
         sample.seq = record.seq().iter().map(|b| *b as char).collect();
+
+        // check mask coord
+        for bases in mask {
+            if *bases > sample.seq.len() {
+                return Err(
+                    eyre!("5' and 3' masking ({mask:?}) is incompatible with sequence length {}", sample.seq.len())
+                    .suggestion("Please change your --mask parameter.")
+                );
+            }
+        }
 
         if let Some(reference) = reference {
             sample.genome_length = reference.seq.len();

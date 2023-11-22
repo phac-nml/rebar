@@ -253,7 +253,11 @@ pub fn run(args: &mut cli::run::Args) -> Result<(), Report> {
             let p = p.replace('*', "");
 
             // Identify descendants
-            let exclude_populations = dataset.phylogeny.get_descendants(&p)?;
+            let exclude_populations = if dataset.phylogeny.is_empty() {
+                vec![p.to_string()]
+            } else {
+                dataset.phylogeny.get_descendants(&p)?
+            };
 
             // remove from populations
             debug!("Removing {p}* from the populations fasta.");
@@ -275,8 +279,10 @@ pub fn run(args: &mut cli::run::Args) -> Result<(), Report> {
                 .collect();
 
             // remove from phylogeny
-            debug!("Removing {p}* from the phylogeny.");
-            dataset.phylogeny = dataset.phylogeny.prune(&p)?;
+            if !dataset.phylogeny.is_empty() {
+                debug!("Removing {p}* from the phylogeny.");
+                dataset.phylogeny = dataset.phylogeny.prune(&p)?;
+            }
 
             expanded_knockout.extend(exclude_populations);
         }
@@ -469,12 +475,16 @@ pub fn plot(args: cli::plot::Args) -> Result<(), Report> {
             "Barcodes directory {barcodes_dir:?} does not exist in --output-dir {output_dir:?}."
         ));
     }
-    let annotations = &dataset_dir.join("annotations.tsv");
-    if !annotations.exists() {
-        return Err(eyre!(
-            "Annotations {annotations:?} do not exist in --dataset-dir {dataset_dir:?}."
-        ));
-    }
+
+    let annotations_path = dataset_dir.join("annotations.tsv");
+    let annotations = if annotations_path.exists() {
+        Some(annotations_path)
+    } else {
+        warn!(
+            "Annotations {annotations_path:?} do not exist in --dataset-dir {dataset_dir:?}."
+        );
+        None
+    };
 
     // create plot directory if it doesn't exist
     let plot_dir = args.plot_dir.unwrap_or(output_dir.join("plots"));
@@ -517,8 +527,12 @@ pub fn plot(args: cli::plot::Args) -> Result<(), Report> {
         info!("Plotting barcodes file: {:?}", barcodes_file);
         let output_prefix = barcodes_file.file_stem().unwrap().to_str().unwrap();
         let output_path = plot_dir.join(format!("{}.png", output_prefix));
-        let result =
-            plot::create(&barcodes_file, linelist, Some(annotations), &output_path);
+        let result = plot::create(
+            &barcodes_file,
+            linelist,
+            annotations.as_deref(),
+            &output_path,
+        );
         match result {
             Ok(_) => info!("Plotting success."),
             Err(e) => {

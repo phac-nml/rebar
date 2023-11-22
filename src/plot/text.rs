@@ -22,11 +22,10 @@ pub enum VerticalAlignment {
 
 /// Load font from file path
 pub fn load_font(path: &Path) -> Result<rusttype::Font, Report> {
-    let font_bytes = std::fs::read(path).wrap_err_with(|| {
-        format!("Could not load font from file path: {}", path.display())
-    })?;
+    let font_bytes = std::fs::read(path)
+        .wrap_err_with(|| format!("Could not load font from file path: {path:?}"))?;
     let font = rusttype::Font::try_from_vec(font_bytes)
-        .ok_or_else(|| eyre!("Could not convert file to Font: {}", path.display()))?;
+        .ok_or_else(|| eyre!("Could not convert file to Font: {path:?}"))?;
 
     Ok(font)
 }

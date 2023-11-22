@@ -2,8 +2,8 @@ pub mod attributes;
 pub mod download;
 pub mod list;
 pub mod load;
-//pub mod io;
 pub mod sarscov2;
+pub mod toy1;
 
 use crate::cli::run;
 use crate::phylogeny::Phylogeny;
@@ -50,8 +50,8 @@ impl Default for Dataset {
 impl Dataset {
     pub fn new() -> Self {
         Dataset {
-            name: attributes::Name::Unknown,
-            tag: attributes::Tag::Unknown,
+            name: attributes::Name::Custom,
+            tag: attributes::Tag::Custom,
             reference: Sequence::new(),
             populations: BTreeMap::new(),
             mutations: BTreeMap::new(),
@@ -288,8 +288,13 @@ impl Dataset {
         // todo!() think about how mandatory a phylogeny is
         // summarize top populations by common ancestor
         // if we found populations with diagnostic mutations, prioritize those
-        let consensus_population =
-            self.phylogeny.get_common_ancestor(&result.top_populations)?;
+        let consensus_population = if self.phylogeny.is_empty() {
+            //result.top_populations.iter().join("|")
+            // just take first?
+            result.top_populations[0].clone()
+        } else {
+            self.phylogeny.get_common_ancestor(&result.top_populations)?
+        };
         result.consensus_population = consensus_population.clone();
 
         // if the common_ancestor was not in the populations list, add it
@@ -337,10 +342,11 @@ impl Dataset {
         });
 
         // Check if the consensus population is a known recombinant or descendant of one
-        result.recombinant =
-            self.phylogeny.get_recombinant_ancestor(&consensus_population)?;
-
-        // set private subs relative to consensus population (conflict_ref, conflict_alt)
+        result.recombinant = if self.phylogeny.is_empty() {
+            None
+        } else {
+            self.phylogeny.get_recombinant_ancestor(&consensus_population)?
+        };
 
         // --------------------------------------------------------------------
         // Substitutions

@@ -38,7 +38,6 @@ pub fn linelist(
         "dataset_name",
         "dataset_tag",
         "cli_version",
-        "cli_args",
     ]
     .into_iter()
     .map(|s| s.to_string())
@@ -85,12 +84,14 @@ pub fn linelist(
         let edge_case = recombination.edge_case.to_string();
         row[table.header_position("edge_case")?] = edge_case;
 
-        // validate
-        let validate = validate::validate(dataset, best_match, recombination)?;
-        if let Some(validate) = validate {
-            row[table.header_position("validate")?] = validate.status.to_string();
-            row[table.header_position("validate_details")?] =
-                validate.details.iter().join(";");
+        // validate, currently requires phylogeny
+        if !dataset.phylogeny.is_empty() {
+            let validate = validate::validate(dataset, best_match, recombination)?;
+            if let Some(validate) = validate {
+                row[table.header_position("validate")?] = validate.status.to_string();
+                row[table.header_position("validate_details")?] =
+                    validate.details.iter().join(";");
+            }
         }
 
         // unique_key

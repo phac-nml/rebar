@@ -31,8 +31,9 @@ pub enum Name {
     #[strum(props(implemented = "false"))]
     RsvB,
     #[default]
+    #[serde(rename = "custom")]
     #[strum(props(implemented = "false"))]
-    Unknown,
+    Custom,
 }
 
 impl Name {
@@ -56,7 +57,7 @@ impl fmt::Display for Name {
             Name::SarsCov2 => String::from("sars-cov-2"),
             Name::RsvA => String::from("rsv-a"),
             Name::RsvB => String::from("rsv-b"),
-            Name::Unknown => String::from("unknown"),
+            Name::Custom => String::from("custom"),
         };
 
         write!(f, "{}", name)
@@ -71,7 +72,7 @@ impl FromStr for Name {
             "sars-cov-2" => Name::SarsCov2,
             "rsv-a" => Name::RsvA,
             "rsv-b" => Name::RsvB,
-            "unknown" => Name::Unknown,
+            "custom" => Name::Custom,
             _ => Err(eyre!("Unknown dataset name: {name}"))
                 .suggestion("Please choose from:")?,
         };
@@ -264,8 +265,8 @@ impl Summary {
     pub fn new() -> Self {
         Summary {
             version: format!("{} {}", env!("CARGO_PKG_NAME"), env!("CARGO_PKG_VERSION")),
-            tag: Tag::Unknown,
-            name: Name::Unknown,
+            tag: Tag::Custom,
+            name: Name::Custom,
             reference: RemoteFile::new(),
             populations: RemoteFile::new(),
             misc: BTreeMap::new(),
@@ -274,7 +275,7 @@ impl Summary {
     /// Read summary from file.
     pub fn read(path: &Path) -> Result<Summary, Report> {
         let summary = std::fs::read_to_string(path)
-            .wrap_err_with(|| "Failed to read file: {path:?}.")?;
+            .wrap_err_with(|| format!("Failed to read file: {path:?}."))?;
         let summary = serde_json::from_str(&summary)
             .wrap_err_with(|| format!("Failed to parse file: {path:?}"))?;
 

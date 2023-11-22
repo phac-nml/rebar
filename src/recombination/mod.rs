@@ -654,9 +654,14 @@ pub fn identify_breakpoints(
         // a breakpoint is only possible if we already found a prev region
         if let Some(end_prev) = end_prev {
             // breakpoint intervals are non-inclusive of regions
-            let breakpoint = Breakpoint {
-                start: end_prev + 1,
-                end: region.start - 1,
+            // but what happens if we know the precise bases...
+            let start = end_prev + 1;
+            let end = region.start - 1;
+            println!("{start} {end}");
+            let breakpoint = if start < end {
+                Breakpoint { start, end }
+            } else {
+                Breakpoint { start, end: start }
             };
             breakpoints.push(breakpoint);
         }

@@ -65,10 +65,21 @@ jobs:
 
       - name: example 1
         run: |
-          rebar run  --dataset-dir dataset/sars-cov-2/$tag --output-dir example1 --populations "AY.4.2*,BA.5.2,XBC.1.6*,XBB.1.5.1,XBL"
-          rebar plot --dataset-dir dataset/sars-cov-2/$tag --output-dir example1 --plot-dir example1/plots
+          rebar run  --dataset-dir dataset/sars-cov-2/$tag --output-dir output/example1 --populations "AY.4.2*,BA.5.2,XBC.1.6*,XBB.1.5.1,XBL"
+          rebar plot --dataset-dir dataset/sars-cov-2/$tag --output-dir output/example1
 
       - name: example 2
         run: |
-          rebar run  --dataset-dir dataset/sars-cov-2/$tag --output-dir example2 --alignment data/example2.fasta
-          rebar plot --dataset-dir dataset/sars-cov-2/$tag --output-dir example2 --plot-dir example2/plots
+          rebar run  --dataset-dir dataset/sars-cov-2/$tag --output-dir output/example2 --alignment data/example2.fasta
+          rebar plot --dataset-dir dataset/sars-cov-2/$tag --output-dir output/example2
+
+      - name: toy1
+        run: |
+          rebar run  --dataset-dir dataset/toy1 --output-dir output/toy1 --populations "*" --mask 0,0 --min-length 1
+          rebar plot --dataset-dir dataset/toy1 --output-dir output/toy1
+
+      - name: upload output
+        uses: actions/upload-artifact@v3
+        with:
+          name: output-${{ matrix.arch }}
+          path: output
