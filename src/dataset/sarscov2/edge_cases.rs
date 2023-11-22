@@ -159,6 +159,19 @@ pub fn default() -> Result<Vec<run::Args>, Report> {
     edge_cases.push(edge_case);
 
     // --------------------------------------------------------------------
+    // XCQ: XBB.2.3 and XBB.1.5 with only 2 consecutive
+
+    let recombinant = "XCQ".to_string();
+    debug!("Creating manual edge case: {recombinant:?}");
+    let edge_case = run::Args {
+        min_consecutive: 2,
+        min_length: 400,
+        population: Some(recombinant),
+        ..Default::default()
+    };
+    edge_cases.push(edge_case);
+
+    // --------------------------------------------------------------------
     // XDB: XBB.1.16.19 with double reversion assumed from XBB
 
     let recombinant = "XDB".to_string();
