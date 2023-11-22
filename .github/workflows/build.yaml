@@ -28,7 +28,7 @@ jobs:
           #- x86_64-apple-darwin
           #- x86_64-pc-windows-gnu
           - x86_64-unknown-linux-gnu
-          #- x86_64-unknown-linux-musl
+          - x86_64-unknown-linux-musl
 
     steps:
       - name: checkout repo
@@ -39,9 +39,13 @@ jobs:
         with:
           toolchain: 1.74.0
 
+      - name: install cross
+        run: |
+          cargo install cross
+
       - name: build
         run: |
-          cargo build --release --all-features --target ${{ matrix.arch }}
+          cross build --release --all-features --target ${{ matrix.arch }}
 
       - name: compress with upx
         uses: crazy-max/ghaction-upx@v3

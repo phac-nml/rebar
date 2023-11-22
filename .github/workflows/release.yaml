@@ -27,19 +27,20 @@ jobs:
         run: |
           mkdir target/release
           mv target/rebar-x86_64-unknown-linux-gnu/rebar target/release/rebar-x86_64-unknown-linux-gnu
+          mv target/rebar-x86_64-unknown-linux-musl/rebar target/release/rebar-x86_64-unknown-linux-musl
           ls -l target/release/
 
       - name: create release
         uses: ncipollo/release-action@v1
         with:
           # comma-separated
-          artifacts: "target/release/rebar-x86_64-unknown-linux-gnu"
+          artifacts: "target/release/rebar-x86_64-unknown-linux-gnu,target/release/rebar-x86_64-unknown-linux-musl"
           # aarch64-apple-darwin
           # aarch64-unknown-linux-gnu
           # aarch64-unknown-linux-musl
           # x86_64-apple-darwin
           # x86_64-pc-windows-gnu
-          # x86_64-unknown-linux-musl
+
           artifactErrorsFailBuild: true
           draft: true
           generateReleaseNotes: true
