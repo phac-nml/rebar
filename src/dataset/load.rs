@@ -1,5 +1,5 @@
 use crate::cli::run;
-use crate::dataset::attributes::Summary;
+use crate::dataset::attributes::{Name, Summary, Tag};
 use crate::dataset::Dataset;
 use crate::phylogeny::Phylogeny;
 use crate::sequence::{read_reference, Sequence, Substitution};
@@ -19,11 +19,8 @@ pub fn dataset(dataset_dir: &Path, mask: &Vec<usize>) -> Result<Dataset, Report>
 
     let mut dataset = Dataset::new();
 
-    // Summary
-    let summary_path = dataset_dir.join("summary.json");
-    let summary = Summary::read(&summary_path)?;
-    dataset.name = summary.name;
-    dataset.tag = summary.tag;
+    // ------------------------------------------------------------------------
+    // Mandatory
 
     // Reference
     let reference_path = dataset_dir.join("reference.fasta");
@@ -34,24 +31,41 @@ pub fn dataset(dataset_dir: &Path, mask: &Vec<usize>) -> Result<Dataset, Report>
     (dataset.populations, dataset.mutations) =
         parse_populations(&populations_path, &reference_path, mask)?;
 
+    // ------------------------------------------------------------------------
+    // Optional
+
+    // Summary
+    let summary_path = dataset_dir.join("summary.json");
+    if summary_path.exists() {
+        let summary = Summary::read(&summary_path)?;
+        dataset.name = summary.name;
+        dataset.tag = summary.tag;
+    } else {
+        warn!("No summary was found: {summary_path:?}");
+        dataset.name = Name::Custom;
+        dataset.tag = Tag::Custom;
+    }
+
     // Edge Cases
     let edge_cases_path = dataset_dir.join("edge_cases.json");
-    let multiple = true;
-    dataset.edge_cases = run::Args::read(&edge_cases_path, multiple)?.unwrap_right();
+    dataset.edge_cases = if edge_cases_path.exists() {
+        let multiple = true;
+        run::Args::read(&edge_cases_path, multiple)?.unwrap_right()
+    } else {
+        warn!("No edge cases were found: {edge_cases_path:?}");
+        Vec::new()
+    };
 
-    // ------------------------------------------------------------------------
-    // Load Phylogeny (Optional)
-
+    // Phylogeny
     let phylogeny_path = dataset_dir.join("phylogeny.json");
     dataset.phylogeny = if phylogeny_path.exists() {
         Phylogeny::read(&phylogeny_path)?
     } else {
-        warn!("No phylogeny was found.");
+        warn!("No phylogeny was found: {phylogeny_path:?}");
         Phylogeny::new()
     };
 
-    // --------------------------------------------------------------------
-    // Diagnostic Mutations (Optional)
+    // Diagnostic Mutations
 
     // let diagnostic_path = dataset_dir.join("diagnostic_mutations.tsv");
     // dataset.diagnostic = BTreeMap::new();

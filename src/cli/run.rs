@@ -39,7 +39,7 @@ pub struct Args {
 
     /// Number of bases to mask at the 5' and 3' ends.
     ///
-    /// Comma separated.
+    /// Comma separated. Use --mask 0,0 to disable masking.
     #[arg(short = 'm', long, default_values_t = Args::default().mask)]
     #[arg(long, value_delimiter = ',')]
     pub mask: Vec<usize>,
@@ -167,7 +167,7 @@ impl Args {
     ///     Right: Vec<args>
     pub fn read(path: &Path, multiple: bool) -> Result<Either<Args, Vec<Args>>, Report> {
         let input = std::fs::read_to_string(path)
-            .wrap_err_with(|| "Failed to read file: {path:?}.")?;
+            .wrap_err_with(|| format!("Failed to read file: {path:?}."))?;
         let output: Vec<Args> = serde_json::from_str(&input)
             .wrap_err_with(|| format!("Failed to parse file: {path:?}"))?;
 

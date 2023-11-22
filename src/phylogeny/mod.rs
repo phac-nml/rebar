@@ -141,9 +141,9 @@ impl Phylogeny {
     /// Read phylogeny from file.
     pub fn read(path: &Path) -> Result<Phylogeny, Report> {
         let phylogeny = std::fs::read_to_string(path)
-            .wrap_err_with(|| "Failed to read file: {path:?}.")?;
+            .wrap_err_with(|| format!("Failed to read file: {path:?}."))?;
         let phylogeny = serde_json::from_str(&phylogeny)
-            .wrap_err_with(|| "Failed to parse file: {path:?}.")?;
+            .wrap_err_with(|| format!("Failed to parse file: {path:?}."))?;
 
         Ok(phylogeny)
     }

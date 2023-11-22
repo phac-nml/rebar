@@ -216,8 +216,9 @@ pub fn create(
         + longest_legend_label as f32
         + constants::BUFFER;
 
-    let mut canvas_height = constants::X_INC             // white-space top
-        + (constants::X_INC * 2.) + section_gap           // parent regions and text labels
+    let canvas_height = constants::X_INC             // white-space top
+        + (constants::X_INC * 2.) + section_gap          // parent regions and text labels
+        + (constants::X_INC * 2.) + section_gap          // annotations
         + constants::X_INC  + section_gap                // guide section
         + constants::X_INC                               // reference bases
         + (constants::X_INC * parents.len() as f32)      // parent bases
@@ -226,11 +227,6 @@ pub fn create(
         + longest_coord as f32 + section_gap             // x-axis coord ticks
         + legend_height                                  // legend
         + constants::X_INC; // white-space bottom
-
-    // add extra height for optional annotations section
-    if !annotations.rows.is_empty() {
-        canvas_height += (constants::X_INC * 2.) + section_gap
-    }
 
     debug!("Creating canvas: {canvas_width} x {canvas_height}");
 
@@ -618,8 +614,16 @@ pub fn create(
     for (i, breakpoint) in breakpoints.iter().enumerate() {
         // get the region start/end
         let breakpoint_parts = breakpoint.split('-').collect_vec();
-        let prev_region_end = breakpoint_parts[0].parse::<f32>()? - 1.;
-        let next_region_start = breakpoint_parts[1].parse::<f32>()? + 1.;
+        // check if breakpoints is single coordinate
+        let mut prev_region_end = breakpoint_parts[0].parse::<f32>()?;
+        let mut next_region_start = breakpoint_parts[1].parse::<f32>()?;
+
+        if prev_region_end == next_region_start {
+            prev_region_end -= 1.0;
+        } else {
+            prev_region_end -= 1.0;
+            next_region_start += 1.0;
+        }
         //println!("{prev_region_end} {next_region_start}");
 
         // which subs does this fall between
@@ -633,7 +637,9 @@ pub fn create(
         let line_x;
         // top of the line will be the same
         let sub_y_buff = (constants::X_INC - sub_box_w) / 2.;
-        let line_y1 = if let 0 = i % 2 {
+        let line_y1 = if breakpoints.len() == 1 {
+            section_y + (constants::X_INC * 1.5)
+        } else if let 0 = i % 2 {
             section_y + (constants::X_INC * 2.)
         } else {
             section_y + constants::X_INC
@@ -647,7 +653,7 @@ pub fn create(
             - sub_y_buff;
 
         // option 1: draw line if coords right next to each other
-        if coord_next_i - coord_prev_i == 1 {
+        if (coord_next_i - coord_prev_i) <= 1 {
             // adjust the label line
             line_x = section_x
                 + (coord_prev_i + 1 + (coord_next_i - coord_prev_i) / 2) as f32
