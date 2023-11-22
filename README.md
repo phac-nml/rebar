@@ -17,10 +17,10 @@
 
 ## Install
 
-Download the [latest release](https://github.com/phac-nml/rebar/releases).
+Download the [latest release](https://github.com/phac-nml/rebar/releases/download/v0.1.0/rebar-x86_64-unknown-linux-gnu).
 
   ```bash
-  wget -O rebar https://github.com/phac-nml/rebar/releases/latest/download/rebar-x86_64-unknown-linux-gnu
+  wget -O rebar https://github.com/phac-nml/rebar/releases/download/v0.1.0/rebar-x86_64-unknown-linux-gnu
 
   ./rebar --help
   ```
