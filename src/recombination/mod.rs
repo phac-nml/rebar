@@ -657,7 +657,6 @@ pub fn identify_breakpoints(
             // but what happens if we know the precise bases...
             let start = end_prev + 1;
             let end = region.start - 1;
-            println!("{start} {end}");
             let breakpoint = if start < end {
                 Breakpoint { start, end }
             } else {
