@@ -19,10 +19,10 @@
 
 ### Direct
 
-1. Download the [latest release](https://github.com/phac-nml/rebar/releases/download/v0.1.0/rebar-x86_64-unknown-linux-gnu).
+1. Download the [latest release](https://github.com/phac-nml/rebar/releases/download/v0.1.1/rebar-x86_64-unknown-linux-musl).
 
     ```bash
-    wget -O rebar https://github.com/phac-nml/rebar/releases/download/v0.1.0/rebar-x86_64-unknown-linux-gnu
+    wget -O rebar https://github.com/phac-nml/rebar/releases/download/v0.1.1/rebar-x86_64-unknown-linux-musl
     ```
 
 1. (Optional) Copy to `PATH`.
