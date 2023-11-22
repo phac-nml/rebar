@@ -42,7 +42,7 @@ Download a sars-cov-2 dataset, version-controlled to a specific date.
     --output-dir dataset/sars-cov-2/2023-11-17
   ```
 
-- `--tag` can be any date (YYYY-MM-DD)! Run `rebar dataset list` to check dataset-specific date constraints.
+- `--tag` can be any date (YYYY-MM-DD)!
 
 ### Example 1
 
@@ -62,10 +62,7 @@ Download a sars-cov-2 dataset, version-controlled to a specific date.
 1. Plot breakpoints and parental regions.
 
     ```bash
-    rebar plot \
-      --dataset-dir dataset/sars-cov-2/2023-11-17 \
-      --output-dir example1 \
-      --plot-dir example1/plots
+    rebar plot --dataset-dir dataset/sars-cov-2/2023-11-17 --output-dir example1
     ```
 
 ### Example 2
@@ -84,10 +81,7 @@ Download a sars-cov-2 dataset, version-controlled to a specific date.
 1. Plot breakpoints and parental regions.
 
     ```bash
-    rebar plot \
-      --dataset-dir dataset/sars-cov-2/2023-11-17 \
-      --output-dir example2 \
-      --plot-dir example2/plots
+    rebar plot --dataset-dir dataset/sars-cov-2/2023-11-17 --output-dir example2
     ```
 
 ## Validate
@@ -104,24 +98,20 @@ rebar run \
 
 ## Output
 
-### Plot
+### Plots
 
 Visualization of substitutions, parental origins, and breakpoints.
 
-- Output path: `<outdir>/plots/<recombinant>_<parent_1>_<parent_2>.png`
-
-![plot_XBB.1.16](images/plot_XBB.1.16.png)
+![plot_XBB.1.16](images/XBB_BJ.1_CJ.1_22897-22941.png)
 
 ### Table
 
 A linelist summary of detection results.
 
-- Output path: `<outdir>/summary.tsv`
-
-|strain    |lineage   |clade|clade_lineage|recombinant|definition|validate|parents_lineage|parents_clade|parents_clade_lineage|breakpoints|regions                          |genome_length|dataset_name|dataset_tag|barcodes_date|barcodes_tag|tree_date |tree_tag|sequences_date|sequences_tag|
-|:---------|:---------|:----|:------------|:----------|:---------|:-------|:--------------|:------------|:--------------------|:----------|:--------------------------------|:------------|:-----------|:----------|:------------|:-----------|:---------|:-------|:-------------|:------------|
-|XBB.1.16  |XBB.1.16  |23B  |XBB.1.16     |XBB        |XBB.1.16  |positive|BJ.1,CJ.1      |21L,22D      |BA.2,BA.2.75         |22897:22941|261-22896\|BJ.1,22942-29118\|CJ.1|29903        |sars-cov-2  |latest     |2023-04-28   |c728b480    |2023-04-28|b2794397|2023-04-28    |6f36a61a     |
-|XBB.1.16.1|XBB.1.16.1|23B  |XBB.1.16     |XBB        |XBB.1.16.1|positive|BJ.1,CJ.1      |21L,22D      |BA.2,BA.2.75         |22897:22941|261-22896\|BJ.1,22942-29118\|CJ.1|29903        |sars-cov-2  |latest     |2023-04-28   |c728b480    |2023-04-28|b2794397|2023-04-28    |6f36a61a     |
+|strain               |validate|validate_details|population|recombinant|parents  |breakpoints|edge_case|unique_key               |regions                          |private|diagnostic|genome_length|dataset_name|dataset_tag|cli_version|
+|:--------------------|:-------|:---------------|:---------|:----------|:--------|:----------|:--------|:------------------------|:--------------------------------|:------|:---------|:------------|:-----------|:----------|:----------|
+|XBB.1.16  |pass    |                |XBB.1.16  |XBB        |BJ.1,CJ.1|22897-22941|false    |XBB_BJ.1_CJ.1_22897-22941|261-22896\|BJ.1,22942-29118\|CJ.1|       |NA        |29903        |sars-cov-2  |2023-11-17 |0.1.0      |
+|XBB.1.16.1|pass    |                |XBB.1.16.1|XBB        |BJ.1,CJ.1|22897-22941|false    |XBB_BJ.1_CJ.1_22897-22941|261-22896\|BJ.1,22942-29118\|CJ.1|       |NA        |29903        |sars-cov-2  |2023-11-17 |0.1.0      |
 
 ## Credits
 

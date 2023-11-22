@@ -783,7 +783,7 @@ pub fn create(
             // pop label has same pos as section_label, use that function
             if coord_i == 0 {
                 let mut args = text::DrawRaqoteArgs::from_canvas(&mut canvas);
-                args.text = population.to_string();
+                args.text = population.replace("population_", "").to_string();
                 args.font_size = constants::FONT_SIZE;
                 args.x = section_x - label_gap;
                 args.y = y + (constants::X_INC / 2.0);
