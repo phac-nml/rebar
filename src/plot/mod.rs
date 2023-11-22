@@ -5,13 +5,10 @@ pub mod text;
 use crate::utils::table::Table;
 use color_eyre::eyre::{eyre, Report, Result};
 use color_eyre::Help;
-use font_kit::family_name::FamilyName;
-use font_kit::handle::Handle;
-use font_kit::properties::{Properties, Weight};
-use font_kit::source::SystemSource;
 use itertools::Itertools;
-use log::debug;
+use log::{debug, warn};
 use raqote::*;
+use rust_fontconfig::{FcFontCache, FcPattern};
 use std::path::PathBuf;
 
 /// Get the background color (RGBA) of a nucleotide base
@@ -45,21 +42,34 @@ pub fn create(
     // Import Data
     // ------------------------------------------------------------------------
 
-    let font_handle = SystemSource::new()
-        .select_best_match(&[FamilyName::SansSerif], &Properties::new())?;
-    let font_path: PathBuf = match font_handle {
-        Handle::Path { path, font_index } => path,
-        _ => return Err(eyre!("A SansSerif Normal font could not found!")),
+    // Locate OS-specific font directories
+    let cache = FcFontCache::build();
+
+    // Locate Normal font
+    let font_name = "DejaVu Sans".to_string();
+    let font_query = cache.query(&FcPattern {
+        name: Some(font_name.clone()),
+        ..Default::default()
+    });
+    let font_path = match font_query {
+        Some(result) => PathBuf::from(result.path.to_string()),
+        None => return Err(eyre!("{font_name} font could not found!")),
     };
-    let font_bold_handle = SystemSource::new().select_best_match(
-        &[FamilyName::SansSerif],
-        Properties::new().weight(Weight::BOLD),
-    )?;
-    let font_bold_path: PathBuf = match font_bold_handle {
-        Handle::Path { path, font_index } => path,
-        _ => return Err(eyre!("A SansSerif Bold font could not found!")),
+
+    // Locate Bold font
+    let font_bold_name = "DejaVu Sans Bold".to_string();
+    let font_bold_query = cache.query(&FcPattern {
+        name: Some(font_bold_name.clone()),
+        ..Default::default()
+    });
+    let font_bold_path = match font_bold_query {
+        Some(result) => PathBuf::from(result.path.to_string()),
+        None => {
+            warn!("{font_name} bold font could not found! Using {font_name} instead.");
+            font_path.clone()
+        }
     };
-    // the name of the barcodes file will be the unique_key
+
     let barcodes = Table::read(barcodes_path)?;
     let unique_key = barcodes_path.file_stem().unwrap().to_str().unwrap();
 
