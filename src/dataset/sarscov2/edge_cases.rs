@@ -147,6 +147,18 @@ pub fn default() -> Result<Vec<run::Args>, Report> {
     edge_cases.push(edge_case);
 
     // --------------------------------------------------------------------
+    // XCM: XBB.2.3.13 and DV.7.1.2
+
+    let recombinant = "XCM".to_string();
+    debug!("Creating manual edge case: {recombinant:?}");
+    let edge_case = run::Args {
+        population: Some(recombinant),
+        parents: Some(vec!["DV.7.1.2".to_string(), "XBB.2.3.13".to_string()]),
+        ..Default::default()
+    };
+    edge_cases.push(edge_case);
+
+    // --------------------------------------------------------------------
     // XDB: XBB.1.16.19 with double reversion assumed from XBB
 
     let recombinant = "XDB".to_string();
