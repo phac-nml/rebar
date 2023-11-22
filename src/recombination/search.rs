@@ -1,6 +1,6 @@
 use crate::cli::run;
 use crate::dataset::{Dataset, SearchResult};
-use crate::recombination::{detect_recombination, Hypothesis, Recombination};
+use crate::recombination::{detect_recombination, validate, Hypothesis, Recombination};
 use crate::sequence::Sequence;
 use color_eyre::eyre::{eyre, Report, Result};
 use itertools::Itertools;
@@ -20,7 +20,7 @@ use strum::IntoEnumIterator;
 pub fn all_parents<'seq>(
     sequence: &'seq Sequence,
     dataset: &Dataset,
-    best_match: &SearchResult,
+    best_match: &mut SearchResult,
     populations: &[&String],
     args: &run::Args,
 ) -> Result<Recombination<'seq>, Report> {
@@ -29,6 +29,8 @@ pub fn all_parents<'seq>(
     // copy search populations, we will refine these based on edge cases and
     // different hypotheses concerning the mechanism of recombination
     let mut populations = populations.to_vec();
+
+    let consensus_population = &best_match.consensus_population;
 
     // ------------------------------------------------------------------------
     // Edge Case
@@ -65,9 +67,11 @@ pub fn all_parents<'seq>(
     // ----------------------------------------------------------------------------
 
     // Store the results of our hypothesis testing
-    // Hyp: (Recombination, score, conflict)
-    let mut hypotheses: BTreeMap<Hypothesis, (Option<Recombination>, isize, usize)> =
-        BTreeMap::new();
+    // Hyp: (Recombination, Parents, score, conflict)
+    let mut hypotheses: BTreeMap<
+        Hypothesis,
+        (Option<Recombination>, Vec<SearchResult>, isize, usize),
+    > = BTreeMap::new();
 
     // iterate through the potential hypotheses
     for hypothesis in Hypothesis::iter() {
@@ -79,11 +83,13 @@ pub fn all_parents<'seq>(
         // + conflict_alt mutations and + conflict_ref reversions
         if hypothesis == Hypothesis::NonRecombinant {
             if best_match.recombinant.is_none() {
-                let score =
-                    best_match.score.get(&best_match.consensus_population).unwrap();
-                let conflict =
-                    best_match.conflict_alt.len() + best_match.conflict_ref.len();
-                hypotheses.insert(Hypothesis::NonRecombinant, (None, *score, conflict));
+                let score = best_match.score[consensus_population];
+                let conflict = best_match.conflict_alt[consensus_population].len()
+                    + best_match.conflict_ref[consensus_population].len();
+                hypotheses.insert(
+                    Hypothesis::NonRecombinant,
+                    (None, Vec::new(), score, conflict),
+                );
             }
             continue;
         }
@@ -108,17 +114,17 @@ pub fn all_parents<'seq>(
         }
 
         // ----------------------------------------------------------------------------
-        // Hypothesis: Novel Recombinant, Allow Recursion.
+        // Hypothesis: Recombinant, Allow Recursion.
         // One or more parent(s) are recombinants or recombinant descendants
         // This is a default search, no filter edits needed
-        if hypothesis == Hypothesis::NovelRecursiveRecombinant {}
+        if hypothesis == Hypothesis::RecursiveRecombinant {}
 
         // ----------------------------------------------------------------------------
-        // Hypothesis: Novel Recombinant, Disallow Recursion.
+        // Hypothesis: Non Recursive Recombinant, Disallow Recursion.
         // No parent(s) are recombinants or recombinant descendants
-        if hypothesis == Hypothesis::NovelNonRecursiveRecombinant {
+        if hypothesis == Hypothesis::NonRecursiveRecombinant {
             // skip this hypothesis if
-            if hypotheses.contains_key(&Hypothesis::NovelNonRecursiveRecombinant) {
+            if hypotheses.contains_key(&Hypothesis::NonRecursiveRecombinant) {
                 continue;
             }
             hyp_populations
@@ -152,15 +158,10 @@ pub fn all_parents<'seq>(
         if let Ok(primary_parent) = primary_search {
             debug!("Primary Parent Search was successful.");
             debug!("Secondary Parent(s) Search.");
-            let secondary_search = secondary_parents(
-                sequence,
-                dataset,
-                best_match,
-                &[primary_parent],
-                &hyp_args,
-            );
+            let secondary_search =
+                secondary_parents(sequence, dataset, &[primary_parent], &hyp_args);
 
-            if let Ok(recombination) = secondary_search {
+            if let Ok((recombination, parents)) = secondary_search {
                 debug!("Secondary Parent(s) Search was successful.");
                 let score: isize = recombination.score.values().sum();
                 let conflict_alt: usize =
@@ -170,7 +171,7 @@ pub fn all_parents<'seq>(
                 let conflict = conflict_alt + conflict_ref;
 
                 // adjust the hypothesis, in case it wasn't actually recursive
-                let hypothesis = if hypothesis == Hypothesis::NovelRecursiveRecombinant {
+                let hypothesis = if hypothesis == Hypothesis::RecursiveRecombinant {
                     let mut is_recursive = false;
                     recombination.parents.iter().for_each(|pop| {
                         let recombinant_ancestor = dataset
@@ -183,15 +184,16 @@ pub fn all_parents<'seq>(
                     });
 
                     if is_recursive {
-                        Hypothesis::NovelRecursiveRecombinant
+                        Hypothesis::RecursiveRecombinant
                     } else {
-                        Hypothesis::NovelNonRecursiveRecombinant
+                        Hypothesis::NonRecursiveRecombinant
                     }
                 } else {
                     hypothesis
                 };
 
-                hypotheses.insert(hypothesis, (Some(recombination), score, conflict));
+                hypotheses
+                    .insert(hypothesis, (Some(recombination), parents, score, conflict));
             } else {
                 debug!("Secondary Parent(s) Search was unsuccessful.");
             }
@@ -203,7 +205,7 @@ pub fn all_parents<'seq>(
             "Hypotheses: {}",
             hypotheses
                 .iter()
-                .map(|(hyp, (_, score, conflict))| format!(
+                .map(|(hyp, (_r, _p, score, conflict))| format!(
                     "{hyp:?}: score={score}, conflict={conflict}"
                 ))
                 .join(", ")
@@ -224,16 +226,18 @@ pub fn all_parents<'seq>(
     // evidence for multiple hypotheses
     else {
         // max_score:    Sometimes the hypothesis with the highest score is 'correct'
-        // Ex. XBB.1.18: DesignatedRecombinant: score=77, conflict=5, NovelNonRecursiveRecombinant: score=64, conflict=4
+        // Ex. XBB.1.18: DesignatedRecombinant: score=77, conflict=5, NonRecursiveRecombinant: score=64, conflict=4
 
         // min_conflict:  Sometimes the hypothesis with the least conflict is 'correct'
         //                This seems to be generally the XBB* recursive recombinants,
         //                the original recombination (BJ.1 x CJ.1) has high support,
         //                but lots of conflict.
-        // Ex. XCW:       DesignatedRecombinant: score=55, conflict=6, NovelNonRecursiveRecombinant: score=65, conflict=17
+        // Ex. XCW:       DesignatedRecombinant: score=55, conflict=6, NonRecursiveRecombinant: score=65, conflict=17
 
-        let min_conflict = hypotheses.iter().map(|(_hyp, (_, _, c))| c).min().unwrap();
-        let max_conflict = hypotheses.iter().map(|(_hyp, (_, _, c))| c).max().unwrap();
+        let min_conflict =
+            hypotheses.iter().map(|(_hyp, (_r, _p, _s, c))| c).min().unwrap();
+        let max_conflict =
+            hypotheses.iter().map(|(_hyp, (_r, _p, _s, c))| c).max().unwrap();
         let conflict_range = max_conflict - min_conflict;
         let conflict_threshold = 5;
 
@@ -243,15 +247,16 @@ pub fn all_parents<'seq>(
             debug!("Best hypothesis selected by MIN CONFLICT. Conflict range ({conflict_range}) >= threshold ({conflict_threshold}).");
             hypotheses
                 .iter()
-                .filter_map(|(hyp, (_, _, c))| (c == min_conflict).then_some(hyp))
+                .filter_map(|(hyp, (_r, _p, _s, c))| (c == min_conflict).then_some(hyp))
                 .next()
                 .unwrap()
         } else {
             debug!("Best hypothesis selected by MAX SCORE. Conflict range ({conflict_range}) < threshold ({conflict_threshold})");
-            let max_score = hypotheses.iter().map(|(_hyp, (_, s, _))| s).max().unwrap();
+            let max_score =
+                hypotheses.iter().map(|(_hyp, (_r, _p, s, _c))| s).max().unwrap();
             hypotheses
                 .iter()
-                .filter_map(|(hyp, (_, s, _))| (s == max_score).then_some(hyp))
+                .filter_map(|(hyp, (_r, _p, s, _c))| (s == max_score).then_some(hyp))
                 .next()
                 .unwrap()
         };
@@ -259,13 +264,45 @@ pub fn all_parents<'seq>(
         best_hypothesis.clone()
     };
 
+    debug!("best_hypothesis: {best_hypothesis:?}");
+
+    // non-recombinant means that the parent search "failed"
     if best_hypothesis == Hypothesis::NonRecombinant {
         return Err(eyre!("Best hypothesis is Non-Recombinant."));
-    } else {
-        debug!("best_hypothesis: {best_hypothesis:?}");
     }
-    let mut recombination = hypotheses.remove(&best_hypothesis).unwrap().0.unwrap();
+    let result = hypotheses.remove(&best_hypothesis).unwrap();
+    let mut recombination = result.0.unwrap();
+    let primary_parent = result.1[0].clone();
+
+    // ------------------------------------------------------------------------
+    // Recombinat attributes
+
     recombination.edge_case = edge_case;
+
+    // Decide on novel vs known recombinant at this point
+    recombination.recombinant = if let Some(recombinant) = &best_match.recombinant {
+        // check if expected parents match observed
+        let observed = &recombination.parents;
+        let expected = dataset.phylogeny.get_parents(recombinant)?;
+        let parents_match = validate::compare_parents(observed, &expected, dataset)?;
+
+        if parents_match {
+            Some(recombinant.clone())
+        } else {
+            *best_match = primary_parent;
+            Some("novel".to_string())
+        }
+    } else {
+        Some("novel".to_string())
+    };
+
+    recombination.unique_key = format!(
+        "{}_{}_{}",
+        &recombination.recombinant.clone().unwrap(),
+        &recombination.parents.iter().join("_"),
+        &recombination.breakpoints.iter().join("_"),
+    );
+
     recombination.hypothesis = Some(best_hypothesis);
 
     Ok(recombination)
@@ -275,10 +312,9 @@ pub fn all_parents<'seq>(
 pub fn secondary_parents<'seq>(
     sequence: &'seq Sequence,
     dataset: &Dataset,
-    best_match: &SearchResult,
     parents: &[SearchResult],
     args: &run::Args,
-) -> Result<Recombination<'seq>, Report> {
+) -> Result<(Recombination<'seq>, Vec<SearchResult>), Report> {
     // Initialize our 'Recombination' result, that we will modify and update
     // as we iterate through potential parents
     let mut recombination = Recombination::new(sequence);
@@ -311,14 +347,14 @@ pub fn secondary_parents<'seq>(
         if num_parents >= args.max_parents {
             // Maxing out the number of parents is a SUCCESS
             debug!("Maximum parents reached ({num_parents}).");
-            return Ok(recombination);
+            return Ok((recombination, parents));
         }
         if num_iter >= args.max_iter {
             debug!("Maximum iterations reached ({num_iter}).");
 
             // Finding minimum parents is a SUCCESS
             if num_parents >= args.min_parents {
-                return Ok(recombination);
+                return Ok((recombination, parents));
             }
             // otherwise FAILURE
             else {
@@ -362,7 +398,7 @@ pub fn secondary_parents<'seq>(
             debug!("Sufficient conflict_alt resolution reached, stopping parent search.");
             // Finding minimum parents is a SUCCESS
             if num_parents >= args.min_parents {
-                return Ok(recombination);
+                return Ok((recombination, parents));
             }
             // Otherwise FAILURE
             else {
@@ -510,8 +546,6 @@ pub fn secondary_parents<'seq>(
                 Some(&search_coords),
             );
 
-            //debug!("detect_recombination");
-
             // if the search found parents, check for recombination
             if let Ok(parent_candidate) = parent_candidate {
                 // remove this parent from future searches
@@ -522,7 +556,6 @@ pub fn secondary_parents<'seq>(
                 let detect_result = detect_recombination(
                     sequence,
                     dataset,
-                    best_match,
                     &parents,
                     Some(&parent_candidate),
                     &dataset.reference,

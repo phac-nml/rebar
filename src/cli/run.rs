@@ -34,13 +34,13 @@ pub struct Args {
     ///
     /// Regardless of whether you use '*' or not, all descendants of the
     /// specified populations will be removed.
-    #[arg(short = 'k', long, value_delimiter = ',')]
+    #[arg(short = 'k', long)]
     pub knockout: Option<Vec<String>>,
 
     /// Number of bases to mask at the 5' and 3' ends.
     ///
     /// Comma separated.
-    #[arg(short = 'm', long)]
+    #[arg(short = 'm', long, default_values_t = Args::default().mask)]
     #[arg(long, value_delimiter = ',')]
     pub mask: Vec<usize>,
 

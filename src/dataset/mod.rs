@@ -356,6 +356,15 @@ impl Dataset {
             })
             .collect_vec();
 
+        // private subs (conflict_alt and conflict_ref reversed)
+        result.private = result.conflict_alt[&consensus_population].clone();
+        result.conflict_ref[&consensus_population].iter().for_each(|sub| {
+            let mut sub = *sub;
+            std::mem::swap(&mut sub.alt, &mut sub.reference);
+            result.private.push(sub);
+        });
+        result.private.sort();
+
         debug!("Search Result:\n{}", result.pretty_print());
         Ok(result)
     }
@@ -450,13 +459,6 @@ impl SearchResult {
             .map(|(pop, count)| format!("- {}: {}", &pop, &count))
             .collect::<Vec<_>>();
 
-        // // private count and list
-        // let private_order = format!(
-        //     " {}\n    - substitutions: {}",
-        //     self.private.len(),
-        //     self.private.iter().join(", ")
-        // );
-
         formatdoc!(
             "sequence_id: {}
             consensus_population: {}
@@ -467,7 +469,8 @@ impl SearchResult {
             score:\n  {}{display_suffix}
             support:\n  {}{display_suffix}
             conflict_ref:\n  {}{display_suffix}
-            conflict_alt:\n  {}{display_suffix}",
+            conflict_alt:\n  {}{display_suffix}
+            private: {}",
             self.sequence_id,
             self.consensus_population,
             self.top_populations.join(", "),
@@ -478,7 +481,7 @@ impl SearchResult {
             support_order.join("\n  "),
             conflict_ref_order.join("\n  "),
             conflict_alt_order.join("\n  "),
-            //private_order,
+            self.private.iter().join(", ")
         )
     }
 }

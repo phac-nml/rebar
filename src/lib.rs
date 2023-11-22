@@ -134,6 +134,8 @@ pub fn simulate(args: &cli::simulate::Args) -> Result<(), Report> {
 
 /// Run rebar on input alignment and/or dataset population(s)
 pub fn run(args: &mut cli::run::Args) -> Result<(), Report> {
+    // copy args for export/seralizing
+    let args_export = args.clone();
     // check how many threads are available on the system
     let default_thread_pool = rayon::ThreadPoolBuilder::new().build().unwrap();
     info!(
@@ -333,7 +335,7 @@ pub fn run(args: &mut cli::run::Args) -> Result<(), Report> {
                 let parent_search = recombination::search::all_parents(
                     sequence,
                     &dataset,
-                    &best_match,
+                    &mut best_match,
                     &parent_search_populations,
                     args,
                 );
@@ -372,6 +374,23 @@ pub fn run(args: &mut cli::run::Args) -> Result<(), Report> {
         best_matches.push(result.0);
         recombinations.push(result.1);
     }
+
+    // ------------------------------------------------------------------------
+    // Export CLI args
+
+    let outpath_args = args.output_dir.join("run_args.json");
+    info!("Exporting CLI Run Args: {outpath_args:?}");
+    // create output file
+    let mut file = File::create(&outpath_args)
+        .wrap_err_with(|| format!("Failed to create file: {outpath_args:?}"))?;
+
+    // parse to string
+    let output = serde_json::to_string_pretty(&args_export)
+        .wrap_err_with(|| "Failed to parse mutations.".to_string())?;
+
+    // write to file
+    file.write_all(format!("{}\n", output).as_bytes())
+        .wrap_err_with(|| format!("Failed to write file: {outpath_args:?}"))?;
 
     // ------------------------------------------------------------------------
     // Export Linelist (single)

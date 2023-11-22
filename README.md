@@ -31,7 +31,7 @@
     - Compile: `cargo build --release --all-features --target x86_64-unknown-linux-gnu`
     - Output binary: `target/x86_64-unknown-linux-gnu/release/rebar`
 
-## Quick Start
+## Usage
 
 Download a sars-cov-2 dataset, version-controlled to a specific date.
 
@@ -42,8 +42,7 @@ Download a sars-cov-2 dataset, version-controlled to a specific date.
     --output-dir dataset/sars-cov-2/2023-11-17
   ```
 
-- `--tag` can be any date (YYYY-MM-DD)!
-- Run `rebar dataset list` to check dataset-specific date constraints.
+- `--tag` can be any date (YYYY-MM-DD)! Run `rebar dataset list` to check dataset-specific date constraints.
 
 ### Example 1
 
