@@ -7,55 +7,41 @@ on:
 
 jobs:
 
-  release-notes:
-    name: Release Notes 📰
+  build:
+    uses: ./.github/workflows/build.yaml
+
+  #----------------------------------------------------------------------------
+  release:
+
+    needs: build
     runs-on: ubuntu-latest
 
     steps:
-      - name: checkout repo
-        uses: actions/checkout@v3
+
+      - name: download binaries from build
+        uses: actions/download-artifact@v3
         with:
-          lfs: true
-          fetch-depth: 0
+          path: target
 
-      - name: update submodules
-        run: git submodule update --init --recursive
-
-      # Check 2 most recent tags, overwrites
-      - name: Tagged Release Notes
+      - name: rename binaries by architecture
         run: |
-          ./autologs/autologs \
-            --release \
-            -o release-notes.md \
-            --old-tag `git tag | tail -n2 | head -n1` \
-            --new-tag `git tag | tail -n1`
-      - name: Upload Release Notes
-        uses: actions/upload-artifact@v2
+          mkdir target/release
+          mv target/rebar-x86_64-unknown-linux-gnu/rebar target/release/rebar-x86_64-unknown-linux-gnu
+          ls -l target/release/
+
+      - name: create release
+        uses: ncipollo/release-action@v1
         with:
-          name: release-notes
-          path: release-notes.md
-          retention-days: 7
-
-  tagged-release:
-    name: Tagged Release
-    needs: [release-notes]
-    runs-on: ubuntu-latest
-
-    steps:
-
-      - name: Download Release Notes
-        uses: actions/download-artifact@v2
-        with:
-          name: release-notes
-
-      - name: Create Release
-        id: create_release
-        uses: actions/create-release@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          tag_name: ${{ github.ref }}
-          release_name: Release ${{ github.ref }}
+          # comma-separated
+          artifacts: "target/release/rebar-x86_64-unknown-linux-gnu"
+          # aarch64-apple-darwin
+          # aarch64-unknown-linux-gnu
+          # aarch64-unknown-linux-musl
+          # x86_64-apple-darwin
+          # x86_64-pc-windows-gnu
+          # x86_64-unknown-linux-musl
+          artifactErrorsFailBuild: true
           draft: true
+          generateReleaseNotes: true
+          makeLatest: true
           prerelease: true
-          body_path: release-notes.md

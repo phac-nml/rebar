@@ -1,0 +1,51 @@
+[package]
+name = "rebar"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+bio = "1.1.0"
+chrono = {version = "0.4.31", features = ["serde"] }
+clap = { version = "4.2.7", features = ["derive"] }
+color-eyre = "0.6.2"
+either = "1.9.0"
+env_logger = "0.10.0"
+image = "0.24.6"
+indicatif = {version = "0.17.5", features = ["rayon"]}
+indoc = "2.0.4"
+itertools = "0.11.0"
+log = "0.4.17"
+petgraph = { version = "0.6.3", features = ["serde-1"] }
+raqote = "0.8.2"
+rand = "0.8.5"
+rayon = "1.7.0"
+regex = "1.9.5"
+rusttype = "0.9.3"
+semver = "1.0.19"
+serde = { version = "1.0.163", features = ["derive"] }
+serde_json = "1.0.96"
+#strum = "0.25.0"
+#strum_macros = "0.25"
+strum = { version = "0.25", features = ["derive"] }
+tempfile = "3.5.0"
+tokio = { version = "1.28.1", features = ["macros", "rt-multi-thread"] }
+reqwest = { version = "0.11.18", features = ["json"] }
+url = "2.3.1"
+zstd = "0.12.3+zstd.1.5.2"
+
+# Enable a small amount of optimization in debug mode
+[profile.dev]
+opt-level = 1
+
+# Enable high optimizations for dependencies (incl. Bevy), but not for our code:
+[profile.dev.package."*"]
+opt-level = 3
+
+[profile.release]
+# Binary size reduction tips from: https://github.com/johnthagen/min-sized-rust
+strip         = true  # Strip Symbols from Binary
+#opt-level     = "z"  # Optimize For Size
+lto           = true # Enable Link Time Optimization (LTO)
+codegen-units = 1 # Reduce Parallel Code Generation Units to Increase Optimization

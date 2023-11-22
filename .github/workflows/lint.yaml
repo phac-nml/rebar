@@ -9,8 +9,6 @@ on:
       - '*'
   release:
     types: [published]
-#  schedule:
-#    - cron: "0 0 * * *"
 
 jobs:
 
@@ -22,10 +20,15 @@ jobs:
       - name: checkout repo
         uses: actions/checkout@v3
 
-      - name: setup Python
+      - name: setup python
         uses: actions/setup-python@v2
         with:
           python-version: '3.9'
+
+      - name: setup rust
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: 1.74.0
 
       - name: setup linters
         run: |

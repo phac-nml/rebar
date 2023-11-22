@@ -1,149 +1,118 @@
 # rebar
 
 [![All Contributors](https://img.shields.io/badge/all_contributors-11-orange.svg?style=flat-square)](#credits)
-
 [![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](https://github.com/phac-nml/rebar/blob/master/LICENSE)
 [![GitHub issues](https://img.shields.io/github/issues/phac-nml/rebar.svg)](https://github.com/phac-nml/rebar/issues)
-[![Install CI](https://github.com/phac-nml/rebar/actions/workflows/install.yaml/badge.svg)](https://github.com/phac-nml/rebar/actions/workflows/install.yaml)
-[![Examples CI](https://github.com/phac-nml/rebar/actions/workflows/examples.yaml/badge.svg)](https://github.com/phac-nml/rebar/actions/workflows/examples.yaml)
-[![Validate CI](https://github.com/phac-nml/rebar/actions/workflows/validate.yaml/badge.svg)](https://github.com/phac-nml/rebar/actions/workflows/validate.yaml)
+[![Build CI](https://github.com/phac-nml/rebar/actions/workflows/build.yaml/badge.svg)](https://github.com/phac-nml/rebar/actions/workflows/build.yaml)
+[![Test CI](https://github.com/phac-nml/rebar/actions/workflows/test.yaml/badge.svg)](https://github.com/phac-nml/rebar/actions/workflows/test.yaml)
+[![Latest CI](https://github.com/phac-nml/rebar/actions/workflows/latest.yaml/badge.svg)](https://github.com/phac-nml/rebar/actions/workflows/latest.yaml)
 
-**RE**combination **BAR**code detector for SARS-CoV-2.
-
-## Why rebar?
-
-`rebar` is a command-line application that _detects_ and _visualizes_ recombination between SARS-CoV-2 lineages. It follows the [PHA4GE Guidance for Detecting and Characterizing SARS-CoV-2 Recombinants](https://github.com/pha4ge/pipeline-resources/blob/main/docs/sc2-recombinants.md) which outlines three steps:
+`rebar` is a command-line application that _detects_ and _visualizes_ recombination between genomic sequences. It follows the [PHA4GE Guidance for Detecting and Characterizing SARS-CoV-2 Recombinants](https://github.com/pha4ge/pipeline-resources/blob/main/docs/sc2-recombinants.md) which outlines three steps:
 
 1. Assess the genomic evidence for recombination.
-1. Classify sequences as _designated_ or _novel_ recombinant lineages.
 1. Identify the breakpoint coordinates and parental regions.
+1. Classify sequences as _designated_ or _novel_ recombinant lineages.
+
+![plot_XBB.1.16](images/XBB_BJ.1_CJ.1_22897-22941.png)
 
 ## Install
 
-1. Git
+Download the [latest release](https://github.com/phac-nml/rebar/releases).
 
-    ```bash
-    git clone https://github.com/phac-nml/rebar.git
-    cd rebar
-    pip install .
-    ```
+  ```bash
+  wget -O rebar https://github.com/phac-nml/rebar/releases/latest/download/rebar-x86_64-unknown-linux-gnu
 
-1. PyPI: \*\*Coming Soon\*\*
+  ./rebar --help
+  ```
 
-1. Conda: \*\*Coming Soon\*\*
+### Conda \*\*Coming Soon!\*\*
+
+### Source
+
+1. Clone repository: `git clone https://github.com/phac-nml/rebar.git && cd rebar`
+1. Install the rust compiler: [official](https://doc.rust-lang.org/cargo/getting-started/installation.html) or [conda](https://anaconda.org/conda-forge/rust).
+1. Compile: `cargo build --release --all-features --target x86_64-unknown-linux-gnu`
+    - Output binary: `target/x86_64-unknown-linux-gnu/release/rebar`
 
 ## Usage
 
-Download the `rebar` dataset.
+Download a sars-cov-2 dataset, version-controlled to a specific date.
 
-```bash
-rebar dataset \
-  --name sars-cov-2 \
-  --tag latest \
-  --outdir dataset/sars-cov-2-latest
-```
+  ```bash
+  rebar dataset download \
+    --name sars-cov-2 \
+    --tag 2023-11-17 \
+    --output-dir dataset/sars-cov-2/2023-11-17
+  ```
+
+- `--tag` can be any date (YYYY-MM-DD)!
 
 ### Example 1
 
-Detect recombination in user-specified lineages.
+1. Detect recombination in user-specified populations.
 
-```bash
-rebar run \
-  --dataset dataset/sars-cov-2-latest \
-  --lineages AY.4,BA.5.2,XD,XBB.1.5.1,XBL \
-  --output-all \
-  --outdir example1
-```
+    ```bash
+    rebar run \
+      --dataset-dir dataset/sars-cov-2/2023-11-17  \
+      --populations "AY.4.2*,BA.5.2,XBC.1.6*,XBB.1.5.1,XBL" \
+      --output-dir example1
+    ```
 
-- The `--lineages` can include any designated lineage found in the dataset `alignment.fasta`.
-- The "\*" character can also be used to include descendants. For example `--lineages XBB.1.16*` will include `XBB.1.16`, `XBB.1.16.1`, `FU.1`, `XBB.1.16.2`, etc.
+    - `--populations` can include any sequence name found in the dataset `populations.fasta`. For sars-cov-2, sequence names are the designated lineages.
+    - The wildcard character ("\*") will include the lineage and all its descendants.
+    - **NOTE**: If using "\*", make sure to use quotes (ex. `--lineages "XBC*,XBB.1.16*"`)!
+
+1. Plot breakpoints and parental regions.
+
+    ```bash
+    rebar plot --dataset-dir dataset/sars-cov-2/2023-11-17 --output-dir example1
+    ```
 
 ### Example 2
 
-Detect recombination from an input alignment.
+1. Detect recombination from an input alignment.
 
-```bash
-rebar run \
-  --dataset dataset/sars-cov-2-latest \
-  --alignment test/alignment.fasta \
-  --output-all \
-  --outdir example2
-```
+    ```bash
+    rebar run \
+      --dataset dataset/sars-cov-2/2023-11-17 \
+      --alignment data/example2.fasta \
+      --output-dir example2
+    ```
 
-The `--alignment` must be aligned to the same reference as in the dataset `reference.fasta` (we strongly recommend [nextclade](https://github.com/nextstrain/nextclade)).
+    - The `--alignment` must be aligned to the same reference as in the dataset `reference.fasta` (we strongly recommend [nextclade](https://clades.nextstrain.org/)).
+
+1. Plot breakpoints and parental regions.
+
+    ```bash
+    rebar plot --dataset-dir dataset/sars-cov-2/2023-11-17 --output-dir example2
+    ```
 
 ## Validate
 
-Run `rebar` on all designated lineages, and validate against the expected results.
+Run `rebar` on all populations in the dataset, and validate against the expected results.
 
 ```bash
 rebar run \
-  --dataset dataset/sars-cov-2-latest \
-  --alignment dataset/sars-cov-2-latest/alignment.fasta \
-  --validate \
-  --threads 8 \
-  --output-all \
-  --outdir validate
+  --dataset-dir dataset/sars-cov-2/latest \
+  --output-dir validate \
+  --populations "*" \
+  --threads 4
 ```
 
 ## Output
 
-### Plot
+### Plots
 
 Visualization of substitutions, parental origins, and breakpoints.
-
-- Output path: `<outdir>/plots/<recombinant>_<parent_1>_<parent_2>.png`
-
-![plot_XBB.1.16](images/plot_XBB.1.16.png)
 
 ### Table
 
 A linelist summary of detection results.
 
-- Output path: `<outdir>/summary.tsv`
-
-|strain    |lineage   |clade|clade_lineage|recombinant|definition|validate|parents_lineage|parents_clade|parents_clade_lineage|breakpoints|regions                          |genome_length|dataset_name|dataset_tag|barcodes_date|barcodes_tag|tree_date |tree_tag|sequences_date|sequences_tag|
-|:---------|:---------|:----|:------------|:----------|:---------|:-------|:--------------|:------------|:--------------------|:----------|:--------------------------------|:------------|:-----------|:----------|:------------|:-----------|:---------|:-------|:-------------|:------------|
-|XBB.1.16  |XBB.1.16  |23B  |XBB.1.16     |XBB        |XBB.1.16  |positive|BJ.1,CJ.1      |21L,22D      |BA.2,BA.2.75         |22897:22941|261-22896\|BJ.1,22942-29118\|CJ.1|29903        |sars-cov-2  |latest     |2023-04-28   |c728b480    |2023-04-28|b2794397|2023-04-28    |6f36a61a     |
-|XBB.1.16.1|XBB.1.16.1|23B  |XBB.1.16     |XBB        |XBB.1.16.1|positive|BJ.1,CJ.1      |21L,22D      |BA.2,BA.2.75         |22897:22941|261-22896\|BJ.1,22942-29118\|CJ.1|29903        |sars-cov-2  |latest     |2023-04-28   |c728b480    |2023-04-28|b2794397|2023-04-28    |6f36a61a     |
-
-### Summary YAML
-
-A super-detailed YAML summary of recombination detection results.
-
-- Output path: `<outdir>/summary.yaml`
-
-```yaml
-XBB.1.16:
-  substitutions: C241T,A405G,T670G,C2790T,C3037T,G4184A,...
-  deletions: 11288-11296,21633-21641,21992-21994,28362-28370
-  missing: 1-200,29704-29903
-  lineage:
-    lineage: XBB.1.16
-    definition: XBB.1.16
-    clade: 23B
-    clade_lineage: XBB.1.16
-    top_lineages: XBB.1.16.3,XBB.1.16.2,XBB.1.16.1,XBB.1.16,FU.2,FU.1
-    top_lineages_subsample: XBB.1.16.3,XBB.1.16.2,XBB.1.16.1,XBB.1.16,FU.2,FU.1
-    outlier_lineages:
-    barcode: A1G,C44T,C241T,A405G,T670G,C2790T,C3037T,G4184A,...
-    support: C241T,A405G,T670G,C2790T,C3037T,G4184A,...
-    missing: A1G,C44T
-    conflict_ref:
-    conflict_alt:
-    recombinant: XBB
-    recursive: None
-    edge_case: 'False'
-  recombination:
-    breakpoints: 22897:22941
-    regions: 261-22896|BJ.1,22942-29118|CJ.1
-    parent_1:
-      lineage: BJ.1
-      definition: BJ.1
-      clade: 21L
-      clade_lineage: BA.2
-      ...
-```
+|strain               |validate|validate_details|population|recombinant|parents  |breakpoints|edge_case|unique_key               |regions                          |private|diagnostic|genome_length|dataset_name|dataset_tag|cli_version|
+|:--------------------|:-------|:---------------|:---------|:----------|:--------|:----------|:--------|:------------------------|:--------------------------------|:------|:---------|:------------|:-----------|:----------|:----------|
+|XBB.1.16  |pass    |                |XBB.1.16  |XBB        |BJ.1,CJ.1|22897-22941|false    |XBB_BJ.1_CJ.1_22897-22941|261-22896\|BJ.1,22942-29118\|CJ.1|       |NA        |29903        |sars-cov-2  |2023-11-17 |0.1.0      |
+|XBB.1.16.1|pass    |                |XBB.1.16.1|XBB        |BJ.1,CJ.1|22897-22941|false    |XBB_BJ.1_CJ.1_22897-22941|261-22896\|BJ.1,22942-29118\|CJ.1|       |NA        |29903        |sars-cov-2  |2023-11-17 |0.1.0      |
 
 ## Credits
 

@@ -1,4 +1,4 @@
-name: Test
+name: Latest
 
 on:
   push:
@@ -10,9 +10,11 @@ on:
   release:
     types: [published]
 
+  schedule:
+  - cron: '0 0 * * *'
 
 env:
-  tag: "2023-11-17"
+  tag: "latest"
 
 jobs:
 
@@ -20,7 +22,7 @@ jobs:
     uses: ./.github/workflows/build.yaml
 
   # ---------------------------------------------------------------------------
-  test:
+  latest:
 
     needs: build
 
@@ -55,31 +57,21 @@ jobs:
           chmod +x ~/.local/bin/rebar
           rebar --help
 
-      - name: dataset list
-        run: |
-          rebar dataset list
-
       - name: dataset download
         run: |
           rebar dataset download --name sars-cov-2 --tag $tag --output-dir dataset/sars-cov-2/$tag
 
-      - name: example 1
+      - name: validate
         run: |
-          rebar run  --dataset-dir dataset/sars-cov-2/$tag --output-dir output/example1 --populations "AY.4.2*,BA.5.2,XBC.1.6*,XBB.1.5.1,XBL"
-          rebar plot --dataset-dir dataset/sars-cov-2/$tag --output-dir output/example1
+          rebar run  --dataset-dir dataset/sars-cov-2/$tag --output-dir validate --populations "*" --threads 2
+          if [[ $(grep "fail" validate/linelist.tsv) ]]; then exit 1; fi
 
-      - name: example 2
+      - name: plot
         run: |
-          rebar run  --dataset-dir dataset/sars-cov-2/$tag --output-dir output/example2 --alignment data/example2.fasta
-          rebar plot --dataset-dir dataset/sars-cov-2/$tag --output-dir output/example2
+          rebar plot --dataset-dir dataset/sars-cov-2/$tag --output-dir validate --plot-dir validate/plots
 
-      - name: toy1
-        run: |
-          rebar run  --dataset-dir dataset/toy1 --output-dir output/toy1 --populations "*" --mask 0,0 --min-length 1
-          rebar plot --dataset-dir dataset/toy1 --output-dir output/toy1
-
-      - name: upload output
+      - name: upload
         uses: actions/upload-artifact@v3
         with:
-          name: output-${{ matrix.arch }}
-          path: output
+          name: validate-${{ matrix.arch }}
+          path: validate
