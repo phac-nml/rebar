@@ -114,8 +114,8 @@ impl<'seq> Recombination<'seq> {
 pub enum Hypothesis {
     NonRecombinant,
     DesignatedRecombinant,
-    NovelRecursiveRecombinant,
-    NovelNonRecursiveRecombinant,
+    RecursiveRecombinant,
+    NonRecursiveRecombinant,
 }
 
 impl std::fmt::Display for Hypothesis {
@@ -123,8 +123,8 @@ impl std::fmt::Display for Hypothesis {
         let hypothesis = match self {
             Hypothesis::NonRecombinant => "non_recombinant",
             Hypothesis::DesignatedRecombinant => "designated_recombinant",
-            Hypothesis::NovelRecursiveRecombinant => "novel_recursive_recombinant",
-            Hypothesis::NovelNonRecursiveRecombinant => "novel_non_recursive_recombinant",
+            Hypothesis::RecursiveRecombinant => "recursive_recombinant",
+            Hypothesis::NonRecursiveRecombinant => "non_recursive_recombinant",
         };
         write!(f, "{hypothesis}")
     }
@@ -184,7 +184,6 @@ impl std::fmt::Display for Region {
 /// # Arguments
 ///
 ///  * `sequence` | `&'seq Sequence` | Query sequence.
-///  * `best_match` | &SearchResult |
 ///  * `parents` | `&Vec<dataset::SearchResult>` | Any known recombination parents so far.
 ///  * `parent_candidate` |  Option<&SearchResult> |  An unknown recombination parent to evaluate.
 ///  * `reference` |
@@ -193,7 +192,6 @@ impl std::fmt::Display for Region {
 pub fn detect_recombination<'seq>(
     sequence: &'seq Sequence,
     dataset: &Dataset,
-    best_match: &SearchResult,
     parents: &Vec<SearchResult>,
     parent_candidate: Option<&SearchResult>,
     reference: &Sequence,
@@ -482,36 +480,6 @@ pub fn detect_recombination<'seq>(
     debug!(
         "Parsimony Summary:\n{}",
         recombination.pretty_print_parsimony()
-    );
-
-    // Decide on novel vs known recombinant at this point
-    recombination.recombinant = if let Some(recombinant) = &best_match.recombinant {
-        // check if expected parents match observed
-        let observed_parents = &recombination.parents;
-        let expected_parents = dataset.phylogeny.get_parents(recombinant)?;
-        let parents_match =
-            validate::compare_parents(observed_parents, &expected_parents, dataset)?;
-
-        if parents_match {
-            Some(recombinant.to_string())
-        }
-        // use the "-like" nomenclature to indicate this novel recombinant is
-        // a mimic of another known kind?
-        else {
-            //Some(format!("{recombinant}-like"))
-            Some("novel".to_string())
-        }
-    }
-    // otherwise its totally novel
-    else {
-        Some("novel".to_string())
-    };
-
-    recombination.unique_key = format!(
-        "{}_{}_{}",
-        &recombination.recombinant.clone().unwrap(),
-        &recombination.parents.iter().join("_"),
-        &recombination.breakpoints.iter().join("_"),
     );
 
     Ok(recombination)

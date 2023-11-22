@@ -35,9 +35,10 @@ pub fn linelist(
         "private",
         "diagnostic",
         "genome_length",
-        "cli_version",
         "dataset_name",
         "dataset_tag",
+        "cli_version",
+        "cli_args",
     ]
     .into_iter()
     .map(|s| s.to_string())
@@ -117,15 +118,15 @@ pub fn linelist(
         let genome_length = recombination.genome_length.to_string();
         row[table.header_position("genome_length")?] = genome_length;
 
-        // cli version
-        row[table.header_position("cli_version")?] =
-            env!("CARGO_PKG_VERSION").to_string();
-
         // dataset name
         row[table.header_position("dataset_name")?] = dataset.name.to_string();
 
         // dataset tag
         row[table.header_position("dataset_tag")?] = dataset.tag.to_string();
+
+        // cli version
+        row[table.header_position("cli_version")?] =
+            env!("CARGO_PKG_VERSION").to_string();
 
         table.rows.push(row);
     }
