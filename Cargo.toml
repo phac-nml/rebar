@@ -12,7 +12,6 @@ clap = { version = "4.2.7", features = ["derive"] }
 color-eyre = "0.6.2"
 either = "1.9.0"
 env_logger = "0.10.0"
-font-kit = "0.11.0"
 image = "0.24.6"
 indicatif = {version = "0.17.5", features = ["rayon"]}
 indoc = "2.0.4"
@@ -24,6 +23,7 @@ raqote = { version = "0.8.2", default-features = false, features = ["png"]}
 rand = "0.8.5"
 rayon = "1.7.0"
 regex = "1.9.5"
+rust-fontconfig = "0.1.6"
 rustix = "0.38.25"
 rusttype = "0.9.3"
 semver = "1.0.19"
