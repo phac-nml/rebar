@@ -17,13 +17,45 @@
 
 ## Install
 
-Download the [latest release](https://github.com/phac-nml/rebar/releases/download/v0.1.0/rebar-x86_64-unknown-linux-gnu).
+### Direct
 
-  ```bash
-  wget -O rebar https://github.com/phac-nml/rebar/releases/download/v0.1.0/rebar-x86_64-unknown-linux-gnu
+1. Download the [latest release](https://github.com/phac-nml/rebar/releases/download/v0.1.0/rebar-x86_64-unknown-linux-gnu).
 
-  ./rebar --help
-  ```
+    ```bash
+    wget -O rebar https://github.com/phac-nml/rebar/releases/download/v0.1.0/rebar-x86_64-unknown-linux-gnu
+    ```
+
+1. (Optional) Copy to `PATH`.
+
+    ```bash
+    cp rebar /usr/local/bin
+    ```
+
+    > **NOTE**: If you don't copy to `PATH`, then in all following commands replace "`rebar`" with "`./rebar`" (ex `./rebar --help`).
+
+1. Display usage and help.
+
+    ```bash
+    rebar --help
+    ```
+
+    ```text
+    Rebar command-line interface (CLI)
+
+    Usage: rebar [OPTIONS] <COMMAND>
+
+    Commands:
+      dataset   List or download datasets.
+      run       Detect recombination in a dataset population and/or input alignment.
+      plot      Plot recombination from 'run' output.
+      simulate  Simulate recombination.
+      help      Print this message or the help of the given subcommand(s)
+
+    Options:
+      -v, --verbosity <VERBOSITY>  Control output verbosity level [default: info] [possible values: info, warn, debug, error]
+      -h, --help                   Print help
+      -V, --version                Print version
+    ```
 
 ### Conda \*\*Coming Soon!\*\*
 
