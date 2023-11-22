@@ -5,9 +5,14 @@ pub mod text;
 use crate::utils::table::Table;
 use color_eyre::eyre::{eyre, Report, Result};
 use color_eyre::Help;
+use font_kit::family_name::FamilyName;
+use font_kit::handle::Handle;
+use font_kit::properties::{Properties, Weight};
+use font_kit::source::SystemSource;
 use itertools::Itertools;
 use log::debug;
 use raqote::*;
+use std::path::PathBuf;
 
 /// Get the background color (RGBA) of a nucleotide base
 pub fn get_base_rgba(base: &String, ref_base: &String, pal_i: usize) -> [u8; 4] {
@@ -40,12 +45,20 @@ pub fn create(
     // Import Data
     // ------------------------------------------------------------------------
 
-    // find system fonts, TBD!!
-    let font_path =
-        std::path::PathBuf::from("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf");
-    let font_bold_path =
-        std::path::PathBuf::from("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf");
-
+    let font_handle = SystemSource::new()
+        .select_best_match(&[FamilyName::SansSerif], &Properties::new())?;
+    let font_path: PathBuf = match font_handle {
+        Handle::Path { path, font_index } => path,
+        _ => return Err(eyre!("A SansSerif Normal font could not found!")),
+    };
+    let font_bold_handle = SystemSource::new().select_best_match(
+        &[FamilyName::SansSerif],
+        Properties::new().weight(Weight::BOLD),
+    )?;
+    let font_bold_path: PathBuf = match font_bold_handle {
+        Handle::Path { path, font_index } => path,
+        _ => return Err(eyre!("A SansSerif Bold font could not found!")),
+    };
     // the name of the barcodes file will be the unique_key
     let barcodes = Table::read(barcodes_path)?;
     let unique_key = barcodes_path.file_stem().unwrap().to_str().unwrap();
