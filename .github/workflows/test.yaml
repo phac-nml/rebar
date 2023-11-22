@@ -13,6 +13,8 @@ on:
 
 env:
   tag: "2023-11-17"
+  GITHUB_USERNAME: ${{ github.actor }}
+  GITHUB_TOKEN: ${{ github.token }}
 
 jobs:
 
