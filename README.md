@@ -18,17 +18,25 @@
 1. Identify the breakpoint coordinates and parental regions.
 1. Classify sequences as _designated_ or _novel_ recombinant lineages.
 
+![plot_XBB.1.16](images/XBB_BJ.1_CJ.1_22897-22941.png)
+
 ## Install
 
-1. Binary: \*\*Coming Soon!\*\*
+Download the [latest release](https://github.com/phac-nml/rebar/releases).
 
-1. Conda: \*\*Coming Soon!\*\*
+  ```bash
+  wget -O rebar https://github.com/phac-nml/rebar/releases/latest/download/rebar-x86_64-unknown-linux-gnu
 
-1. Compile from source:
+  ./rebar --help
+  ```
 
-    - Clone repository: `git clone https://github.com/phac-nml/rebar.git && cd rebar`
-    - Install the rust compiler: [official](https://doc.rust-lang.org/cargo/getting-started/installation.html) or [conda](https://anaconda.org/conda-forge/rust).
-    - Compile: `cargo build --release --all-features --target x86_64-unknown-linux-gnu`
+### Conda \*\*Coming Soon!\*\*
+
+### Source
+
+1. Clone repository: `git clone https://github.com/phac-nml/rebar.git && cd rebar`
+1. Install the rust compiler: [official](https://doc.rust-lang.org/cargo/getting-started/installation.html) or [conda](https://anaconda.org/conda-forge/rust).
+1. Compile: `cargo build --release --all-features --target x86_64-unknown-linux-gnu`
     - Output binary: `target/x86_64-unknown-linux-gnu/release/rebar`
 
 ## Usage
@@ -101,8 +109,6 @@ rebar run \
 ### Plots
 
 Visualization of substitutions, parental origins, and breakpoints.
-
-![plot_XBB.1.16](images/XBB_BJ.1_CJ.1_22897-22941.png)
 
 ### Table
 
