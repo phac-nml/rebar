@@ -87,6 +87,9 @@ jobs:
 
   # ---------------------------------------------------------------------------
   docker:
+
+    needs: build
+
     runs-on: ubuntu-latest
 
     permissions:
