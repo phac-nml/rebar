@@ -69,6 +69,14 @@ jobs:
         run: |
           cargo build --release --all-features --target ${{ matrix.arch }}
 
+      - name: check
+        run: |
+          ls -l
+          ls -l target
+          ls -l target/${{ matrix.arch }}
+          ls -l target/${{ matrix.arch }}/release
+
+
       # not supported on darwin
       - name: compress with upx
         if: matrix.os == 'ubuntu-latest'
@@ -85,3 +93,4 @@ jobs:
           name: rebar-${{ matrix.arch }}
           path: target/${{ matrix.arch }}/release/rebar
           retention-days: 7
+          if-no-files-found: error
