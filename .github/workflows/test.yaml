@@ -85,4 +85,5 @@ jobs:
         with:
           name: output-${{ matrix.arch }}
           path: output
-          retention-days: 1
+          if-no-files-found: error
+          retention-days: 7
