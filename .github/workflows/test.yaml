@@ -26,19 +26,25 @@ jobs:
 
     needs: build
 
-    runs-on: ubuntu-latest
-
     strategy:
       fail-fast: false
       matrix:
-        arch:
-          #- aarch64-apple-darwin
-          #- aarch64-unknown-linux-gnu
-          #- aarch64-unknown-linux-musl
-          #- x86_64-apple-darwin
-          #- x86_64-pc-windows-gnu
-          - x86_64-unknown-linux-gnu
-          - x86_64-unknown-linux-musl
+        include:
+          # Linux
+          - arch: aarch64-unknown-linux-musl
+            os: ubuntu-latest
+          - arch: x86_64-unknown-linux-musl
+            os: ubuntu-latest
+          # Linux cross-compile to windows
+          - arch: x86_64-pc-windows-gnu
+            os: ubuntu-latest
+          # macOS
+          - arch: aarch64-apple-darwin
+            os: macos-latest
+          - arch: x86_64-apple-darwin
+            os: macos-latest
+
+    runs-on: ${{ matrix.os }}
 
     steps:
       - name: checkout repo
@@ -85,3 +91,4 @@ jobs:
         with:
           name: output-${{ matrix.arch }}
           path: output
+          retention-days: 7

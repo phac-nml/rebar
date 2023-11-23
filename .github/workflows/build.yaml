@@ -84,6 +84,4 @@ jobs:
         with:
           name: rebar-${{ matrix.arch }}
           path: target/${{ matrix.arch }}/release/rebar
-
-      # ---------------------------------------------------------------------------
-      # MacOS Compile
+          retention-days: 7
