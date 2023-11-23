@@ -67,9 +67,9 @@ jobs:
         run: |
           mv target/${{ matrix.arch }}/release/rebar.exe target/${{ matrix.arch }}/release/rebar
 
-      # not supported on darwin
+      # not supported on darwin, possibly also breaks windows exe?
       - name: compress with upx
-        if: matrix.os == 'ubuntu-latest'
+        if: matrix.arch == 'x86_64-unknown-linux-musl'
         uses: crazy-max/ghaction-upx@v3
         with:
           version: v4.1.0
