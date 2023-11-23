@@ -66,12 +66,12 @@ jobs:
           cargo install cross
 
       - name: build (linux cross-compile)
-        if: ${{ matrix.os }} == "ubuntu-latest"
+        if: ${{ matrix.os }} == 'ubuntu-latest'
         run: |
           cross build --release --all-features --target ${{ matrix.arch }}
 
       - name: build (macos)
-        if: ${{ matrix.os }} == "macos-latest"
+        if: ${{ matrix.os }} == 'macos-latest'
         run: |
           cargo build --release --all-features --target ${{ matrix.arch }}
 
