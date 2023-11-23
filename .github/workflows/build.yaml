@@ -29,8 +29,30 @@ jobs:
           - x86_64-pc-windows-gnu
           - x86_64-unknown-linux-gnu
           - x86_64-unknown-linux-musl
+        os:
+          - ubuntu-latest
+          - macos-latest
+        exclude:
+          - os: ubuntu-latest
+            arch: aarch64-apple-darwin
+          - os: ubuntu-latest
+            arch: x86_64-apple-darwin
+          - os: macos-latest
+            arch: aarch64-unknown-linux-gnu
+          - os: macos-latest
+            arch: aarch64-unknown-linux-musl
+          - os: macos-latest
+            arch: x86_64-pc-windows-gnu
+          - os: macos-latest
+            arch: x86_64-unknown-linux-gnu
+          - os: maos-latest
+            arch: x86_64-unknown-linux-musl
 
     steps:
+
+      # ---------------------------------------------------------------------------
+      # Linux Cross-Compile
+
       - name: checkout repo
         uses: actions/checkout@v3
 
@@ -43,9 +65,15 @@ jobs:
         run: |
           cargo install cross
 
-      - name: build
+      - name: build (linux cross-compile)
+        if: $ {{ matrix.os }} == "ubuntu-latest"
         run: |
           cross build --release --all-features --target ${{ matrix.arch }}
+
+      - name: build (macos)
+        if: $ {{ matrix.os }} == "macos-latest"
+        run: |
+          cargo build --release --all-features --target ${{ matrix.arch }}
 
       - name: compress with upx
         uses: crazy-max/ghaction-upx@v3
@@ -60,3 +88,6 @@ jobs:
         with:
           name: rebar-${{ matrix.arch }}
           path: target/${{ matrix.arch }}/release/rebar
+
+      # ---------------------------------------------------------------------------
+      # MacOS Compile
