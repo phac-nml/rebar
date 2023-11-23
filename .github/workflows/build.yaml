@@ -84,6 +84,6 @@ jobs:
         uses: actions/upload-artifact@v3
         with:
           name: rebar-${{ matrix.arch }}
-          path: target/${{ matrix.arch }}/rebar
+          path: target/${{ matrix.arch }}/release/rebar
           retention-days: 7
           if-no-files-found: error
