@@ -12,7 +12,6 @@ on:
 
 
 env:
-  tag: "2023-11-17"
   GITHUB_USERNAME: ${{ github.actor }}
   GITHUB_TOKEN: ${{ github.token }}
 
@@ -66,17 +65,17 @@ jobs:
 
       - name: dataset download
         run: |
-          ./${{ matrix.binary }} dataset download --name sars-cov-2 --tag $tag --output-dir dataset/sars-cov-2/$tag
+          ./${{ matrix.binary }} dataset download --name sars-cov-2 --tag 2023-11-17 --output-dir dataset/sars-cov-2/2023-11-17
 
       - name: example 1
         run: |
-          ./${{ matrix.binary }} run  --dataset-dir dataset/sars-cov-2/$tag --output-dir output/example1 --populations "AY.4.2*,BA.5.2,XBC.1.6*,XBB.1.5.1,XBL"
-          ./${{ matrix.binary }} plot --dataset-dir dataset/sars-cov-2/$tag --output-dir output/example1
+          ./${{ matrix.binary }} run  --dataset-dir dataset/sars-cov-2/2023-11-17 --output-dir output/example1 --populations "AY.4.2*,BA.5.2,XBC.1.6*,XBB.1.5.1,XBL"
+          ./${{ matrix.binary }} plot --dataset-dir dataset/sars-cov-2/2023-11-17 --output-dir output/example1
 
       - name: example 2
         run: |
-          ./${{ matrix.binary }} run  --dataset-dir dataset/sars-cov-2/$tag --output-dir output/example2 --alignment data/example2.fasta
-          ./${{ matrix.binary }} plot --dataset-dir dataset/sars-cov-2/$tag --output-dir output/example2
+          ./${{ matrix.binary }} run  --dataset-dir dataset/sars-cov-2/2023-11-17 --output-dir output/example2 --alignment data/example2.fasta
+          ./${{ matrix.binary }} plot --dataset-dir dataset/sars-cov-2/2023-11-17 --output-dir output/example2
 
       - name: toy1
         run: |
