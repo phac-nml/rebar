@@ -25,6 +25,7 @@ jobs:
   test:
 
     needs: build
+    if: ${{ always() }}
 
     strategy:
       fail-fast: false
@@ -33,7 +34,7 @@ jobs:
           - arch: x86_64-unknown-linux-musl
             os: ubuntu-latest
           - arch: x86_64-pc-windows-gnu
-            os: ubuntu-latest
+            os: windows-latest
           - arch: x86_64-apple-darwin
             os: macos-latest
 
