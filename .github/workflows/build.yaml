@@ -104,13 +104,13 @@ jobs:
     steps:
 
       - name: checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v3
 
       - name: download binary from build
         uses: actions/download-artifact@v3
         with:
           name: rebar-x86_64-unknown-linux-musl
-          path: target/${{ matrix.arch }}/release/
+          path: target/x86_64-unknown-linux-musl/release/
 
       # - name: login
       #   uses: docker/login-action@v3
