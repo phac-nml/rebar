@@ -28,12 +28,15 @@ jobs:
           # Linux
           - arch: x86_64-unknown-linux-musl
             os: ubuntu-latest
+            binary: rebar
           # Linux cross-compile to windows
           - arch: x86_64-pc-windows-gnu
             os: ubuntu-latest
+            binary: rebar.exe
           # macOS
           - arch: x86_64-apple-darwin
             os: macos-latest
+            binary: rebar
 
     runs-on: ${{ matrix.os }}
 
@@ -67,26 +70,21 @@ jobs:
         run: |
           cargo build --release --all-features --target ${{ matrix.arch }}
 
-      - name: strip exe suffix (windows)
-        if: matrix.arch == 'x86_64-pc-windows-gnu'
-        run: |
-          mv target/${{ matrix.arch }}/release/rebar.exe target/${{ matrix.arch }}/release/rebar
-
-      # not supported on darwin, possibly also breaks windows exe?
+      # not supported on darwin
       - name: compress with upx
-        if: matrix.arch == 'x86_64-unknown-linux-musl'
+        if: matrix.os == 'ubuntu-latest'
         uses: crazy-max/ghaction-upx@v3
         with:
           version: v4.1.0
           files: |
-            target/${{ matrix.arch }}/release/rebar
+            target/${{ matrix.arch }}/release/${{ matrix.binary }}
           args: --best --lzma
 
       - name: upload binary
         uses: actions/upload-artifact@v3
         with:
           name: rebar-${{ matrix.arch }}
-          path: target/${{ matrix.arch }}/release/rebar
+          path: target/${{ matrix.arch }}/release/${{ matrix.binary }}
           retention-days: 7
           if-no-files-found: error
 
