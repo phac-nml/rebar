@@ -30,6 +30,10 @@ jobs:
         with:
           toolchain: 1.74.0
 
+      # add default target
+      - name: lint
+        run: rustup target add x86_64-unknown-linux-musl
+
       - name: setup linters
         run: |
           pip install pre-commit==2.17.0
