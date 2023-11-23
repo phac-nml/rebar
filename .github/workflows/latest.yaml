@@ -14,7 +14,6 @@ on:
   - cron: '0 0 * * *'
 
 env:
-  tag: "latest"
   GITHUB_USERNAME: ${{ github.actor }}
   GITHUB_TOKEN: ${{ github.token }}
 
@@ -67,16 +66,16 @@ jobs:
 
       - name: dataset download
         run: |
-          rebar dataset download --name sars-cov-2 --tag $tag --output-dir dataset/sars-cov-2/$tag
+          rebar dataset download --name sars-cov-2 --tag $latest --output-dir dataset/sars-cov-2/$latest
 
       - name: validate
         run: |
-          rebar run  --dataset-dir dataset/sars-cov-2/$tag --output-dir validate --populations "*" --threads 2
+          rebar run  --dataset-dir dataset/sars-cov-2/$latest --output-dir validate --populations "*" --threads 2
           if [[ $(grep "fail" validate/linelist.tsv) ]]; then exit 1; fi
 
       - name: plot
         run: |
-          rebar plot --dataset-dir dataset/sars-cov-2/$tag --output-dir validate --plot-dir validate/plots
+          rebar plot --dataset-dir dataset/sars-cov-2/$latest --output-dir validate --plot-dir validate/plots
 
       - name: upload
         uses: actions/upload-artifact@v3
