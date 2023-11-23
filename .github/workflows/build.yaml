@@ -21,22 +21,18 @@ jobs:
       matrix:
         include:
           # Linux
-          - os: ubuntu-latest
-            arch: aarch64-unknown-linux-gnu
-          - os: ubuntu-latest
-            arch: aarch64-unknown-linux-musl
-          - os: ubuntu-latest
-            arch: x86_64-unknown-linux-gnu
-          - os: ubuntu-latest
-            arch: x86_64-unknown-linux-musl
+          - arch: aarch64-unknown-linux-musl
+            os: ubuntu-latest
+          - arch: x86_64-unknown-linux-musl
+            os: ubuntu-latest
           # Linux cross-compile to windows
-          - os: ubuntu-latest
-            arch: x86_64-pc-windows-gnu
-          # MacOS
-          - os: macos-latest
-            arch: aarch64-apple-darwin
-          - os: macos-latest
-            arch: x86_64-apple-darwin
+          - arch: x86_64-pc-windows-gnu
+            os: ubuntu-latest
+          # macOS
+          - arch: aarch64-apple-darwin
+            os: macos-latest
+          - arch: x86_64-apple-darwin
+            os: macos-latest
 
     runs-on: ${{ matrix.os }}
 
@@ -54,10 +50,16 @@ jobs:
           toolchain: 1.74.0
 
       - name: install cross
+        if: matrix.os == 'ubuntu-latest'
         run: |
           cargo install cross
 
-      - name: build (linux cross-compile)
+      - name: install macOS target
+        if: matrix.os == 'macos-latest'
+        run: |
+          rustup target add ${{ matrix.arch }}
+
+      - name: build (cross)
         if: matrix.os == 'ubuntu-latest'
         run: |
           cross build --release --all-features --target ${{ matrix.arch }}
@@ -67,7 +69,9 @@ jobs:
         run: |
           cargo build --release --all-features --target ${{ matrix.arch }}
 
+      # not supported on darwin
       - name: compress with upx
+        if: matrix.os == 'ubuntu-latest'
         uses: crazy-max/ghaction-upx@v3
         with:
           version: v4.1.0
