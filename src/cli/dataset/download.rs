@@ -13,14 +13,8 @@ pub struct Args {
     /// Dataset tag.
     ///
     /// can be 'latest' or a date (YYYY-MM-DD)
-    #[clap(short = 't', long)]
-    #[clap(default_value_t=Tag::default())]
+    #[clap(short = 't', long, required = true)]
     pub tag: Tag,
-
-    /// Calculate diagnostic mutations (slow).
-    #[clap(short = 'd', long)]
-    #[clap(default_value_t = false)]
-    pub diagnostic: bool,
 
     /// Output directory.
     ///

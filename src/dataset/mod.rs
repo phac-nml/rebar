@@ -30,7 +30,6 @@ pub struct Dataset {
     pub reference: Sequence,
     pub populations: BTreeMap<String, Sequence>,
     pub mutations: BTreeMap<Substitution, Vec<String>>,
-    pub diagnostic: BTreeMap<Substitution, String>,
     pub phylogeny: Phylogeny,
     pub edge_cases: Vec<run::Args>,
 }
@@ -55,7 +54,6 @@ impl Dataset {
             reference: Sequence::new(),
             populations: BTreeMap::new(),
             mutations: BTreeMap::new(),
-            diagnostic: BTreeMap::new(),
             phylogeny: Phylogeny::new(),
             edge_cases: Vec::new(),
         }
@@ -260,34 +258,8 @@ impl Dataset {
             .collect_vec();
 
         // --------------------------------------------------------------------
-        // Diagnostic Mutations
-
-        // todo!()
-        // check if any diagnostic mutations are present
-        // and whether these populations are in the top_populations (?)
-        // todo!()
-        //  whether there are cases where the true population
-        // does not appear in the top_populations
-
-        // result.diagnostic = self
-        //     .diagnostic
-        //     .iter()
-        //     .filter(|(sub, pop)| {
-        //         sequence.substitutions.contains(sub)
-        //             && result.top_populations.contains(pop)
-        //     })
-        //     .map(|(_sub, pop)| pop.to_owned())
-        //     .unique()
-        //     .collect::<Vec<_>>();
-
-        //todo!() decide how this will shape/affect top populations
-
-        // --------------------------------------------------------------------
         // Consensus Population
-
-        // todo!() think about how mandatory a phylogeny is
         // summarize top populations by common ancestor
-        // if we found populations with diagnostic mutations, prioritize those
         let consensus_population = if self.phylogeny.is_empty() {
             //result.top_populations.iter().join("|")
             // just take first?
@@ -384,7 +356,6 @@ pub struct SearchResult {
     pub sequence_id: String,
     pub consensus_population: String,
     pub top_populations: Vec<String>,
-    pub diagnostic: Vec<String>,
     pub substitutions: Vec<Substitution>,
     pub support: BTreeMap<String, Vec<Substitution>>,
     pub private: Vec<Substitution>,
@@ -400,7 +371,6 @@ impl SearchResult {
             sequence_id: sequence.id.clone(),
             consensus_population: String::new(),
             top_populations: Vec::new(),
-            diagnostic: Vec::new(),
             support: BTreeMap::new(),
             private: Vec::new(),
             conflict_ref: BTreeMap::new(),
@@ -469,7 +439,6 @@ impl SearchResult {
             "sequence_id: {}
             consensus_population: {}
             top_populations: {}
-            diagnostic: {}
             recombinant: {}
             substitutions: {}
             score:\n  {}{display_suffix}
@@ -480,7 +449,6 @@ impl SearchResult {
             self.sequence_id,
             self.consensus_population,
             self.top_populations.join(", "),
-            self.diagnostic.join(", "),
             self.recombinant.clone().unwrap_or("None".to_string()),
             self.substitutions.iter().join(", "),
             score_order.join("\n  "),

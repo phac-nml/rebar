@@ -65,25 +65,6 @@ pub fn dataset(dataset_dir: &Path, mask: &Vec<usize>) -> Result<Dataset, Report>
         Phylogeny::new()
     };
 
-    // Diagnostic Mutations
-
-    // let diagnostic_path = dataset_dir.join("diagnostic_mutations.tsv");
-    // dataset.diagnostic = BTreeMap::new();
-
-    // if diagnostic_path.exists() {
-    //     let diagnostic_table = Table::read(&diagnostic_path)?;
-    //     let mut_col_i = diagnostic_table.header_position("mutation")?;
-    //     let pop_col_i = diagnostic_table.header_position("population")?;
-
-    //     for row in diagnostic_table.rows {
-    //         let mutation = Substitution::from_str(&row[mut_col_i])?;
-    //         let population = row[pop_col_i].clone();
-    //         dataset.diagnostic.insert(mutation, population);
-    //     }
-    // } else {
-    //     warn!("No diagnostic mutations were found.");
-    // }
-
     // --------------------------------------------------------------------
     // Done
 

@@ -3,7 +3,7 @@ use crate::dataset;
 use crate::dataset::attributes::{check_compatibility, Name, Summary};
 use crate::{utils, utils::remote_file::RemoteFile};
 //use crate::sequence::Substitution;
-use color_eyre::eyre::{eyre, Report, Result};
+use color_eyre::eyre::{Report, Result};
 //use indicatif::ProgressBar;
 use itertools::Itertools;
 use log::{info, warn};
@@ -124,39 +124,6 @@ pub async fn dataset(args: &mut cli::dataset::download::Args) -> Result<(), Repo
         &mask,
     )?;
     dataset::write_mutations(&mutations, &output_path)?;
-
-    // --------------------------------------------------------------------
-    // Identify Diagnostic Mutations
-    //
-    // This is painfully slow, need to rethink!
-
-    if args.diagnostic {
-        // todo!()
-        return Err(eyre!(
-            "Diagnostic mutations is not efficiently implemented yet."
-        ));
-
-        // let output_path = args.output_dir.join("diagnostic_mutations.tsv");
-        // info!("Identifying diagnostic mutations: {output_path:?}");
-
-        // let bar = ProgressBar::new(mutations.len() as u64);
-
-        // let diagnostic: BTreeMap<Substitution, Vec<String>> = mutations
-        //     .into_iter()
-        //     .filter_map(|(sub, pops)| {
-        //         bar.inc(1);
-        //         if pops.len() == 1 {
-        //             Some((sub, pops))
-        //         } else {
-        //             let mrca = phylogeny.get_common_ancestor(&pops).unwrap();
-        //             if pops.contains(&mrca){ Some((sub, pops)) }
-        //             else { None }
-        //         }
-        //     })
-        //     .collect();
-
-        // dataset::write_mutations(&diagnostic, &output_path)?;
-    }
 
     // --------------------------------------------------------------------
     // Create Edge Cases
