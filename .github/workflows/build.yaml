@@ -110,12 +110,12 @@ jobs:
           name: rebar-x86_64-unknown-linux-musl
           path: target/x86_64-unknown-linux-musl/release/
 
-      # - name: login
-      #   uses: docker/login-action@v3
-      #   with:
-      #     registry: ${{ env.REGISTRY }}
-      #     username: ${{ github.actor }}
-      #     password: ${{ github.token }}
+      - name: registry login
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: metadata
         id: meta
@@ -132,4 +132,4 @@ jobs:
 
       - name: test
         run: |
-          docker run --rm ${{ github.repository }}:${{ github.ref }} rebar --help
+          docker run --rm ${{ github.repository }}:$DOCKER_METADATA_OUTPUT_VERSION rebar --help
