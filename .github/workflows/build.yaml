@@ -14,7 +14,6 @@ on:
 env:
   REGISTRY: ghcr.io
   IMAGE_NAME: ${{ github.repository }}
-  TEST_TAG: ${{ github.repository }}:test
 
 jobs:
 
@@ -92,6 +91,7 @@ jobs:
   docker:
 
     needs: build
+    if: ${{ always() }}
 
     runs-on: ubuntu-latest
 
@@ -132,4 +132,4 @@ jobs:
 
       - name: test
         run: |
-          docker run --rm ${{ env.TEST_TAG }} rebar --help
+          docker run --rm ${{ github.repository }}:${{ github.ref }} rebar --help
