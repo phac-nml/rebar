@@ -80,6 +80,10 @@ jobs:
             target/${{ matrix.arch }}/release/rebar
           args: --best --lzma
 
+      - name: help
+        run: |
+          target/${{ matrix.arch }}/release/rebar --help
+
       - name: upload binary
         uses: actions/upload-artifact@v3
         with:
