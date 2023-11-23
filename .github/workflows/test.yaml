@@ -51,34 +51,34 @@ jobs:
           path: target/${{ matrix.arch }}/release
 
       - name: install
+        if:
         run: |
-          mkdir -p /home/runner/.local/bin
-          mv target/${{ matrix.arch }}/release/rebar ~/.local/bin
-          chmod +x ~/.local/bin/rebar
-          rebar --help
+          chmod +x target/${{ matrix.arch }}/release/rebar
+          cp target/x86_64-unknown-linux-musl/release/rebar .
+          ./rebar --help
 
       - name: dataset list
         run: |
-          rebar dataset list
+          ./rebar dataset list
 
       - name: dataset download
         run: |
-          rebar dataset download --name sars-cov-2 --tag $tag --output-dir dataset/sars-cov-2/$tag
+          ./rebar dataset download --name sars-cov-2 --tag $tag --output-dir dataset/sars-cov-2/$tag
 
       - name: example 1
         run: |
-          rebar run  --dataset-dir dataset/sars-cov-2/$tag --output-dir output/example1 --populations "AY.4.2*,BA.5.2,XBC.1.6*,XBB.1.5.1,XBL"
-          rebar plot --dataset-dir dataset/sars-cov-2/$tag --output-dir output/example1
+          ./rebar run  --dataset-dir dataset/sars-cov-2/$tag --output-dir output/example1 --populations "AY.4.2*,BA.5.2,XBC.1.6*,XBB.1.5.1,XBL"
+          ./rebar plot --dataset-dir dataset/sars-cov-2/$tag --output-dir output/example1
 
       - name: example 2
         run: |
-          rebar run  --dataset-dir dataset/sars-cov-2/$tag --output-dir output/example2 --alignment data/example2.fasta
-          rebar plot --dataset-dir dataset/sars-cov-2/$tag --output-dir output/example2
+          ./rebar run  --dataset-dir dataset/sars-cov-2/$tag --output-dir output/example2 --alignment data/example2.fasta
+          ./rebar plot --dataset-dir dataset/sars-cov-2/$tag --output-dir output/example2
 
       - name: toy1
         run: |
-          rebar run  --dataset-dir dataset/toy1 --output-dir output/toy1 --populations "*" --mask 0,0 --min-length 1
-          rebar plot --dataset-dir dataset/toy1 --output-dir output/toy1
+          ./rebar run  --dataset-dir dataset/toy1 --output-dir output/toy1 --populations "*" --mask 0,0 --min-length 1
+          ./rebar plot --dataset-dir dataset/toy1 --output-dir output/toy1
 
       - name: upload output
         uses: actions/upload-artifact@v3
