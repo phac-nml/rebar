@@ -14,7 +14,7 @@ on:
 env:
   GITHUB_USERNAME: ${{ github.actor }}
   GITHUB_TOKEN: ${{ github.token }}
-  DOCKER_IMAGE: "ghcr.io/${{ github.repository }}:${{ github.refname }}"
+  DOCKER_IMAGE: "ghcr.io/${{ github.repository }}:${{ github.ref_name }}"
 
 jobs:
 
@@ -34,19 +34,15 @@ jobs:
           # linux
           - arch: x86_64-unknown-linux-musl
             os: ubuntu-latest
-            binary: rebar
           # windows
           - arch: x86_64-pc-windows-gnu
             os: windows-latest
-            binary: rebar.exe
           # macOS
           - arch: x86_64-apple-darwin
             os: macos-latest
-            binary: rebar
           # docker
           - arch: docker
             os: ubuntu-latest
-            binary: rebar
 
     runs-on: ${{ matrix.os }}
 
@@ -54,19 +50,22 @@ jobs:
       - name: checkout repo
         uses: actions/checkout@v3
 
-      # How we execute the program depends on whether we're testing direct or the docker image
-      - name: set run command
-        run: >
-          if [[ ${{ matrix.arch }} == "docker" ]]; then
-            RUN_CMD="docker run $DOCKER_IMAGE"
-          else
-            RUN_CMD="./${{ matrix.binary }}"
-          fi;
-          echo RUN_CMD="$RUN_CMD" >> $GITHUB_ENV;
+      # ------------------------------------------------------------------------
+      # How we execute the program depends on the architecture
+      - name: set run command (windows)
+        if: matrix.os == 'windows-latest'
+        run: echo RUN_CMD="./rebar.exe" >> $GITHUB_ENV
+
+      - name: set run command (docker)
+        if: matrix.arch == 'docker'
+        run: echo RUN_CMD="docker run $DOCKER_IMAGE" >> $GITHUB_ENV
+
+      - name: set run command (linux, mac)
+        if: matrix.os == 'ubuntu-latest' || matrix.os == 'macos-latest'
+        run: echo RUN_CMD="./rebar" >> $GITHUB_ENV
 
       - name: check run command
-        run: |
-          echo $RUN_CMD
+        run: echo $RUN_CMD
 
       # - name: download build output
       #   uses: actions/download-artifact@v3
