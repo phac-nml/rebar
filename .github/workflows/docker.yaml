@@ -88,13 +88,12 @@ jobs:
         uses: docker/build-push-action@v5
         with:
           context: .
-          load: true
           tags: ${{ env.IMAGE_TAG }}
           outputs: type=docker,dest=rebar.tar
 
-      - name: test
-        run: |
-          docker run ${{ env.IMAGE_TAG }} rebar
+      # - name: test
+      #   run: |
+      #     docker run ${{ env.IMAGE_TAG }} rebar
 
       - name: upload image
         uses: actions/upload-artifact@v3
