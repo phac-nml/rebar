@@ -92,7 +92,7 @@ jobs:
 
       - name: help
         run: |
-          docker run ${{ env.IMAGE_NAME }}:$DOCKER_METADATA_OUTPUT_VERSION rebar --help
+          docker run ${{ steps.meta.outputs.tags }} rebar --help
 
       - name: upload image artifact
         uses: actions/upload-artifact@v3
