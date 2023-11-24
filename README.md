@@ -19,52 +19,24 @@
 
 ### Direct
 
-1. Download the [latest release](https://github.com/phac-nml/rebar/releases/download/v0.1.1/rebar-x86_64-unknown-linux-musl).
+Download the [latest release](https://github.com/phac-nml/rebar/releases/download/v0.1.1/rebar-x86_64-unknown-linux-musl):
 
-    ```bash
-    wget -O rebar https://github.com/phac-nml/rebar/releases/download/v0.1.1/rebar-x86_64-unknown-linux-musl
-    ```
+```bash
+wget -O rebar https://github.com/phac-nml/rebar/releases/download/v0.1.1/rebar-x86_64-unknown-linux-musl
+./rebar --help
+```
 
-1. (Optional) Copy to `PATH`.
+### Docker
 
-    ```bash
-    cp rebar /usr/local/bin
-    ```
-
-    > **NOTE**: If you don't copy to `PATH`, then in all following commands replace "`rebar`" with "`./rebar`" (ex `./rebar --help`).
-
-1. Display usage and help.
-
-    ```bash
-    rebar --help
-    ```
-
-    ```text
-    Rebar command-line interface (CLI)
-
-    Usage: rebar [OPTIONS] <COMMAND>
-
-    Commands:
-      dataset   List or download datasets.
-      run       Detect recombination in a dataset population and/or input alignment.
-      plot      Plot recombination from 'run' output.
-      simulate  Simulate recombination.
-      help      Print this message or the help of the given subcommand(s)
-
-    Options:
-      -v, --verbosity <VERBOSITY>  Control output verbosity level [default: info] [possible values: info, warn, debug, error]
-      -h, --help                   Print help
-      -V, --version                Print version
-    ```
+```bash
+docker run ghcr.io/phac-nml/rebar:latest rebar --help
+```
 
 ### Conda \*\*Coming Soon!\*\*
 
 ### Source
 
-1. Clone repository: `git clone https://github.com/phac-nml/rebar.git && cd rebar`
-1. Install the rust compiler: [official](https://doc.rust-lang.org/cargo/getting-started/installation.html) or [conda](https://anaconda.org/conda-forge/rust).
-1. Compile: `cargo build --release --all-features --target x86_64-unknown-linux-gnu`
-    - Output binary: `target/x86_64-unknown-linux-gnu/release/rebar`
+Please see the [compilation](docs/comilation.md) documentation.
 
 ## Usage
 
