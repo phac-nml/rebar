@@ -86,7 +86,7 @@ jobs:
   # ---------------------------------------------------------------------------
   docker:
 
-    needs: build
+    needs: compile
     if: ${{ always() }}
 
     strategy:
