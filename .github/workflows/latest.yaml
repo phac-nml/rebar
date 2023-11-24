@@ -31,19 +31,15 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          # Linux
-          - arch: aarch64-unknown-linux-musl
-            os: ubuntu-latest
           - arch: x86_64-unknown-linux-musl
             os: ubuntu-latest
-          # Linux cross-compile to windows
+            binary: rebar
           - arch: x86_64-pc-windows-gnu
-            os: ubuntu-latest
-          # macOS
-          - arch: aarch64-apple-darwin
-            os: macos-latest
+            os: windows-latest
+            binary: rebar.exe
           - arch: x86_64-apple-darwin
             os: macos-latest
+            binary: rebar
 
     runs-on: ${{ matrix.os }}
 
@@ -59,27 +55,27 @@ jobs:
 
       - name: install
         run: |
-          mkdir -p /home/runner/.local/bin
-          mv target/${{ matrix.arch }}/release/rebar ~/.local/bin
-          chmod +x ~/.local/bin/rebar
-          rebar --help
+          chmod +x target/${{ matrix.arch }}/release/${{ matrix.binary }}
+          cp target/${{ matrix.arch }}/release/${{ matrix.binary }} .
+          ./${{ matrix.binary }} --help
 
       - name: dataset download
         run: |
-          rebar dataset download --name sars-cov-2 --tag $latest --output-dir dataset/sars-cov-2/$latest
+          ./${{ matrix.binary }} dataset download --name sars-cov-2 --tag latest --output-dir dataset/sars-cov-2/latest
 
       - name: validate
         run: |
-          rebar run  --dataset-dir dataset/sars-cov-2/$latest --output-dir validate --populations "*" --threads 2
+          ./${{ matrix.binary }} run  --dataset-dir dataset/sars-cov-2/latest --output-dir validate --populations "*" --threads 2
           if [[ $(grep "fail" validate/linelist.tsv) ]]; then exit 1; fi
 
       - name: plot
         run: |
-          rebar plot --dataset-dir dataset/sars-cov-2/$latest --output-dir validate --plot-dir validate/plots
+          ./${{ matrix.binary }} plot --dataset-dir dataset/sars-cov-2/latest --output-dir validate --plot-dir validate/plots
 
       - name: upload
         uses: actions/upload-artifact@v3
         with:
           name: validate-${{ matrix.arch }}
           path: validate
+          if-no-files-found: error
           retention-days: 7

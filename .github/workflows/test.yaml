@@ -53,7 +53,6 @@ jobs:
           path: target/${{ matrix.arch }}/release
 
       - name: install
-        if:
         run: |
           chmod +x target/${{ matrix.arch }}/release/${{ matrix.binary }}
           cp target/${{ matrix.arch }}/release/${{ matrix.binary }} .
