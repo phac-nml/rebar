@@ -10,6 +10,16 @@ on:
   release:
     types: [published]
   workflow_call:
+    inputs:
+      arch:
+        required: true
+        type: string
+      os:
+        required: true
+        type: string
+      binary:
+        required: true
+        type: string
 
 env:
   REGISTRY: ghcr.io
@@ -22,22 +32,8 @@ jobs:
 
     strategy:
       fail-fast: false
-      matrix:
-        include:
-          # Linux
-          - arch: x86_64-unknown-linux-musl
-            os: ubuntu-latest
-            binary: rebar
-          # Linux cross-compile to windows
-          - arch: x86_64-pc-windows-gnu
-            os: ubuntu-latest
-            binary: rebar.exe
-          # macOS
-          - arch: x86_64-apple-darwin
-            os: macos-latest
-            binary: rebar
 
-    runs-on: ${{ matrix.os }}
+    runs-on: ${{ inputs.os }}
 
     steps:
 
@@ -50,39 +46,39 @@ jobs:
           toolchain: 1.74.0
 
       - name: install cross
-        if: matrix.os == 'ubuntu-latest'
+        if: inputs.os == 'ubuntu-latest'
         run: |
           cargo install cross
 
       - name: install macOS target
-        if: matrix.os == 'macos-latest'
+        if: inputs.os == 'macos-latest'
         run: |
-          rustup target add ${{ matrix.arch }}
+          rustup target add ${{ inputs.arch }}
 
       - name: build (cross)
-        if: matrix.os == 'ubuntu-latest'
+        if: inputs.os == 'ubuntu-latest'
         run: |
-          cross build --release --all-features --target ${{ matrix.arch }}
+          cross build --release --all-features --target ${{ inputs.arch }}
 
       - name: build (macos)
-        if: matrix.os == 'macos-latest'
+        if: inputs.os == 'macos-latest'
         run: |
-          cargo build --release --all-features --target ${{ matrix.arch }}
+          cargo build --release --all-features --target ${{ inputs.arch }}
 
       # not supported on darwin
       - name: compress with upx
-        if: matrix.os == 'ubuntu-latest'
+        if: inputs.os == 'ubuntu-latest'
         uses: crazy-max/ghaction-upx@v3
         with:
           version: v4.1.0
           files: |
-            target/${{ matrix.arch }}/release/${{ matrix.binary }}
+            target/${{ inputs.arch }}/release/${{ inputs.binary }}
           args: --best --lzma
 
       - name: upload binary
         uses: actions/upload-artifact@v3
         with:
-          name: rebar-${{ matrix.arch }}
-          path: target/${{ matrix.arch }}/release/${{ matrix.binary }}
+          name: rebar-${{ inputs.arch }}
+          path: target/${{ inputs.arch }}/release/${{ inputs.binary }}
           retention-days: 7
           if-no-files-found: error
