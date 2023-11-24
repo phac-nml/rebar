@@ -63,6 +63,10 @@ jobs:
           name: rebar-${{ matrix.arch }}
           path: target/${{ matrix.arch }}/release/
 
+      - name: update binary permission
+        run: |
+          chmod +x target/${{ matrix.arch }}/release/${{ matrix.binary }}
+
       - name: registry login
         uses: docker/login-action@v3
         with:
@@ -88,17 +92,9 @@ jobs:
         uses: docker/build-push-action@v5
         with:
           context: .
+          load: true
           tags: ${{ env.IMAGE_TAG }}
-          outputs: type=docker,dest=rebar.tar
 
-      # - name: test
-      #   run: |
-      #     docker run ${{ env.IMAGE_TAG }} rebar
-
-      - name: upload image
-        uses: actions/upload-artifact@v3
-        with:
-          name: rebar-docker
-          path: rebar.tar
-          retention-days: 7
-          if-no-files-found: error
+      - name: test
+        run: |
+          docker run ${{ env.IMAGE_TAG }} rebar --help
