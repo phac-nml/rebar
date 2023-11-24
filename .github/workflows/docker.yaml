@@ -14,6 +14,7 @@ on:
 env:
   REGISTRY: ghcr.io
   IMAGE_NAME: ${{ github.repository }}
+  TEST_TAG: phac-nml/rebar:font
 
 jobs:
 
@@ -47,9 +48,14 @@ jobs:
       packages: write
 
     steps:
-
       - name: checkout
         uses: actions/checkout@v3
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
 
       - name: download binary from build
         uses: actions/download-artifact@v3
@@ -70,14 +76,21 @@ jobs:
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
 
+      # - name: build
+      #   uses: docker/build-push-action@v5
+      #   with:
+      #     context: .
+      #     load: true
+      #     tags: ${{ steps.meta.outputs.tags }}
+      #     labels: ${{ steps.meta.outputs.labels }}
+
       - name: build
         uses: docker/build-push-action@v5
         with:
           context: .
           load: true
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
+          tags: ${{ env.TEST_TAG }}
 
       - name: test
         run: |
-          docker run --rm ${{ github.repository }}:$DOCKER_METADATA_OUTPUT_VERSION rebar --help
+          docker run --rm ${{ env.TEST_TAG }}
