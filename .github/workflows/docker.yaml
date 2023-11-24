@@ -14,7 +14,7 @@ on:
 env:
   REGISTRY: ghcr.io
   IMAGE_NAME: ${{ github.repository }}
-  TEST_TAG: phac-nml/rebar:font
+  IMAGE_TAG: ${{ github.repository }}:${{ github.ref_name }}
 
 jobs:
 
@@ -89,8 +89,17 @@ jobs:
         with:
           context: .
           load: true
-          tags: ${{ env.TEST_TAG }}
+          tags: ${{ env.IMAGE_TAG }}
+          outputs: type=docker,dest=rebar.tar
 
       - name: test
         run: |
-          docker run --rm ${{ env.TEST_TAG }} rebar --help
+          docker run ${{ env.IMAGE_TAG }} rebar
+
+      - name: upload image
+        uses: actions/upload-artifact@v3
+        with:
+          name: rebar-docker
+          path: rebar.tar
+          retention-days: 7
+          if-no-files-found: error
