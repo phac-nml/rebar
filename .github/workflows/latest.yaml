@@ -16,6 +16,7 @@ on:
 env:
   GITHUB_USERNAME: ${{ github.actor }}
   GITHUB_TOKEN: ${{ github.token }}
+  RUN_CMD: "./rebar"
 
 jobs:
 
@@ -67,20 +68,20 @@ jobs:
         run: |
           chmod +x target/${{ matrix.arch }}/release/${{ matrix.binary }}
           cp target/${{ matrix.arch }}/release/${{ matrix.binary }} .
-          ./${{ matrix.binary }} --help
+          ${{ env.RUN_CMD }} --help
 
       - name: dataset download
         run: |
-          ./${{ matrix.binary }} dataset download --name sars-cov-2 --tag latest --output-dir dataset/sars-cov-2/latest
+          ${{ env.RUN_CMD }} dataset download --name sars-cov-2 --tag latest --output-dir dataset/sars-cov-2/latest
 
       - name: validate
         run: |
-          ./${{ matrix.binary }} run  --dataset-dir dataset/sars-cov-2/latest --output-dir validate --populations "*" --threads 2
+          ${{ env.RUN_CMD }} run  --dataset-dir dataset/sars-cov-2/latest --output-dir validate --populations "*" --threads 2
           if [[ $(grep "fail" validate/linelist.tsv) ]]; then exit 1; fi
 
       - name: plot
         run: |
-          ./${{ matrix.binary }} plot --dataset-dir dataset/sars-cov-2/latest --output-dir validate --plot-dir validate/plots
+          ${{ env.RUN_CMD }} plot --dataset-dir dataset/sars-cov-2/latest --output-dir validate --plot-dir validate/plots
 
       - name: upload
         uses: actions/upload-artifact@v3

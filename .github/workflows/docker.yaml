@@ -29,7 +29,7 @@ jobs:
       binary: ${{ matrix.binary }}
 
   # ---------------------------------------------------------------------------
-  docker:
+  image:
 
     needs: compile
 
