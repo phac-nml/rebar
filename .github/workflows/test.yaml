@@ -18,14 +18,14 @@ env:
 
 jobs:
 
-  # build:
-  #   uses: ./.github/workflows/build.yaml
+  build:
+    uses: ./.github/workflows/build.yaml
 
   # ---------------------------------------------------------------------------
   test:
 
-    #needs: build
-    #if: ${{ always() }}
+    needs: build
+    if: ${{ always() }}
 
     strategy:
       fail-fast: false
@@ -34,15 +34,19 @@ jobs:
           # linux
           - arch: x86_64-unknown-linux-musl
             os: ubuntu-latest
+            binary: rebar
           # windows
           - arch: x86_64-pc-windows-gnu
             os: windows-latest
+            binary: rebar.exe
           # macOS
           - arch: x86_64-apple-darwin
             os: macos-latest
+            binary: rebar
           # docker
           - arch: docker
             os: ubuntu-latest
+            binary: rebar
 
     runs-on: ${{ matrix.os }}
 
@@ -55,36 +59,39 @@ jobs:
 
       - name: set run command (windows)
         if: matrix.os == 'windows-latest'
-        run: echo "RUN_CMD='.\rebar.exe'" | Out-File -FilePath $env:GITHUB_ENV -Append
+        run: echo RUN_CMD=".\${{ matrix.binary }}" | Out-File -FilePath $env:GITHUB_ENV -Append
 
       - name: set run command (docker)
         if: matrix.arch == 'docker'
-        run: echo RUN_CMD="docker run $DOCKER_IMAGE" >> $GITHUB_ENV
+        run: echo RUN_CMD="docker run $DOCKER_IMAGE ${{ matrix.binary }}" >> $GITHUB_ENV
 
       - name: set run command (linux, mac)
         if: matrix.arch == 'x86_64-unknown-linux-musl' || matrix.arch == 'x86_64-apple-darwin'
-        run: echo RUN_CMD="./rebar" >> $GITHUB_ENV
+        run: echo RUN_CMD="./${{ matrix.binary }}" >> $GITHUB_ENV
 
       - name: check run command
         run: echo ${{ env.RUN_CMD }}
 
-      # - name: download build output
-      #   uses: actions/download-artifact@v3
-      #   with:
-      #     name: rebar-${{ matrix.arch }}
-      #     path: target/${{ matrix.arch }}/release
+      # ------------------------------------------------------------------------
+      # Install
 
-      # - name: install
-      #   if: ${{ matrix.arch != docker }}
-      #   run: |
-      #     chmod +x target/${{ matrix.arch }}/release/${{ matrix.binary }}
-      #     cp target/${{ matrix.arch }}/release/${{ matrix.binary }} .
-      #     ./${{ matrix.binary }} --help
+      - name: download build output
+        uses: actions/download-artifact@v3
+        with:
+          name: rebar-${{ matrix.arch }}
+          path: target/${{ matrix.arch }}/release
 
-      # - name: load docker image
-      #   if: ${{ matrix.arch == docker }}
-      #   run: |
-      #     docker load --input ${{ env.DOCKER_IMAGE }}
+      - name: install
+        if: ${{ matrix.arch != 'docker' }}
+        run: |
+          chmod +x target/${{ matrix.arch }}/release/${{ matrix.binary }}
+          cp target/${{ matrix.arch }}/release/${{ matrix.binary }} .
+          ${{ env.RUN_CMD }} --help
+
+      - name: load docker image
+        if: ${{ matrix.arch == docker }}
+        run: |
+          docker load --input ${{ env.DOCKER_IMAGE }}
 
       # - name: dataset list
       #   run: |
