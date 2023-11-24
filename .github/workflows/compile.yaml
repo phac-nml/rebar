@@ -1,3 +1,4 @@
+# Re-usable workflow to compile the binary application on various systems
 name: Compile
 
 on:
