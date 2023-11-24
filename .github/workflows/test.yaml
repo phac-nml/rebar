@@ -38,7 +38,7 @@ jobs:
       binary: ${{ matrix.binary }}
 
   # ---------------------------------------------------------------------------
-  test:
+  direct:
 
     needs: build
     if: ${{ always() }}
@@ -105,3 +105,6 @@ jobs:
           path: output
           if-no-files-found: error
           retention-days: 7
+
+  # ---------------------------------------------------------------------------
+  # docker
