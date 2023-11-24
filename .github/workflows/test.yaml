@@ -54,14 +54,14 @@ jobs:
       # How we execute the program depends on the architecture
       - name: set run command (windows)
         if: matrix.os == 'windows-latest'
-        run: echo RUN_CMD="./rebar.exe" >> $GITHUB_ENV
+        run: echo "RUN_CMD="./rebar.exe" | Out-File -FilePath $env:GITHUB_ENV -Append
 
       - name: set run command (docker)
         if: matrix.arch == 'docker'
         run: echo RUN_CMD="docker run $DOCKER_IMAGE" >> $GITHUB_ENV
 
       - name: set run command (linux, mac)
-        if: matrix.os == 'ubuntu-latest' || matrix.os == 'macos-latest'
+        if: matrix.arch == 'x86_64-unknown-linux-musl' || matrix.os == 'x86_64-apple-darwin'
         run: echo RUN_CMD="./rebar" >> $GITHUB_ENV
 
       - name: check run command
