@@ -14,7 +14,7 @@ on:
 env:
   GITHUB_USERNAME: ${{ github.actor }}
   GITHUB_TOKEN: ${{ github.token }}
-  IMAGE_NAME: ${{ github.repository }}
+  DOCKER_IMAGE: "ghcr.io/${{ github.repository }}:${{ github.refname }}"
 
 jobs:
 
@@ -50,7 +50,7 @@ jobs:
           - arch: docker
             os: ubuntu-latest
             binary: rebar
-            prefix: "docker run  "
+            prefix: "docker run ${{ env.DOCKER_IMAGE }} "
 
     runs-on: ${{ matrix.os }}
 
@@ -58,15 +58,7 @@ jobs:
       - name: checkout repo
         uses: actions/checkout@v3
 
-      - name: download binary from build
-        if: ${{ matrix.arch != docker }}
-        uses: actions/download-artifact@v3
-        with:
-          name: rebar-${{ matrix.arch }}
-          path: target/${{ matrix.arch }}/release
-
-      - name: download docker image from build
-        if: ${{ matrix.arch == docker }}
+      - name: download build output
         uses: actions/download-artifact@v3
         with:
           name: rebar-${{ matrix.arch }}
@@ -82,30 +74,30 @@ jobs:
       - name: load docker image
         if: ${{ matrix.arch == docker }}
         run: |
-          docker load target/${{ matrix.arch }}/release/${{ matrix.binary }}.tar
+          docker load --input ${{ env.DOCKER_IMAGE }}
 
       - name: dataset list
         run: |
-          ./${{ matrix.binary }} dataset list
+          ${{ matrix.prefix }}${{ matrix.binary }} dataset list
 
       - name: dataset download
         run: |
-          ./${{ matrix.binary }} dataset download --name sars-cov-2 --tag 2023-11-17 --output-dir dataset/sars-cov-2/2023-11-17
+          ${{ matrix.prefix }}${{ matrix.binary }} dataset download --name sars-cov-2 --tag 2023-11-17 --output-dir dataset/sars-cov-2/2023-11-17
 
       - name: example 1
         run: |
-          ./${{ matrix.binary }} run  --dataset-dir dataset/sars-cov-2/2023-11-17 --output-dir output/example1 --populations "AY.4.2*,BA.5.2,XBC.1.6*,XBB.1.5.1,XBL"
-          ./${{ matrix.binary }} plot --dataset-dir dataset/sars-cov-2/2023-11-17 --output-dir output/example1
+          ${{ matrix.prefix }}${{ matrix.binary }} run  --dataset-dir dataset/sars-cov-2/2023-11-17 --output-dir output/example1 --populations "AY.4.2*,BA.5.2,XBC.1.6*,XBB.1.5.1,XBL"
+          ${{ matrix.prefix }}${{ matrix.binary }} plot --dataset-dir dataset/sars-cov-2/2023-11-17 --output-dir output/example1
 
       - name: example 2
         run: |
-          ./${{ matrix.binary }} run  --dataset-dir dataset/sars-cov-2/2023-11-17 --output-dir output/example2 --alignment data/example2.fasta
-          ./${{ matrix.binary }} plot --dataset-dir dataset/sars-cov-2/2023-11-17 --output-dir output/example2
+          ${{ matrix.prefix }}${{ matrix.binary }} run  --dataset-dir dataset/sars-cov-2/2023-11-17 --output-dir output/example2 --alignment data/example2.fasta
+          ${{ matrix.prefix }}${{ matrix.binary }} plot --dataset-dir dataset/sars-cov-2/2023-11-17 --output-dir output/example2
 
       - name: toy1
         run: |
-          ./${{ matrix.binary }} run  --dataset-dir dataset/toy1 --output-dir output/toy1 --populations "*" --mask 0,0 --min-length 1
-          ./${{ matrix.binary }} plot --dataset-dir dataset/toy1 --output-dir output/toy1
+          ${{ matrix.prefix }}${{ matrix.binary }} run  --dataset-dir dataset/toy1 --output-dir output/toy1 --populations "*" --mask 0,0 --min-length 1
+          ${{ matrix.prefix }}${{ matrix.binary }} plot --dataset-dir dataset/toy1 --output-dir output/toy1
 
       - name: upload output
         uses: actions/upload-artifact@v3
