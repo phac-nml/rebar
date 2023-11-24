@@ -40,6 +40,7 @@ jobs:
       matrix:
         arch: [x86_64-unknown-linux-musl]
         os: [ubuntu-latest]
+        binary: [rebar]
 
     runs-on: ${{ matrix.os }}
 
@@ -80,6 +81,18 @@ jobs:
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
 
+      - name: build local
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          tags: ${{ env.IMAGE_TAG }}
+          outputs: type=docker,dest=rebar.tar
+
+      - name: test local
+        run: |
+          docker load --input rebar.tar
+          docker run ${{ env.IMAGE_TAG }} rebar --help
+
       # - name: build
       #   uses: docker/build-push-action@v5
       #   with:
@@ -88,13 +101,10 @@ jobs:
       #     tags: ${{ steps.meta.outputs.tags }}
       #     labels: ${{ steps.meta.outputs.labels }}
 
-      - name: build
-        uses: docker/build-push-action@v5
+      - name: upload image artifact
+        uses: actions/upload-artifact@v3
         with:
-          context: .
-          load: true
-          tags: ${{ env.IMAGE_TAG }}
-
-      - name: test
-        run: |
-          docker run ${{ env.IMAGE_TAG }} rebar --help
+          name: rebar-docker
+          path: rebar.tar
+          retention-days: 7
+          if-no-files-found: error
