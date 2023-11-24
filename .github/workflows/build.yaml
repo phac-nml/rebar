@@ -11,16 +11,6 @@ on:
   release:
     types: [published]
   workflow_call:
-    inputs:
-      arch:
-        required: true
-        type: string
-      os:
-        required: true
-        type: string
-      binary:
-        required: true
-        type: string
 
 jobs:
 
