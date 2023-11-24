@@ -1,0 +1,103 @@
+# Re-usable workflow to create the docker image
+name: Docker
+
+on:
+  workflow_call:
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+
+jobs:
+
+  # ---------------------------------------------------------------------------
+  # The docker image only needs the linux version compiled
+
+  compile:
+    uses: ./.github/workflows/compile.yaml
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # Linux
+          - arch: x86_64-unknown-linux-musl
+            os: ubuntu-latest
+            binary: rebar
+    with:
+      arch: ${{ matrix.arch }}
+      os: ${{ matrix.os }}
+      binary: ${{ matrix.binary }}
+
+  # ---------------------------------------------------------------------------
+  docker:
+
+    needs: compile
+
+    strategy:
+      matrix:
+        arch: [x86_64-unknown-linux-musl]
+        os: [ubuntu-latest]
+        binary: [rebar]
+
+    runs-on: ${{ matrix.os }}
+
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: checkout
+        uses: actions/checkout@v3
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: download binary from build
+        uses: actions/download-artifact@v3
+        with:
+          name: rebar-${{ matrix.arch }}
+          path: target/${{ matrix.arch }}/release/
+
+      - name: update binary permission
+        run: |
+          chmod +x target/${{ matrix.arch }}/release/${{ matrix.binary }}
+
+      - name: registry login
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+
+      - name: build
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          outputs: type=docker,dest=rebar.tar
+
+      - name: load
+        run: |
+          docker load --input rebar.tar
+
+      - name: help
+        run: |
+          docker run ${{ env.IMAGE_NAME }}:$DOCKER_METADATA_OUTPUT_VERSION rebar --help
+
+      - name: upload image artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: rebar-docker
+          path: rebar.tar
+          retention-days: 7
+          if-no-files-found: error
