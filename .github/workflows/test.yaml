@@ -56,6 +56,10 @@ jobs:
           - arch: x86_64-apple-darwin
             os: macos-latest
             binary: rebar
+          # docker
+          - arch: docker
+            os: ubuntu-latest
+            binary: rebar
 
     runs-on: ${{ matrix.os }}
 
@@ -64,6 +68,7 @@ jobs:
         uses: actions/checkout@v3
 
       - name: download binary from build
+        if: matrix.arch != docker
         uses: actions/download-artifact@v3
         with:
           name: rebar-${{ matrix.arch }}
@@ -105,9 +110,3 @@ jobs:
           path: output
           if-no-files-found: error
           retention-days: 7
-
-  # ---------------------------------------------------------------------------
-  # docker
-
-  # ---------------------------------------------------------------------------
-  # singularity

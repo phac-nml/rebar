@@ -1,0 +1,72 @@
+name: Compile
+
+on:
+  workflow_call:
+    inputs:
+      arch:
+        required: true
+        type: string
+      os:
+        required: true
+        type: string
+      binary:
+        required: true
+        type: string
+
+jobs:
+
+  # ---------------------------------------------------------------------------
+  compile:
+
+    strategy:
+      fail-fast: false
+
+    runs-on: ${{ inputs.os }}
+
+    steps:
+
+      - name: checkout repo
+        uses: actions/checkout@v3
+
+      - name: setup rust
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: 1.74.0
+
+      - name: install cross
+        if: inputs.os == 'ubuntu-latest'
+        run: |
+          cargo install cross
+
+      - name: install macOS target
+        if: inputs.os == 'macos-latest'
+        run: |
+          rustup target add ${{ inputs.arch }}
+
+      - name: build (cross)
+        if: inputs.os == 'ubuntu-latest'
+        run: |
+          cross build --release --all-features --target ${{ inputs.arch }}
+
+      - name: build (macos)
+        if: inputs.os == 'macos-latest'
+        run: |
+          cargo build --release --all-features --target ${{ inputs.arch }}
+
+      # not supported on darwin
+      - name: compress with upx
+        if: inputs.os == 'ubuntu-latest'
+        uses: crazy-max/ghaction-upx@v3
+        with:
+          version: v4.1.0
+          files: |
+            target/${{ inputs.arch }}/release/${{ inputs.binary }}
+          args: --best --lzma
+
+      - name: upload binary
+        uses: actions/upload-artifact@v3
+        with:
+          name: rebar-${{ inputs.arch }}
+          path: target/${{ inputs.arch }}/release/${{ inputs.binary }}
+          retention-days: 7
+          if-no-files-found: error
