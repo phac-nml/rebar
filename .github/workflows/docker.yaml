@@ -20,10 +20,14 @@ jobs:
   build:
     uses: ./.github/workflows/build.yaml
     strategy:
-      fail-fast: false
       matrix:
-        arch: [x86_64-unknown-linux-musl]
-        os: [ubuntu-latest]
+        exclude:
+          - arch: x86_64-pc-windows-gnu
+            os: windows-latest
+            binary: rebar.exe
+          - arch: x86_64-apple-darwin
+            os: macos-latest
+            binary: rebar
 
   # ---------------------------------------------------------------------------
   docker:
