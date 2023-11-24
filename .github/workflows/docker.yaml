@@ -21,10 +21,17 @@ jobs:
     uses: ./.github/workflows/build.yaml
     strategy:
       matrix:
+        include:
+          # Linux
+          - arch: x86_64-unknown-linux-musl
+            os: ubuntu-latest
+            binary: rebar
         exclude:
+          # Linux cross-compile to windows
           - arch: x86_64-pc-windows-gnu
-            os: windows-latest
+            os: ubuntu-latest
             binary: rebar.exe
+          # macOS
           - arch: x86_64-apple-darwin
             os: macos-latest
             binary: rebar
