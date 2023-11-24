@@ -15,6 +15,7 @@ env:
   GITHUB_USERNAME: ${{ github.actor }}
   GITHUB_TOKEN: ${{ github.token }}
   DOCKER_IMAGE: "ghcr.io/${{ github.repository }}:${{ github.ref_name }}"
+  DATASET_TAG: "2023-11-17"
 
 jobs:
 
@@ -91,7 +92,7 @@ jobs:
       - name: load docker image
         if:  matrix.arch == 'docker'
         run: |
-          docker load --input rebar.tar
+          docker load --input target/${{ matrix.arch }}/release/rebar.tar
 
       - name: dataset list
         run: |
@@ -99,17 +100,17 @@ jobs:
 
       - name: dataset download
         run: |
-          ${{ env.RUN_CMD }} dataset download --name sars-cov-2 --tag 2023-11-17 --output-dir dataset/sars-cov-2/2023-11-17
+          ${{ env.RUN_CMD }} dataset download --name sars-cov-2 --tag ${{ env.DATASET_TAG }} --output-dir dataset/sars-cov-2/${{ env.DATASET_TAG }}
 
       - name: example 1
         run: |
-          ${{ env.RUN_CMD }} run  --dataset-dir dataset/sars-cov-2/2023-11-17 --output-dir output/example1 --populations "AY.4.2*,BA.5.2,XBC.1.6*,XBB.1.5.1,XBL"
-          ${{ env.RUN_CMD }} plot --dataset-dir dataset/sars-cov-2/2023-11-17 --output-dir output/example1
+          ${{ env.RUN_CMD }} run  --dataset-dir dataset/sars-cov-2/${{ env.DATASET_TAG }} --output-dir output/example1 --populations "AY.4.2*,BA.5.2,XBC.1.6*,XBB.1.5.1,XBL"
+          ${{ env.RUN_CMD }} plot --dataset-dir dataset/sars-cov-2/${{ env.DATASET_TAG }} --output-dir output/example1
 
       - name: example 2
         run: |
-          ${{ env.RUN_CMD }} run  --dataset-dir dataset/sars-cov-2/2023-11-17 --output-dir output/example2 --alignment data/example2.fasta
-          ${{ env.RUN_CMD }} plot --dataset-dir dataset/sars-cov-2/2023-11-17 --output-dir output/example2
+          ${{ env.RUN_CMD }} run  --dataset-dir dataset/sars-cov-2/${{ env.DATASET_TAG }} --output-dir output/example2 --alignment data/example2.fasta
+          ${{ env.RUN_CMD }} plot --dataset-dir dataset/sars-cov-2/${{ env.DATASET_TAG }} --output-dir output/example2
 
       - name: toy1
         run: |
