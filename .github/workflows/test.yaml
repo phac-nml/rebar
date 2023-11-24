@@ -52,9 +52,10 @@ jobs:
 
       # ------------------------------------------------------------------------
       # How we execute the program depends on the architecture
+
       - name: set run command (windows)
         if: matrix.os == 'windows-latest'
-        run: echo "RUN_CMD="./rebar.exe" | Out-File -FilePath $env:GITHUB_ENV -Append
+        run: echo "RUN_CMD='.\rebar.exe'" | Out-File -FilePath $env:GITHUB_ENV -Append
 
       - name: set run command (docker)
         if: matrix.arch == 'docker'
