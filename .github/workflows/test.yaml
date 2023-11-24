@@ -89,7 +89,7 @@ jobs:
           ${{ env.RUN_CMD }} --help
 
       - name: load docker image
-        if: ${{ matrix.arch == docker }}
+        if:  matrix.arch == 'docker'
         run: |
           docker load --input ${{ env.DOCKER_IMAGE }}
 
