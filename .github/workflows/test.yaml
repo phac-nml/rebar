@@ -19,23 +19,6 @@ jobs:
 
   build:
     uses: ./.github/workflows/build.yaml
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - arch: x86_64-unknown-linux-musl
-            os: ubuntu-latest
-            binary: rebar
-          - arch: x86_64-pc-windows-gnu
-            os: windows-latest
-            binary: rebar.exe
-          - arch: x86_64-apple-darwin
-            os: macos-latest
-            binary: rebar
-    with:
-      arch: ${{ matrix.arch }}
-      os: ${{ matrix.os }}
-      binary: ${{ matrix.binary }}
 
   # ---------------------------------------------------------------------------
   direct:
