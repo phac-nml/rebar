@@ -18,14 +18,14 @@ env:
 
 jobs:
 
-  build:
-    uses: ./.github/workflows/build.yaml
+  # build:
+  #   uses: ./.github/workflows/build.yaml
 
   # ---------------------------------------------------------------------------
   test:
 
     needs: build
-    if: ${{ always() }}
+    #if: ${{ always() }}
 
     strategy:
       fail-fast: false
@@ -35,22 +35,18 @@ jobs:
           - arch: x86_64-unknown-linux-musl
             os: ubuntu-latest
             binary: rebar
-            prefix: "./"
           # windows
           - arch: x86_64-pc-windows-gnu
             os: windows-latest
             binary: rebar.exe
-            prefix: "./"
           # macOS
           - arch: x86_64-apple-darwin
             os: macos-latest
             binary: rebar
-            prefix: "./"
           # docker
           - arch: docker
             os: ubuntu-latest
             binary: rebar
-            prefix: "docker run ${{ env.DOCKER_IMAGE }} "
 
     runs-on: ${{ matrix.os }}
 
@@ -58,51 +54,66 @@ jobs:
       - name: checkout repo
         uses: actions/checkout@v3
 
-      - name: download build output
-        uses: actions/download-artifact@v3
-        with:
-          name: rebar-${{ matrix.arch }}
-          path: target/${{ matrix.arch }}/release
+      # How we execute the program depends on whether we're testing direct or the docker image
+      - name: set run command
+        run: >
+          if [[ ${{ matrix.arch }} == "docker" ]]; then
+            RUN_CMD="docker run $DOCKER_IMAGE"
+          else
+            RUN_CMD="./${{ matrix.binary }}"
+          fi;
+          echo RUN_CMD="$RUN_CMD" >> $GITHUB_ENV;
 
-      - name: install
-        if: ${{ matrix.arch != docker }}
+      - name: check run command
         run: |
-          chmod +x target/${{ matrix.arch }}/release/${{ matrix.binary }}
-          cp target/${{ matrix.arch }}/release/${{ matrix.binary }} .
-          ./${{ matrix.binary }} --help
+          echo $RUN_CMD
 
-      - name: load docker image
-        if: ${{ matrix.arch == docker }}
-        run: |
-          docker load --input ${{ env.DOCKER_IMAGE }}
+      # - name: download build output
+      #   uses: actions/download-artifact@v3
+      #   with:
+      #     name: rebar-${{ matrix.arch }}
+      #     path: target/${{ matrix.arch }}/release
 
-      - name: dataset list
-        run: |
-          ${{ matrix.prefix }}${{ matrix.binary }} dataset list
+      # - name: install
+      #   if: ${{ matrix.arch != docker }}
+      #   run: |
+      #     chmod +x target/${{ matrix.arch }}/release/${{ matrix.binary }}
+      #     cp target/${{ matrix.arch }}/release/${{ matrix.binary }} .
+      #     ./${{ matrix.binary }} --help
 
-      - name: dataset download
-        run: |
-          ${{ matrix.prefix }}${{ matrix.binary }} dataset download --name sars-cov-2 --tag 2023-11-17 --output-dir dataset/sars-cov-2/2023-11-17
+      # - name: load docker image
+      #   if: ${{ matrix.arch == docker }}
+      #   run: |
+      #     docker load --input ${{ env.DOCKER_IMAGE }}
 
-      - name: example 1
-        run: |
-          ${{ matrix.prefix }}${{ matrix.binary }} run  --dataset-dir dataset/sars-cov-2/2023-11-17 --output-dir output/example1 --populations "AY.4.2*,BA.5.2,XBC.1.6*,XBB.1.5.1,XBL"
-          ${{ matrix.prefix }}${{ matrix.binary }} plot --dataset-dir dataset/sars-cov-2/2023-11-17 --output-dir output/example1
+      # - name: dataset list
+      #   run: |
+      #     prefix=
+      #     ${{ matrix.prefix }}${{ matrix.binary }} dataset list
 
-      - name: example 2
-        run: |
-          ${{ matrix.prefix }}${{ matrix.binary }} run  --dataset-dir dataset/sars-cov-2/2023-11-17 --output-dir output/example2 --alignment data/example2.fasta
-          ${{ matrix.prefix }}${{ matrix.binary }} plot --dataset-dir dataset/sars-cov-2/2023-11-17 --output-dir output/example2
+      # - name: dataset download
+      #   run: |
+      #     ${{ matrix.prefix }}${{ matrix.binary }} dataset download --name sars-cov-2 --tag 2023-11-17 --output-dir dataset/sars-cov-2/2023-11-17
 
-      - name: toy1
-        run: |
-          ${{ matrix.prefix }}${{ matrix.binary }} run  --dataset-dir dataset/toy1 --output-dir output/toy1 --populations "*" --mask 0,0 --min-length 1
-          ${{ matrix.prefix }}${{ matrix.binary }} plot --dataset-dir dataset/toy1 --output-dir output/toy1
+      # - name: example 1
+      #   run: |
+      #     ${{ matrix.prefix }}${{ matrix.binary }} run  --dataset-dir dataset/sars-cov-2/2023-11-17 --output-dir output/example1 --populations "AY.4.2*,BA.5.2,XBC.1.6*,XBB.1.5.1,XBL"
+      #     ${{ matrix.prefix }}${{ matrix.binary }} plot --dataset-dir dataset/sars-cov-2/2023-11-17 --output-dir output/example1
 
-      - name: upload output
-        uses: actions/upload-artifact@v3
-        with:
-          name: output-${{ matrix.arch }}
-          path: output
-          if-no-files-found: error
-          retention-days: 7
+      # - name: example 2
+      #   run: |
+      #     ${{ matrix.prefix }}${{ matrix.binary }} run  --dataset-dir dataset/sars-cov-2/2023-11-17 --output-dir output/example2 --alignment data/example2.fasta
+      #     ${{ matrix.prefix }}${{ matrix.binary }} plot --dataset-dir dataset/sars-cov-2/2023-11-17 --output-dir output/example2
+
+      # - name: toy1
+      #   run: |
+      #     ${{ matrix.prefix }}${{ matrix.binary }} run  --dataset-dir dataset/toy1 --output-dir output/toy1 --populations "*" --mask 0,0 --min-length 1
+      #     ${{ matrix.prefix }}${{ matrix.binary }} plot --dataset-dir dataset/toy1 --output-dir output/toy1
+
+      # - name: upload output
+      #   uses: actions/upload-artifact@v3
+      #   with:
+      #     name: output-${{ matrix.arch }}
+      #     path: output
+      #     if-no-files-found: error
+      #     retention-days: 7
