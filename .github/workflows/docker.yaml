@@ -23,13 +23,11 @@ jobs:
       matrix:
         arch: [x86_64-unknown-linux-musl]
         os: [ubuntu-latest]
-        exclude:
-          # Linux cross-compile to windows
-          - arch: x86_64-pc-windows-gnu
-            os: ubuntu-latest
-          # macOS
-          - arch: x86_64-apple-darwin
-            os: macos-latest
+        binary: [rebar]
+    with:
+      arch: ${{ matrix.arch }}
+      os: ${{ matrix.os }}
+      binary: ${{ matrix.binary }}
 
   # ---------------------------------------------------------------------------
   docker:
