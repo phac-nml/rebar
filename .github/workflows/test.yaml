@@ -62,11 +62,11 @@ jobs:
         run: echo RUN_CMD="docker run $DOCKER_IMAGE" >> $GITHUB_ENV
 
       - name: set run command (linux, mac)
-        if: matrix.arch == 'x86_64-unknown-linux-musl' || matrix.os == 'x86_64-apple-darwin'
+        if: matrix.arch == 'x86_64-unknown-linux-musl' || matrix.arch == 'x86_64-apple-darwin'
         run: echo RUN_CMD="./rebar" >> $GITHUB_ENV
 
       - name: check run command
-        run: echo $RUN_CMD
+        run: echo ${{ env.RUN_CMD }}
 
       # - name: download build output
       #   uses: actions/download-artifact@v3
