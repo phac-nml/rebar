@@ -93,4 +93,4 @@ jobs:
 
       - name: test
         run: |
-          docker run --rm ${{ env.TEST_TAG }}
+          docker run --rm ${{ env.TEST_TAG }} rebar --help
