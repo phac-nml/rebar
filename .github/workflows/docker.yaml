@@ -33,9 +33,14 @@ jobs:
   docker:
 
     needs: build
-    if: ${{ always() }}
 
-    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        arch: [x86_64-unknown-linux-musl]
+        os: [ubuntu-latest]
+
+    runs-on: ${{ matrix.os }}
 
     permissions:
       contents: read
