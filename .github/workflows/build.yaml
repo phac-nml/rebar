@@ -1,3 +1,4 @@
+# Fully build the rebar application, for all supported arch and containers
 name: Build
 
 on:

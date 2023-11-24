@@ -19,27 +19,36 @@ env:
 
 jobs:
 
-  build:
-    uses: ./.github/workflows/build.yaml
+  # ---------------------------------------------------------------------------
+  # Latest is a model/algorithm test, only needs the linux version compiled
+
+  compile:
+    uses: ./.github/workflows/compile.yaml
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # Linux
+          - arch: x86_64-unknown-linux-musl
+            os: ubuntu-latest
+            binary: rebar
+    with:
+      arch: ${{ matrix.arch }}
+      os: ${{ matrix.os }}
+      binary: ${{ matrix.binary }}
 
   # ---------------------------------------------------------------------------
   latest:
 
-    needs: build
-    if: ${{ always() }}
+    needs: compile
 
     strategy:
       fail-fast: false
       matrix:
         include:
+          # Linux
           - arch: x86_64-unknown-linux-musl
             os: ubuntu-latest
-            binary: rebar
-          - arch: x86_64-pc-windows-gnu
-            os: windows-latest
-            binary: rebar.exe
-          - arch: x86_64-apple-darwin
-            os: macos-latest
             binary: rebar
 
     runs-on: ${{ matrix.os }}
