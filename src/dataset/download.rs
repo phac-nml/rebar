@@ -14,14 +14,14 @@ use std::path::Path;
 
 /// Download dataset
 pub async fn dataset(args: &mut cli::dataset::download::Args) -> Result<(), Report> {
-    
     // make sure output directory is empty!
     let output_dir_is_empty = args.output_dir.read_dir()?.next().is_none();
     if !output_dir_is_empty {
-        return Err(
-            eyre!("--output-dir {:?} already exists and is not empty!", args.output_dir)
-            .suggestion("Please change your --output-dir to a new or empty directory.")
-        );
+        return Err(eyre!(
+            "--output-dir {:?} already exists and is not empty!",
+            args.output_dir
+        )
+        .suggestion("Please change your --output-dir to a new or empty directory."));
     }
 
     info!("Downloading dataset: {} {}", &args.name, &args.tag);
