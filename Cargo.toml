@@ -30,7 +30,7 @@ serde_json      = { version = "1.0.96",  default-features = false }
 strum           = { version = "0.25",    default-features = false, features = ["derive"] }
 tempfile        = { version = "3.5.0",   default-features = false }
 tokio           = { version = "1.28.1",  default-features = false, features = ["macros", "rt-multi-thread"] }
-zip             = { version = "0.6.6",   default-features = false, features = ["deflate"]}
+#zip             = { version = "0.6.6",   default-features = false, features = ["deflate"]}
 zstd            = { version = "0.13.0",  default-features = false }
 
 # Enable a small amount of optimization in debug mode

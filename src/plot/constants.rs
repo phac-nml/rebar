@@ -1,5 +1,11 @@
 use raqote::*;
 
+// Embed fonts at compile time
+pub const FONT_REGULAR: &[u8] =
+    include_bytes!("../../assets/fonts/dejavu/DejaVuSans.ttf");
+pub const FONT_BOLD: &[u8] =
+    include_bytes!("../../assets/fonts/dejavu/DejaVuSans-Bold.ttf");
+
 pub const ALPHABET: [char; 4] = ['A', 'C', 'G', 'T'];
 
 // D3 Palettes: https://github.com/d3/d3-3.x-api-reference/blob/master/Ordinal-Scales.md#categorical-colors

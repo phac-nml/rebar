@@ -10,26 +10,6 @@ use log::debug;
 use raqote::*;
 use std::path::Path;
 
-/// Get the background color (RGBA) of a nucleotide base
-pub fn get_base_rgba(base: &String, ref_base: &String, pal_i: usize) -> [u8; 4] {
-    // default WHITE
-    let mut rgba = [255, 255, 255, 255];
-
-    // convert to char for alphabet comparison
-    let base_char = base.chars().next().unwrap();
-
-    // same as reference, light palette
-    if base == ref_base {
-        rgba = constants::PALETTE_LIGHT[pal_i];
-    }
-    // mutation, dark palette
-    else if constants::ALPHABET.contains(&base_char) {
-        rgba = constants::PALETTE_DARK[pal_i];
-    }
-
-    rgba
-}
-
 #[allow(unused_variables)]
 pub async fn create(
     barcodes_path: &Path,
@@ -38,15 +18,9 @@ pub async fn create(
     output_path: &Path,
     font_cache: &Path,
 ) -> Result<(), Report> {
-
-    debug!("Locating fonts for plotting.");
-    let (_font_license, font_path, font_bold_path) = text::find_font(font_cache).await?;
-    debug!("Regular font: {font_path:?}");
-    debug!("Bold font: {font_bold_path:?}");
-
     // ------------------------------------------------------------------------
     // Import Data
-    // ------------------------------------------------------------------------  
+    // ------------------------------------------------------------------------
 
     let barcodes = Table::read(barcodes_path)?;
     let unique_key = barcodes_path.file_stem().unwrap().to_str().unwrap();
@@ -154,9 +128,14 @@ pub async fn create(
     let longest_sequence_id = sequence_ids
         .iter()
         .map(|id| {
-            text::to_image(id, &font_path, constants::FONT_SIZE, &constants::TEXT_COLOR)
-                .unwrap()
-                .width()
+            text::to_image(
+                id,
+                constants::FONT_REGULAR,
+                constants::FONT_SIZE,
+                &constants::TEXT_COLOR,
+            )
+            .unwrap()
+            .width()
         })
         .max()
         .ok_or_else(|| eyre!("Failed to calculated the maximum sequence ID length"))?;
@@ -167,7 +146,7 @@ pub async fn create(
         .map(|coord| {
             text::to_image(
                 coord,
-                &font_path,
+                constants::FONT_REGULAR,
                 constants::FONT_SIZE,
                 &constants::TEXT_COLOR,
             )
@@ -183,7 +162,7 @@ pub async fn create(
         .map(|id| {
             text::to_image(
                 &format!("{id} Reference"),
-                &font_path,
+                constants::FONT_REGULAR,
                 constants::FONT_SIZE,
                 &constants::TEXT_COLOR,
             )
@@ -264,8 +243,7 @@ pub async fn create(
     // draw section label
     let mut args = text::DrawRaqoteArgs::from_canvas(&mut canvas);
     args.text = "Regions".to_string();
-    args.font_size = constants::FONT_SIZE;
-    args.font_path = font_bold_path.clone();
+    args.font_style = text::FontStyle::Bold;
     args.x = section_x - label_gap;
     args.y = section_y + (constants::X_INC * 1.5);
     args.horizontal_alignment = text::HorizontalAlignment::Right;
@@ -324,7 +302,6 @@ pub async fn create(
         let mut args = text::DrawRaqoteArgs::from_canvas(&mut canvas);
         args.text = parent.to_string();
         args.font_size = constants::FONT_SIZE - 5.0;
-        args.font_path = font_path.clone();
         args.x = box_x + (box_w / 2.0);
         args.y = section_y;
         args.horizontal_alignment = text::HorizontalAlignment::Center;
@@ -374,8 +351,7 @@ pub async fn create(
     // draw section label
     let mut args = text::DrawRaqoteArgs::from_canvas(&mut canvas);
     args.text = "Genome".to_string();
-    args.font_size = constants::FONT_SIZE;
-    args.font_path = font_bold_path.clone();
+    args.font_style = text::FontStyle::Bold;
     args.x = section_x - label_gap;
     args.y = section_y + (constants::X_INC * 1.5);
     args.horizontal_alignment = text::HorizontalAlignment::Right;
@@ -451,8 +427,8 @@ pub async fn create(
         // text label
         let mut args = text::DrawRaqoteArgs::from_canvas(&mut canvas);
         args.text = abbreviation.to_string();
+        args.font_style = text::FontStyle::Regular;
         args.font_size = constants::FONT_SIZE - 5.0;
-        args.font_path = font_path.clone();
         args.x = box_x + (box_w / 2.0);
         args.y = if let 0 = i % 2 {
             section_y
@@ -576,7 +552,6 @@ pub async fn create(
         let mut args = text::DrawRaqoteArgs::from_canvas(&mut canvas);
         args.text = coord.to_string();
         args.font_size = constants::FONT_SIZE - 5.0;
-        args.font_path = font_path.clone();
         args.x = coord_x;
         args.y = line_y2;
         args.horizontal_alignment = text::HorizontalAlignment::Center;
@@ -593,8 +568,7 @@ pub async fn create(
     // draw section label
     let mut args = text::DrawRaqoteArgs::from_canvas(&mut canvas);
     args.text = "Breakpoints".to_string();
-    args.font_size = constants::FONT_SIZE;
-    args.font_path = font_bold_path.clone();
+    args.font_style = text::FontStyle::Bold;
     args.x = section_x - label_gap;
     args.y = section_y + (constants::X_INC * 1.5);
     args.horizontal_alignment = text::HorizontalAlignment::Right;
@@ -716,8 +690,6 @@ pub async fn create(
         // breakpoint label, just to get dimensions for box
         let mut args = text::DrawRaqoteArgs::from_canvas(&mut canvas);
         args.text = format!("Breakpoint {}", i + 1);
-        args.font_size = constants::FONT_SIZE;
-        args.font_path = font_path.clone();
         args.x = line_x;
         args.y = line_y1;
         args.horizontal_alignment = text::HorizontalAlignment::Center;
@@ -744,8 +716,6 @@ pub async fn create(
         // actually render the breakpoint label now, reborrowing the canvas
         let mut args = text::DrawRaqoteArgs::from_canvas(&mut canvas);
         args.text = format!("Breakpoint {}", i + 1);
-        args.font_size = constants::FONT_SIZE;
-        args.font_path = font_path.clone();
         args.x = line_x;
         args.y = line_y1;
         args.horizontal_alignment = text::HorizontalAlignment::Center;
@@ -792,8 +762,6 @@ pub async fn create(
             if coord_i == 0 {
                 let mut args = text::DrawRaqoteArgs::from_canvas(&mut canvas);
                 args.text = population.replace("population_", "").to_string();
-                args.font_size = constants::FONT_SIZE;
-                args.font_path = font_path.clone();
                 args.x = section_x - label_gap;
                 args.y = y + (constants::X_INC / 2.0);
                 args.horizontal_alignment = text::HorizontalAlignment::Right;
@@ -860,8 +828,6 @@ pub async fn create(
 
             let mut args = text::DrawRaqoteArgs::from_canvas(&mut canvas);
             args.text = pop_base;
-            args.font_size = constants::FONT_SIZE;
-            args.font_path = font_path.clone();
             args.x = box_x + (sub_box_w / 2.);
             args.y = y + (constants::X_INC / 2.0);
             args.horizontal_alignment = text::HorizontalAlignment::Center;
@@ -888,7 +854,6 @@ pub async fn create(
         let mut args = text::DrawRaqoteArgs::from_canvas(&mut canvas);
         args.text = coord.to_string();
         args.font_size = constants::FONT_SIZE - 5.0;
-        args.font_path = font_path.clone();
         args.x = line_x;
         args.y = line_y2 + constants::BUFFER;
         args.rotate = 270;
@@ -909,8 +874,7 @@ pub async fn create(
     // draw section label
     let mut args = text::DrawRaqoteArgs::from_canvas(&mut canvas);
     args.text = "Legend".to_string();
-    args.font_size = constants::FONT_SIZE;
-    args.font_path = font_bold_path;
+    args.font_style = text::FontStyle::Bold;
     args.x = section_x - label_gap;
     args.y = section_y + (legend_height / 2.0);
     args.horizontal_alignment = text::HorizontalAlignment::Right;
@@ -958,8 +922,6 @@ pub async fn create(
     // Text
     let mut args = text::DrawRaqoteArgs::from_canvas(&mut canvas);
     args.text = "Reference".to_string();
-    args.font_size = constants::FONT_SIZE;
-    args.font_path = font_path.clone();
     args.x = box_x + sub_box_w + constants::BUFFER;
     args.y = y + (constants::X_INC / 2.0);
     args.horizontal_alignment = text::HorizontalAlignment::Left;
@@ -989,8 +951,6 @@ pub async fn create(
         // Mutation Label
         let mut args = text::DrawRaqoteArgs::from_canvas(&mut canvas);
         args.text = format!("{} Mutation", parent).to_string();
-        args.font_size = constants::FONT_SIZE;
-        args.font_path = font_path.clone();
         args.x = box_x + sub_box_w + constants::BUFFER;
         args.y = y + (constants::X_INC / 2.0);
         args.horizontal_alignment = text::HorizontalAlignment::Left;
@@ -1016,8 +976,6 @@ pub async fn create(
         // Reference Label
         let mut args = text::DrawRaqoteArgs::from_canvas(&mut canvas);
         args.text = format!("{} Reference", parent).to_string();
-        args.font_path = font_path.clone();
-        args.font_size = constants::FONT_SIZE;
         args.x = box_x + sub_box_w + constants::BUFFER;
         args.y = y + (constants::X_INC / 2.0);
         args.horizontal_alignment = text::HorizontalAlignment::Left;
@@ -1032,4 +990,24 @@ pub async fn create(
     canvas.write_png(output_path).unwrap();
 
     Ok(())
+}
+
+/// Get the background color (RGBA) of a nucleotide base
+pub fn get_base_rgba(base: &String, ref_base: &String, pal_i: usize) -> [u8; 4] {
+    // default WHITE
+    let mut rgba = [255, 255, 255, 255];
+
+    // convert to char for alphabet comparison
+    let base_char = base.chars().next().unwrap();
+
+    // same as reference, light palette
+    if base == ref_base {
+        rgba = constants::PALETTE_LIGHT[pal_i];
+    }
+    // mutation, dark palette
+    else if constants::ALPHABET.contains(&base_char) {
+        rgba = constants::PALETTE_DARK[pal_i];
+    }
+
+    rgba
 }

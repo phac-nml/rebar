@@ -14,7 +14,7 @@ use std::fs::{remove_file, write, File};
 use std::io::Read;
 use std::path::{Path, PathBuf};
 use tempfile::TempDir;
-use zip::ZipArchive;
+//use zip::ZipArchive;
 use zstd::stream::read::Decoder;
 
 /// Download file from url to path, with optional decompression.
@@ -210,15 +210,13 @@ pub fn decompress_file(input: &Path, output: &Path, inplace: bool) -> Result<(),
             if inplace {
                 remove_file(input)?;
             }
-        },
-        "zip" => {
-            let file = File::open(input)?;
-            let mut archive = ZipArchive::new(file)?;
-            archive.extract(output)
-                .wrap_err(format!("Unable to write file: {:?}", output))?;
-            // zip_extract::extract(file, output, true)
-            //     .wrap_err(format!("Unable to extract file: {:?}", output))?;
         }
+        // "zip" => {
+        //     let file = File::open(input)?;
+        //     let mut archive = ZipArchive::new(file)?;
+        //     archive.extract(output)
+        //         .wrap_err(format!("Unable to write file: {:?}", output))?;
+        // }
         _ => return Err(eyre!("Decompression for .{ext:?} is not implemented yet.")),
     };
 

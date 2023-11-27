@@ -141,10 +141,11 @@ pub fn run(args: &mut cli::run::Args) -> Result<(), Report> {
     // make sure output directory is empty!
     let output_dir_is_empty = args.output_dir.read_dir()?.next().is_none();
     if !output_dir_is_empty {
-        return Err(
-            eyre!("--output-dir {:?} already exists and is not empty!", args.output_dir)
-            .suggestion("Please change your --output-dir to a new or empty directory.")
-        );
+        return Err(eyre!(
+            "--output-dir {:?} already exists and is not empty!",
+            args.output_dir
+        )
+        .suggestion("Please change your --output-dir to a new or empty directory."));
     }
 
     // create output directory if it doesn't exist
@@ -153,7 +154,6 @@ pub fn run(args: &mut cli::run::Args) -> Result<(), Report> {
         create_dir_all(&args.output_dir)?;
     }
 
-    
     // check how many threads are available on the system
     let default_thread_pool = rayon::ThreadPoolBuilder::new().build().unwrap();
     info!(
@@ -545,14 +545,15 @@ pub async fn plot(args: cli::plot::Args) -> Result<(), Report> {
             annotations.as_deref(),
             &output_path,
             &args.font_cache,
-        ).await;
+        )
+        .await;
         match result {
             Ok(_) => info!("Plotting success."),
             Err(e) => {
                 // todo!() decide on whether we ignore or raise error
                 return Err(e);
                 //warn!("Plotting failure. The following error was encountered but ignored: {e:?}")
-            },
+            }
         }
     }
 
