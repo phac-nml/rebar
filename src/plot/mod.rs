@@ -6,10 +6,9 @@ use crate::utils::table::Table;
 use color_eyre::eyre::{eyre, Report, Result};
 use color_eyre::Help;
 use itertools::Itertools;
-use log::{debug, warn};
+use log::debug;
 use raqote::*;
-use rust_fontconfig::{FcFontCache, FcPattern};
-use std::path::PathBuf;
+use std::path::Path;
 
 /// Get the background color (RGBA) of a nucleotide base
 pub fn get_base_rgba(base: &String, ref_base: &String, pal_i: usize) -> [u8; 4] {
@@ -32,43 +31,22 @@ pub fn get_base_rgba(base: &String, ref_base: &String, pal_i: usize) -> [u8; 4] 
 }
 
 #[allow(unused_variables)]
-pub fn create(
-    barcodes_path: &std::path::Path,
-    linelist_path: &std::path::Path,
-    annotations_path: Option<&std::path::Path>,
-    output_path: &std::path::Path,
+pub async fn create(
+    barcodes_path: &Path,
+    linelist_path: &Path,
+    annotations_path: Option<&Path>,
+    output_path: &Path,
+    font_cache: &Path,
 ) -> Result<(), Report> {
+
+    debug!("Locating fonts for plotting.");
+    let (_font_license, font_path, font_bold_path) = text::find_font(font_cache).await?;
+    debug!("Regular font: {font_path:?}");
+    debug!("Bold font: {font_bold_path:?}");
+
     // ------------------------------------------------------------------------
     // Import Data
-    // ------------------------------------------------------------------------
-
-    // Locate OS-specific font directories
-    let cache = FcFontCache::build();
-
-    // Locate Normal font
-    let font_name = "DejaVu Sans".to_string();
-    let font_query = cache.query(&FcPattern {
-        name: Some(font_name.clone()),
-        ..Default::default()
-    });
-    let font_path = match font_query {
-        Some(result) => PathBuf::from(result.path.to_string()),
-        None => return Err(eyre!("{font_name} font could not found!")),
-    };
-
-    // Locate Bold font
-    let font_bold_name = "DejaVu Sans Bold".to_string();
-    let font_bold_query = cache.query(&FcPattern {
-        name: Some(font_bold_name.clone()),
-        ..Default::default()
-    });
-    let font_bold_path = match font_bold_query {
-        Some(result) => PathBuf::from(result.path.to_string()),
-        None => {
-            warn!("{font_name} bold font could not found! Using {font_name} instead.");
-            font_path.clone()
-        }
-    };
+    // ------------------------------------------------------------------------  
 
     let barcodes = Table::read(barcodes_path)?;
     let unique_key = barcodes_path.file_stem().unwrap().to_str().unwrap();
@@ -78,9 +56,11 @@ pub fn create(
     //linelist = linelist.filter("unique_key", unique_key)?;
     linelist = linelist.filter("unique_key", unique_key)?;
     if linelist.rows.is_empty() {
-        return Err(eyre!(
-            "The barcodes unique key was not found in the linelist: {unique_key}"
-        ));
+        return Err(
+            eyre!("The barcodes unique key ({unique_key}) was not found in the linelist: {linelist_path:?}")
+            .suggestion("Are you sure the barcodes file ({barcodes_path:?}) corresponds to the linelist?")
+            .suggestion("Did you select the correct --output-dir?")
+        );
     }
 
     // optional import data
@@ -344,6 +324,7 @@ pub fn create(
         let mut args = text::DrawRaqoteArgs::from_canvas(&mut canvas);
         args.text = parent.to_string();
         args.font_size = constants::FONT_SIZE - 5.0;
+        args.font_path = font_path.clone();
         args.x = box_x + (box_w / 2.0);
         args.y = section_y;
         args.horizontal_alignment = text::HorizontalAlignment::Center;
@@ -471,6 +452,7 @@ pub fn create(
         let mut args = text::DrawRaqoteArgs::from_canvas(&mut canvas);
         args.text = abbreviation.to_string();
         args.font_size = constants::FONT_SIZE - 5.0;
+        args.font_path = font_path.clone();
         args.x = box_x + (box_w / 2.0);
         args.y = if let 0 = i % 2 {
             section_y
@@ -594,6 +576,7 @@ pub fn create(
         let mut args = text::DrawRaqoteArgs::from_canvas(&mut canvas);
         args.text = coord.to_string();
         args.font_size = constants::FONT_SIZE - 5.0;
+        args.font_path = font_path.clone();
         args.x = coord_x;
         args.y = line_y2;
         args.horizontal_alignment = text::HorizontalAlignment::Center;
@@ -734,6 +717,7 @@ pub fn create(
         let mut args = text::DrawRaqoteArgs::from_canvas(&mut canvas);
         args.text = format!("Breakpoint {}", i + 1);
         args.font_size = constants::FONT_SIZE;
+        args.font_path = font_path.clone();
         args.x = line_x;
         args.y = line_y1;
         args.horizontal_alignment = text::HorizontalAlignment::Center;
@@ -761,6 +745,7 @@ pub fn create(
         let mut args = text::DrawRaqoteArgs::from_canvas(&mut canvas);
         args.text = format!("Breakpoint {}", i + 1);
         args.font_size = constants::FONT_SIZE;
+        args.font_path = font_path.clone();
         args.x = line_x;
         args.y = line_y1;
         args.horizontal_alignment = text::HorizontalAlignment::Center;
@@ -808,6 +793,7 @@ pub fn create(
                 let mut args = text::DrawRaqoteArgs::from_canvas(&mut canvas);
                 args.text = population.replace("population_", "").to_string();
                 args.font_size = constants::FONT_SIZE;
+                args.font_path = font_path.clone();
                 args.x = section_x - label_gap;
                 args.y = y + (constants::X_INC / 2.0);
                 args.horizontal_alignment = text::HorizontalAlignment::Right;
@@ -875,6 +861,7 @@ pub fn create(
             let mut args = text::DrawRaqoteArgs::from_canvas(&mut canvas);
             args.text = pop_base;
             args.font_size = constants::FONT_SIZE;
+            args.font_path = font_path.clone();
             args.x = box_x + (sub_box_w / 2.);
             args.y = y + (constants::X_INC / 2.0);
             args.horizontal_alignment = text::HorizontalAlignment::Center;
@@ -901,6 +888,7 @@ pub fn create(
         let mut args = text::DrawRaqoteArgs::from_canvas(&mut canvas);
         args.text = coord.to_string();
         args.font_size = constants::FONT_SIZE - 5.0;
+        args.font_path = font_path.clone();
         args.x = line_x;
         args.y = line_y2 + constants::BUFFER;
         args.rotate = 270;
@@ -971,6 +959,7 @@ pub fn create(
     let mut args = text::DrawRaqoteArgs::from_canvas(&mut canvas);
     args.text = "Reference".to_string();
     args.font_size = constants::FONT_SIZE;
+    args.font_path = font_path.clone();
     args.x = box_x + sub_box_w + constants::BUFFER;
     args.y = y + (constants::X_INC / 2.0);
     args.horizontal_alignment = text::HorizontalAlignment::Left;
@@ -1001,6 +990,7 @@ pub fn create(
         let mut args = text::DrawRaqoteArgs::from_canvas(&mut canvas);
         args.text = format!("{} Mutation", parent).to_string();
         args.font_size = constants::FONT_SIZE;
+        args.font_path = font_path.clone();
         args.x = box_x + sub_box_w + constants::BUFFER;
         args.y = y + (constants::X_INC / 2.0);
         args.horizontal_alignment = text::HorizontalAlignment::Left;
@@ -1026,6 +1016,7 @@ pub fn create(
         // Reference Label
         let mut args = text::DrawRaqoteArgs::from_canvas(&mut canvas);
         args.text = format!("{} Reference", parent).to_string();
+        args.font_path = font_path.clone();
         args.font_size = constants::FONT_SIZE;
         args.x = box_x + sub_box_w + constants::BUFFER;
         args.y = y + (constants::X_INC / 2.0);

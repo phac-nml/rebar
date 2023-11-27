@@ -24,4 +24,8 @@ pub struct Args {
     /// Otherwise will default to 'plots' under the --output-dir
     #[clap(short = 'p', long)]
     pub plot_dir: Option<PathBuf>,
+
+    /// Directory to download fonts to.
+    #[clap(short = 'f', long, default_value = PathBuf::from(".cache/fonts").into_os_string())]
+    pub font_cache: PathBuf,
 }
