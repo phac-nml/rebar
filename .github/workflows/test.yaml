@@ -40,10 +40,10 @@ jobs:
           - arch: x86_64-pc-windows-gnu
             os: windows-latest
             binary: rebar.exe
-          # macOS
-          - arch: x86_64-apple-darwin
-            os: macos-latest
-            binary: rebar
+          # # macOS
+          # - arch: x86_64-apple-darwin
+          #   os: macos-latest
+          #   binary: rebar
           # docker
           - arch: docker
             os: ubuntu-latest

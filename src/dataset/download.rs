@@ -14,16 +14,6 @@ use std::path::Path;
 
 /// Download dataset
 pub async fn dataset(args: &mut cli::dataset::download::Args) -> Result<(), Report> {
-    // make sure output directory is empty!
-    let output_dir_is_empty = args.output_dir.read_dir()?.next().is_none();
-    if !output_dir_is_empty {
-        return Err(eyre!(
-            "--output-dir {:?} already exists and is not empty!",
-            args.output_dir
-        )
-        .suggestion("Please change your --output-dir to a new or empty directory."));
-    }
-
     info!("Downloading dataset: {} {}", &args.name, &args.tag);
 
     // --------------------------------------------------------------------
@@ -57,6 +47,16 @@ pub async fn dataset(args: &mut cli::dataset::download::Args) -> Result<(), Repo
     if !args.output_dir.exists() {
         info!("Creating output directory: {:?}", &args.output_dir);
         create_dir_all(&args.output_dir)?;
+    } else {
+        // make sure output directory is empty!
+        let output_dir_is_empty = args.output_dir.read_dir()?.next().is_none();
+        if !output_dir_is_empty {
+            return Err(eyre!(
+                "--output-dir {:?} already exists and is not empty!",
+                args.output_dir
+            )
+            .suggestion("Please change your --output-dir to a new or empty directory."));
+        }
     }
 
     // --------------------------------------------------------------------
