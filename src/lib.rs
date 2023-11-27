@@ -138,20 +138,21 @@ pub fn run(args: &mut cli::run::Args) -> Result<(), Report> {
     // copy args for export/seralizing
     let args_export = args.clone();
 
-    // make sure output directory is empty!
-    let output_dir_is_empty = args.output_dir.read_dir()?.next().is_none();
-    if !output_dir_is_empty {
-        return Err(eyre!(
-            "--output-dir {:?} already exists and is not empty!",
-            args.output_dir
-        )
-        .suggestion("Please change your --output-dir to a new or empty directory."));
-    }
-
     // create output directory if it doesn't exist
     if !args.output_dir.exists() {
         info!("Creating output directory: {:?}", args.output_dir);
         create_dir_all(&args.output_dir)?;
+    }
+    // make sure output directory is empty!
+    else {
+        let output_dir_is_empty = args.output_dir.read_dir()?.next().is_none();
+        if !output_dir_is_empty {
+            return Err(eyre!(
+                "--output-dir {:?} already exists and is not empty!",
+                args.output_dir
+            )
+            .suggestion("Please change your --output-dir to a new or empty directory."));
+        }
     }
 
     // check how many threads are available on the system
