@@ -13,6 +13,7 @@ use crate::recombination::Recombination;
 use crate::sequence::Sequence;
 use bio::io::fasta;
 use color_eyre::eyre::{eyre, Report, Result, WrapErr};
+use color_eyre::Help;
 use indicatif::{style::ProgressStyle, ProgressBar};
 use itertools::Itertools;
 use log::{debug, info, warn};
@@ -136,6 +137,23 @@ pub fn simulate(args: &cli::simulate::Args) -> Result<(), Report> {
 pub fn run(args: &mut cli::run::Args) -> Result<(), Report> {
     // copy args for export/seralizing
     let args_export = args.clone();
+
+    // make sure output directory is empty!
+    let output_dir_is_empty = args.output_dir.read_dir()?.next().is_none();
+    if !output_dir_is_empty {
+        return Err(
+            eyre!("--output-dir {:?} already exists and is not empty!", args.output_dir)
+            .suggestion("Please change your --output-dir to a new or empty directory.")
+        );
+    }
+
+    // create output directory if it doesn't exist
+    if !args.output_dir.exists() {
+        info!("Creating output directory: {:?}", args.output_dir);
+        create_dir_all(&args.output_dir)?;
+    }
+
+    
     // check how many threads are available on the system
     let default_thread_pool = rayon::ThreadPoolBuilder::new().build().unwrap();
     info!(
@@ -162,12 +180,6 @@ pub fn run(args: &mut cli::run::Args) -> Result<(), Report> {
     let progress_bar_style = ProgressStyle::with_template(
         "{bar:40} {pos}/{len} ({percent}%) | Sequences / Second: {per_sec} | Elapsed: {elapsed_precise} | ETA: {eta_precise}"
     ).unwrap();
-
-    // create output directory if it doesn't exist
-    if !args.output_dir.exists() {
-        info!("Creating output directory: {:?}", args.output_dir);
-        create_dir_all(&args.output_dir)?;
-    }
 
     // Collect files in dataset_dir into a dataset object
     // This mainly includes parent populations sequences
@@ -447,7 +459,7 @@ pub fn run(args: &mut cli::run::Args) -> Result<(), Report> {
 }
 
 /// Plot rebar output
-pub fn plot(args: cli::plot::Args) -> Result<(), Report> {
+pub async fn plot(args: cli::plot::Args) -> Result<(), Report> {
     // ------------------------------------------------------------------------
     // Parse Args
 
@@ -532,12 +544,15 @@ pub fn plot(args: cli::plot::Args) -> Result<(), Report> {
             linelist,
             annotations.as_deref(),
             &output_path,
-        );
+            &args.font_cache,
+        ).await;
         match result {
             Ok(_) => info!("Plotting success."),
             Err(e) => {
-                warn!("Plotting failure. The following error was encountered but ignored: {e:?}")
-            }
+                // todo!() decide on whether we ignore or raise error
+                return Err(e);
+                //warn!("Plotting failure. The following error was encountered but ignored: {e:?}")
+            },
         }
     }
 

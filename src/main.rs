@@ -34,7 +34,7 @@ async fn main() -> Result<(), Report> {
         Command::Run(mut args) => rebar::run(&mut args)?,
         // --------------------------------------------------------------------
         // Plot
-        Command::Plot(args) => rebar::plot(*args)?,
+        Command::Plot(args) => rebar::plot(*args).await?,
         // --------------------------------------------------------------------
         // Simulate
         Command::Simulate(args) => rebar::simulate(&args)?,
