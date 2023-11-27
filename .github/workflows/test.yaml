@@ -64,7 +64,7 @@ jobs:
 
       - name: set run command (docker)
         if: matrix.arch == 'docker'
-        run: echo RUN_CMD="docker run -v .:/rebar $DOCKER_IMAGE ${{ matrix.binary }}" >> $GITHUB_ENV
+        run: echo RUN_CMD="docker run -v .:/rebar -e GITHUB_USERNAME=${{ github.actor }} -e GITHUB_TOKEN=${{ github.token }} $DOCKER_IMAGE ${{ matrix.binary }}" >> $GITHUB_ENV
 
       - name: set run command (linux, mac)
         if: matrix.arch == 'x86_64-unknown-linux-musl' || matrix.arch == 'x86_64-apple-darwin'
