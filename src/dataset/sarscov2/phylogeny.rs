@@ -301,20 +301,8 @@ pub fn compress_lineage(
 ///
 /// # Arguments
 ///
-///  * `lineage` | `String` | A String of a SARS-CoV-2 lineage name.
-///  * `alias_key` | `&BTreeMap<String, Vec<String>>` | A mapping of SARS-CoV-2 aliases to decompressed lineage paths.
-///
-/// # Basic usage:
-///
-/// ```
-/// decompress_lineage("BA.5.2", alias_key)?;
-/// ```
-///
-/// # Example
-///
-/// ```no run
-/// let alias_key = import_alias_key(".")?;
-/// decompress_lineage("BA.5.2", alias_key)?;
+///  * `lineage` | A string slice that contains a SARS-CoV-2 lineage name.
+///  * `alias_key` | A mapping of SARS-CoV-2 aliases to decompressed lineage paths.
 /// ```
 pub fn decompress_lineage(
     lineage: &str,
