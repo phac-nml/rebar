@@ -5,6 +5,8 @@ pub mod phylogeny;
 pub mod plot;
 pub mod recombination;
 pub mod sequence;
+#[cfg(test)]
+pub mod test;
 pub mod utils;
 
 use crate::dataset::attributes::Name;
