@@ -25,6 +25,12 @@ jobs:
         with:
           python-version: '3.9'
 
+      - name: check rust
+        run: |
+          rustup --version
+          rustc --version && rustc +nightly --version
+          cargo --version && cargo +nightly --version
+
       - name: setup linters
         run: |
           pip install pre-commit==2.17.0
