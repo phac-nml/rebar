@@ -1,6 +1,6 @@
 use crate::dataset::{Dataset, SearchResult};
+use crate::recombination::{validate, Recombination};
 use crate::utils;
-use crate::{recombination, recombination::validate};
 use color_eyre::eyre::{eyre, Report, Result};
 use itertools::Itertools;
 
@@ -8,17 +8,9 @@ use itertools::Itertools;
 // LineList
 
 pub fn linelist(
-    recombinations: &Vec<recombination::Recombination>,
-    best_matches: &Vec<SearchResult>,
+    results: &Vec<(SearchResult, Recombination)>,
     dataset: &Dataset,
 ) -> Result<utils::table::Table, Report> {
-    // check for same length
-    if recombinations.len() != best_matches.len() {
-        return Err(eyre!(
-            "recombinations and best_matches are different lengths."
-        ));
-    }
-
     let mut table = utils::table::Table::new();
 
     table.headers = vec![
@@ -32,7 +24,7 @@ pub fn linelist(
         "edge_case",
         "unique_key",
         "regions",
-        "private",
+        "substitutions",
         "genome_length",
         "dataset_name",
         "dataset_tag",
@@ -43,9 +35,7 @@ pub fn linelist(
     .collect_vec();
 
     // iterate in parallel, checking for same sequence id
-    for it in recombinations.iter().zip(best_matches.iter()) {
-        let (recombination, best_match) = it;
-
+    for (best_match, recombination) in results {
         // check that they're in the correct order
         if recombination.sequence.id != best_match.sequence_id {
             return Err(eyre!(
@@ -101,10 +91,6 @@ pub fn linelist(
         let regions = recombination.regions.values().join(",").to_string();
         row[table.header_position("regions")?] = regions;
 
-        // private mutations
-        let private = best_match.private.iter().join(",").to_string();
-        row[table.header_position("private")?] = private;
-
         // genome_length
         let genome_length = recombination.genome_length.to_string();
         row[table.header_position("genome_length")?] = genome_length;
@@ -118,6 +104,46 @@ pub fn linelist(
         // cli version
         row[table.header_position("cli_version")?] =
             env!("CARGO_PKG_VERSION").to_string();
+
+        // --------------------------------------------------------------------
+        // Substitutions, annotated by parental origin or private
+        // todo!() think about if we want reversions in here or not...
+
+        let mut subs_by_origin = Vec::new();
+        // by parent
+        if recombination.recombinant.is_some() {
+            recombination.parents.iter().for_each(|p| {
+                let support = &recombination.support[p];
+                if !support.is_empty() {
+                    let subs_format = format!("{}|{p}", support.iter().join(","));
+                    subs_by_origin.push(subs_format)
+                }
+            });
+        } else {
+            let support = &best_match.support[&best_match.consensus_population];
+
+            if !support.is_empty() {
+                let subs_format = format!(
+                    "{}|{}",
+                    support.iter().join(","),
+                    &best_match.consensus_population
+                );
+                subs_by_origin.push(subs_format);
+            }
+        };
+
+        // private substitutions
+        let mut private = if recombination.recombinant.is_some() {
+            recombination.private.values().flatten().collect_vec()
+        } else {
+            best_match.private.iter().collect_vec()
+        };
+        if !private.is_empty() {
+            private.sort();
+            let subs_format = format!("{}|private", private.iter().join(","));
+            subs_by_origin.push(subs_format);
+        }
+        row[table.header_position("substitutions")?] = subs_by_origin.iter().join(";");
 
         table.rows.push(row);
     }

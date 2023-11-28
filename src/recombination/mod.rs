@@ -2,8 +2,8 @@ pub mod search;
 pub mod validate;
 
 use crate::cli::run;
-use crate::dataset::{Dataset, SearchResult};
-use crate::sequence::{parsimony, Sequence, Substitution};
+use crate::dataset::SearchResult;
+use crate::sequence::{Sequence, Substitution};
 use crate::utils::table::Table;
 use color_eyre::eyre::{eyre, Report, Result};
 use color_eyre::Help;
@@ -35,7 +35,9 @@ pub struct Recombination<'seq> {
     pub support: BTreeMap<String, Vec<Substitution>>,
     pub conflict_ref: BTreeMap<String, Vec<Substitution>>,
     pub conflict_alt: BTreeMap<String, Vec<Substitution>>,
+    pub private: BTreeMap<String, Vec<Substitution>>,
     pub score: BTreeMap<String, isize>,
+    pub substitutions: BTreeMap<String, Vec<Substitution>>,
     #[serde(skip_serializing)]
     pub table: Table,
 }
@@ -56,7 +58,9 @@ impl<'seq> Recombination<'seq> {
             support: BTreeMap::new(),
             conflict_ref: BTreeMap::new(),
             conflict_alt: BTreeMap::new(),
+            private: BTreeMap::new(),
             score: BTreeMap::new(),
+            substitutions: BTreeMap::new(),
         }
     }
 
@@ -65,6 +69,7 @@ impl<'seq> Recombination<'seq> {
         let mut support = String::new();
         let mut conflict_ref = String::new();
         let mut conflict_alt = String::new();
+        let mut private = String::new();
 
         self.parents.iter().for_each(|pop| {
             // score
@@ -85,13 +90,20 @@ impl<'seq> Recombination<'seq> {
             let subs = self.conflict_alt.get(pop).unwrap();
             let msg = format!("  - {pop} ({}): {}\n", subs.len(), subs.iter().join(", "));
             conflict_alt.push_str(&msg);
+
+            // private
+            let subs = self.private.get(pop).unwrap();
+            let msg = format!("  - {pop} ({}): {}\n", subs.len(), subs.iter().join(", "));
+            private.push_str(&msg);
         });
 
         formatdoc!(
             "score:\n{score}
             support:\n{support}
             conflict_ref:\n{conflict_ref}
-            conflict_alt:\n{conflict_alt}"
+            conflict_alt:\n{conflict_alt}
+            private:\n{private}
+            "
         )
     }
 }
@@ -191,7 +203,6 @@ impl std::fmt::Display for Region {
 ///
 pub fn detect_recombination<'seq>(
     sequence: &'seq Sequence,
-    dataset: &Dataset,
     parents: &Vec<SearchResult>,
     parent_candidate: Option<&SearchResult>,
     reference: &Sequence,
@@ -461,20 +472,38 @@ pub fn detect_recombination<'seq>(
         // Which coordinate ranges are attributed to this parent
         let coordinates = recombination
             .regions
-            .iter()
-            .filter(|(_start, region)| &region.origin == pop)
-            .flat_map(|(_start, region)| ((region.start)..=(region.end)).collect_vec())
+            .values()
+            .filter(|region| &region.origin == pop)
+            .flat_map(|region| ((region.start)..=(region.end)).collect_vec())
             .collect_vec();
 
-        let pop_seq = &dataset.populations[pop];
-        let summary =
-            parsimony::Summary::from_sequence(sequence, pop_seq, Some(&coordinates))?;
-        // update recombination with support and conflicts found
-        recombination.support.insert(pop.to_owned(), summary.support);
-        recombination.conflict_ref.insert(pop.to_owned(), summary.conflict_ref);
-        recombination.conflict_alt.insert(pop.to_owned(), summary.conflict_alt);
-        recombination.score.insert(pop.to_owned(), summary.score);
+        let search_result =
+            parents.iter().find(|r| *pop == r.consensus_population).unwrap();
+        // support
+        let mut support = search_result.support[pop].clone();
+        support.retain(|s| coordinates.contains(&s.coord));
+        // conflict_alt
+        let mut conflict_alt = search_result.conflict_alt[pop].clone();
+        conflict_alt.retain(|s| coordinates.contains(&s.coord));
+        // conflict_ref
+        let mut conflict_ref = search_result.conflict_ref[pop].clone();
+        conflict_ref.retain(|s| coordinates.contains(&s.coord));
+        // private
+        let mut private = search_result.private.clone();
+        private.retain(|s| coordinates.contains(&s.coord));
+        // score
+        let score = support.len() as isize
+            - conflict_alt.len() as isize
+            - conflict_ref.len() as isize;
+
+        recombination.support.insert(pop.to_owned(), support);
+        recombination.conflict_ref.insert(pop.to_owned(), conflict_ref);
+        recombination.conflict_alt.insert(pop.to_owned(), conflict_alt);
+        recombination.private.insert(pop.to_owned(), private);
+        recombination.score.insert(pop.to_owned(), score);
     }
+
+    // record the substitutions+reversions that are unresolved by any parent
 
     // convoluted debug message
     debug!(

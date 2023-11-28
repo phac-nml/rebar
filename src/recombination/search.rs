@@ -103,7 +103,7 @@ pub fn all_parents<'seq>(
 
         if hypothesis == Hypothesis::DesignatedRecombinant {
             // skip this hypothesis if user requested naive search
-            if args.naive {
+            if args.naive || best_match.recombinant.is_none() {
                 continue;
             }
             if let Some(recombinant) = &best_match.recombinant {
@@ -275,7 +275,7 @@ pub fn all_parents<'seq>(
     let primary_parent = result.1[0].clone();
 
     // ------------------------------------------------------------------------
-    // Recombinat attributes
+    // Recombinant attributes
 
     recombination.edge_case = edge_case;
 
@@ -290,6 +290,10 @@ pub fn all_parents<'seq>(
             Some(recombinant.clone())
         } else {
             *best_match = primary_parent;
+            debug!(
+                "Changing best match consensus to primary parent:\n{}",
+                best_match.pretty_print()
+            );
             Some("novel".to_string())
         }
     } else {
@@ -555,7 +559,6 @@ pub fn secondary_parents<'seq>(
                 // check for recombination
                 let detect_result = detect_recombination(
                     sequence,
-                    dataset,
                     &parents,
                     Some(&parent_candidate),
                     &dataset.reference,
