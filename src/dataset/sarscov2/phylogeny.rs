@@ -210,7 +210,6 @@ pub async fn build(
     }
 
     phylogeny.recombinants_all = phylogeny.get_recombinants_all()?;
-    phylogeny.non_recombinants_all = phylogeny.get_non_recombinants_all()?;
 
     Ok(phylogeny)
 }

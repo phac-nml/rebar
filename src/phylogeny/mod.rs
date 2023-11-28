@@ -24,7 +24,6 @@ pub struct Phylogeny {
     pub order: Vec<String>,
     pub recombinants: Vec<String>,
     pub recombinants_all: Vec<String>,
-    pub non_recombinants_all: Vec<String>,
 }
 
 impl Default for Phylogeny {
@@ -40,7 +39,6 @@ impl Phylogeny {
             order: Vec::new(),
             recombinants: Vec::new(),
             recombinants_all: Vec::new(),
-            non_recombinants_all: Vec::new(),
         }
     }
 

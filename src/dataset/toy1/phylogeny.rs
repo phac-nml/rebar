@@ -30,7 +30,6 @@ pub fn build() -> Result<Phylogeny, Report> {
     phylogeny.recombinants.push(name.clone());
 
     phylogeny.recombinants_all = phylogeny.get_recombinants_all()?;
-    phylogeny.non_recombinants_all = phylogeny.get_non_recombinants_all()?;
 
     let output_path = PathBuf::from("phylogeny.json");
     phylogeny.write(&output_path)?;
