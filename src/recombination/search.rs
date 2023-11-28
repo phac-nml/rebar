@@ -128,7 +128,7 @@ pub fn all_parents<'seq>(
                 continue;
             }
             hyp_populations
-                .retain(|pop| dataset.phylogeny.non_recombinants_all.contains(pop));
+                .retain(|pop| !dataset.phylogeny.recombinants_all.contains(pop));
         }
 
         // ----------------------------------------------------------------------------
