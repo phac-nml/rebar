@@ -7,53 +7,39 @@
 [![Test CI](https://github.com/phac-nml/rebar/actions/workflows/test.yaml/badge.svg)](https://github.com/phac-nml/rebar/actions/workflows/test.yaml)
 [![Latest CI](https://github.com/phac-nml/rebar/actions/workflows/latest.yaml/badge.svg)](https://github.com/phac-nml/rebar/actions/workflows/latest.yaml)
 
-`rebar` is a command-line application that _detects_ and _visualizes_ recombination between genomic sequences. It follows the [PHA4GE Guidance for Detecting and Characterizing SARS-CoV-2 Recombinants](https://github.com/pha4ge/pipeline-resources/blob/main/docs/sc2-recombinants.md) which outlines three steps:
+`rebar` is **RE**combination **BAR**code detector that _finds_ and _visualizes_ recombination between genomic sequences. It follows the [PHA4GE Guidance for Detecting and Characterizing SARS-CoV-2 Recombinants](https://github.com/pha4ge/pipeline-resources/blob/main/docs/sc2-recombinants.md) which outlines three steps:
 
 1. Assess the genomic evidence for recombination.
 1. Identify the breakpoint coordinates and parental regions.
 1. Classify sequences as _designated_ or _novel_ recombinant lineages.
 
-![plot_XBB.1.16](images/XBB_BJ.1_CJ.1_22897-22941.png)
+![A plot of the breakpoints and parental regions for the recombinant SARS-CoV-2 lineage XBB.1.16. At the top are rectangles arranged side-by-side horizontally. These are colored and labelled by each parent (ex. BJ.1., CJ.1) and are intepreted as reading left to right, 5' to 3'. Below these regions are genomic annotations, which show the coordinates for each gene. At the bottom are horizontal tracks, where each row is a sample, and each column is a mutation. Mutations are colored according to which parent the recombination region derives from.](assets/images/XBB_BJ.1_CJ.1_22897-22941.png)
 
 ## Install
 
-### Direct
-
-Download the [latest release](https://github.com/phac-nml/rebar/releases/download/v0.1.1/rebar-x86_64-unknown-linux-musl):
-
 ```bash
-wget -O rebar https://github.com/phac-nml/rebar/releases/download/v0.1.1/rebar-x86_64-unknown-linux-musl
+wget -O rebar https://github.com/phac-nml/rebar/releases/download/v0.1.3/rebar-x86_64-unknown-linux-musl
 ./rebar --help
 ```
 
-### Docker
-
-```bash
-docker run ghcr.io/phac-nml/rebar:latest rebar --help
-```
-
-### Conda \*\*Coming Soon!\*\*
-
-### Source
-
-Please see the [compilation](docs/comilation.md) documentation.
+- Please see the [install](docs/install.md) docs for Windows, macOS, Docker, Singularity, and Conda.
+- Please see the [compile](docs/compile.md) docs for those interested in source compilation.
 
 ## Usage
 
 Download a sars-cov-2 dataset, version-controlled to a specific date.
 
   ```bash
-  rebar dataset download \
-    --name sars-cov-2 \
-    --tag 2023-11-17 \
-    --output-dir dataset/sars-cov-2/2023-11-17
+  rebar dataset download --name sars-cov-2 --tag 2023-11-17 --output-dir dataset/sars-cov-2/2023-11-17
   ```
 
 - `--tag` can be any date (YYYY-MM-DD)!
 
 ### Example 1
 
-1. Detect recombination in user-specified populations.
+The names of SARS-CoV-2 lineages as input.
+
+1. Detect recombination.
 
     ```bash
     rebar run \
@@ -62,7 +48,7 @@ Download a sars-cov-2 dataset, version-controlled to a specific date.
       --output-dir example1
     ```
 
-    - `--populations` can include any sequence name found in the dataset `populations.fasta`. For sars-cov-2, sequence names are the designated lineages.
+    - `--populations` can include any sequence name found in the dataset `populations.fasta`. For `sars-cov-2``, sequence names are the designated lineages.
     - The wildcard character ("\*") will include the lineage and all its descendants.
     - **NOTE**: If using "\*", make sure to use quotes (ex. `--lineages "XBC*,XBB.1.16*"`)!
 
@@ -74,12 +60,20 @@ Download a sars-cov-2 dataset, version-controlled to a specific date.
 
 ### Example 2
 
-1. Detect recombination from an input alignment.
+An alignment of SARS-CoV-2 genomes as input.
+
+1. Download test data.
+
+    ```bash
+    wget https://raw.githubusercontent.com/phac-nml/rebar/main/data/example2.fasta
+    ```
+
+1. Detect recombination.
 
     ```bash
     rebar run \
       --dataset dataset/sars-cov-2/2023-11-17 \
-      --alignment data/example2.fasta \
+      --alignment example2.fasta \
       --output-dir example2
     ```
 
@@ -95,13 +89,13 @@ Download a sars-cov-2 dataset, version-controlled to a specific date.
 
 Run `rebar` on all populations in the dataset, and validate against the expected results.
 
-```bash
-rebar run \
-  --dataset-dir dataset/sars-cov-2/latest \
-  --output-dir validate \
-  --populations "*" \
-  --threads 4
-```
+  ```bash
+  rebar run \
+    --dataset-dir dataset/sars-cov-2/latest \
+    --output-dir validate \
+    --populations "*" \
+    --threads 4
+  ```
 
 ## Output
 
