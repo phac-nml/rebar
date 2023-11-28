@@ -7,7 +7,11 @@
 [![Test CI](https://github.com/phac-nml/rebar/actions/workflows/test.yaml/badge.svg)](https://github.com/phac-nml/rebar/actions/workflows/test.yaml)
 [![Latest CI](https://github.com/phac-nml/rebar/actions/workflows/latest.yaml/badge.svg)](https://github.com/phac-nml/rebar/actions/workflows/latest.yaml)
 
-`rebar` is **RE**combination **BAR**code detector that _finds_ and _visualizes_ recombination between genomic sequences. It follows the [PHA4GE Guidance for Detecting and Characterizing SARS-CoV-2 Recombinants](https://github.com/pha4ge/pipeline-resources/blob/main/docs/sc2-recombinants.md) which outlines three steps:
+**RE**combination **BAR**code detector
+
+## Why rebar?
+
+`rebar` is a command-line application that _detects_ and _visualizes_ recombination between genomic sequences. It follows the [PHA4GE Guidance for Detecting and Characterizing SARS-CoV-2 Recombinants](https://github.com/pha4ge/pipeline-resources/blob/main/docs/sc2-recombinants.md) which outlines three steps:
 
 1. Assess the genomic evidence for recombination.
 1. Identify the breakpoint coordinates and parental regions.
@@ -27,19 +31,13 @@ wget -O rebar https://github.com/phac-nml/rebar/releases/download/v0.1.3/rebar-x
 
 ## Usage
 
-Download a sars-cov-2 dataset, version-controlled to a specific date.
+1. Download a dataset, version-controlled to a specific date.
 
-  ```bash
-  rebar dataset download --name sars-cov-2 --tag 2023-11-17 --output-dir dataset/sars-cov-2/2023-11-17
-  ```
+    ```bash
+    rebar dataset download --name sars-cov-2 --tag 2023-11-17 --output-dir dataset/sars-cov-2/2023-11-17
+    ```
 
-- `--tag` can be any date (YYYY-MM-DD)!
-
-### Example 1
-
-The names of SARS-CoV-2 lineages as input.
-
-1. Detect recombination.
+1. Detect recombination in dataset populations.
 
     ```bash
     rebar run \
@@ -48,69 +46,33 @@ The names of SARS-CoV-2 lineages as input.
       --output-dir example1
     ```
 
-    - `--populations` can include any sequence name found in the dataset `populations.fasta`. For `sars-cov-2``, sequence names are the designated lineages.
-    - The wildcard character ("\*") will include the lineage and all its descendants.
-    - **NOTE**: If using "\*", make sure to use quotes (ex. `--lineages "XBC*,XBB.1.16*"`)!
-
 1. Plot breakpoints and parental regions.
 
     ```bash
     rebar plot --dataset-dir dataset/sars-cov-2/2023-11-17 --output-dir example1
     ```
 
-### Example 2
+Please see the [examples](docs/examples.md) docs for more tutorials including:
 
-An alignment of SARS-CoV-2 genomes as input.
-
-1. Download test data.
-
-    ```bash
-    wget https://raw.githubusercontent.com/phac-nml/rebar/main/data/example2.fasta
-    ```
-
-1. Detect recombination.
-
-    ```bash
-    rebar run \
-      --dataset dataset/sars-cov-2/2023-11-17 \
-      --alignment example2.fasta \
-      --output-dir example2
-    ```
-
-    - The `--alignment` must be aligned to the same reference as in the dataset `reference.fasta` (we strongly recommend [nextclade](https://clades.nextstrain.org/)).
-
-1. Plot breakpoints and parental regions.
-
-    ```bash
-    rebar plot --dataset-dir dataset/sars-cov-2/2023-11-17 --output-dir example2
-    ```
-
-## Validate
-
-Run `rebar` on all populations in the dataset, and validate against the expected results.
-
-  ```bash
-  rebar run \
-    --dataset-dir dataset/sars-cov-2/latest \
-    --output-dir validate \
-    --populations "*" \
-    --threads 4
-  ```
+- Using an alignment of genomes as input.
+- Performing a 'knockout' experiment.
+- Validating all populations in a dataset.
+- Running a custom dataset.
 
 ## Output
 
 ### Plots
 
-Visualization of substitutions, parental origins, and breakpoints.
+Visualization of substitutions, parental origins, and breakpoints: `<output-dir>/plots/`. Please see the [Why rebar?](#why-rebar) section for an example!
 
 ### Table
 
-A linelist summary of detection results.
+A linelist summary of results: `<output-dir>/linelist.tsv`
 
-|strain               |validate|validate_details|population|recombinant|parents  |breakpoints|edge_case|unique_key               |regions                          |private|diagnostic|genome_length|dataset_name|dataset_tag|cli_version|
-|:--------------------|:-------|:---------------|:---------|:----------|:--------|:----------|:--------|:------------------------|:--------------------------------|:------|:---------|:------------|:-----------|:----------|:----------|
-|XBB.1.16  |pass    |                |XBB.1.16  |XBB        |BJ.1,CJ.1|22897-22941|false    |XBB_BJ.1_CJ.1_22897-22941|261-22896\|BJ.1,22942-29118\|CJ.1|       |NA        |29903        |sars-cov-2  |2023-11-17 |0.1.0      |
-|XBB.1.16.1|pass    |                |XBB.1.16.1|XBB        |BJ.1,CJ.1|22897-22941|false    |XBB_BJ.1_CJ.1_22897-22941|261-22896\|BJ.1,22942-29118\|CJ.1|       |NA        |29903        |sars-cov-2  |2023-11-17 |0.1.0      |
+|strain               |validate|validate_details|population|recombinant|parents  |breakpoints|edge_case|unique_key               |regions                          |substitutions                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |genome_length|dataset_name|dataset_tag|cli_version|
+|:--------------------|:-------|:---------------|:---------|:----------|:--------|:----------|:--------|:------------------------|:--------------------------------|:-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|:------------|:-----------|:----------|:----------|
+|population_XBB.1.16  |pass    |                |XBB.1.16  |XBB        |BJ.1,CJ.1|22897-22941|false    |XBB_BJ.1_CJ.1_22897-22941|261-22896\|BJ.1,22942-29118\|CJ.1|A405G,T670G,C2790T,C3037T,G4184A,C4321T,C9344T,A9424G,C9534T,C9866T,C10029T,C10198T,G10447A,C10449A,C12880T,C14408T,G15451A,C15714T,C15738T,T15939C,T16342C,C17410T,T17859C,A18163G,C19955T,A20055G,C21618T,T21810C,G21987A,C22000A,C22109G,T22200A,G22577C,G22578A,G22599C,C22664A,C22674T,T22679C,C22686T,A22688G,G22775A,A22786C,G22813T,T22882G,G22895C,T22896C\|BJ.1;T22942G,T23018C,T23019C,T23031C,C25416T,A26275G\|CJ.1;C11750T,C11956T,T12730A,A14856G,G18703T,A19326G,A22101T,G22317T,C22995G,A22995C,G27915T,T28297C,A28447G\|private        |29903        |sars-cov-2  |2023-11-17 |0.1.0      |
+|population_XBB.1.16.1|pass    |                |XBB.1.16.1|XBB        |BJ.1,CJ.1|22897-22941|false    |XBB_BJ.1_CJ.1_22897-22941|261-22896\|BJ.1,22942-29118\|CJ.1|A405G,T670G,C2790T,C3037T,G4184A,C4321T,C9344T,A9424G,C9534T,C9866T,C10029T,C10198T,G10447A,C10449A,C12880T,C14408T,G15451A,C15714T,C15738T,T15939C,T16342C,C17410T,T17859C,A18163G,C19955T,A20055G,C21618T,T21810C,G21987A,C22000A,C22109G,T22200A,G22577C,G22578A,G22599C,C22664A,C22674T,T22679C,C22686T,A22688G,G22775A,A22786C,G22813T,T22882G,G22895C,T22896C\|BJ.1;T22942G,T23018C,T23019C,T23031C,C25416T,A26275G\|CJ.1;C11750T,C11956T,T12730A,A14856G,G18703T,A19326G,A22101T,G22317T,C22995G,A22995C,C23202T,G27915T,T28297C,A28447G\|private|29903        |sars-cov-2  |2023-11-17 |0.1.0      |
 
 ## Credits
 
