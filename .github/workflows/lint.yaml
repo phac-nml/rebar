@@ -31,6 +31,11 @@ jobs:
           rustc --version && rustc +nightly --version
           cargo --version && cargo +nightly --version
 
+      - name: setup rust
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: 1.74.0
+
       - name: setup linters
         run: |
           pip install pre-commit==2.17.0
