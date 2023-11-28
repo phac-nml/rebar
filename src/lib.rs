@@ -385,17 +385,6 @@ pub fn run(args: &mut cli::run::Args) -> Result<(), Report> {
 
     progress_bar.finish();
 
-    // unpack our search results, should be able to do this with unzip, but I
-    // keep getting errors related to implementation of Default and Extend
-
-    let mut best_matches = Vec::new();
-    let mut recombinations = Vec::new();
-
-    for result in results {
-        best_matches.push(result.0);
-        recombinations.push(result.1);
-    }
-
     // ------------------------------------------------------------------------
     // Export CLI args
 
@@ -419,7 +408,8 @@ pub fn run(args: &mut cli::run::Args) -> Result<(), Report> {
     let outpath_linelist = args.output_dir.join("linelist.tsv");
     info!("Exporting linelist: {outpath_linelist:?}");
 
-    let linelist_table = export::linelist(&recombinations, &best_matches, &dataset)?;
+    let linelist_table = export::linelist(&results, &dataset)?;
+    //let linelist_table = export::linelist(&best_matches, &recombinations, &dataset)?;
     linelist_table.write(&outpath_linelist)?;
 
     // ------------------------------------------------------------------------
@@ -430,10 +420,9 @@ pub fn run(args: &mut cli::run::Args) -> Result<(), Report> {
     create_dir_all(&outdir_barcodes)?;
 
     // get unique keys of recombinants identified
-    let unique_keys = recombinations
+    let unique_keys = results
         .iter()
-        .filter(|rec| *rec.unique_key != String::new())
-        .map(|rec| &rec.unique_key)
+        .filter_map(|(_b, r)| (*r.unique_key != String::new()).then_some(&r.unique_key))
         .unique()
         .collect_vec();
 
@@ -445,9 +434,9 @@ pub fn run(args: &mut cli::run::Args) -> Result<(), Report> {
 
     for unique_key in unique_keys {
         // filter recombinations down to just this recombinant unique_key
-        let unique_rec = recombinations
+        let unique_rec = results
             .iter()
-            .filter(|rec| rec.unique_key == *unique_key)
+            .filter_map(|(_b, r)| (r.unique_key == *unique_key).then_some(r))
             .cloned()
             .collect_vec();
         // combine all the sample barcode tables

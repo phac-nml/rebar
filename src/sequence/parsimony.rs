@@ -34,19 +34,18 @@ impl Summary {
     ) -> Result<Self, Report> {
         let mut parsimony_summary = Summary::new();
 
-        // get all the substitutions found in this query
-        // exclude missing and deletion coordinates
-        let mut query_subs = query
-            .substitutions
-            .iter()
-            .filter(|sub| {
-                !sequence.missing.contains(&sub.coord)
-                    && !sequence.deletions.contains(&sub.to_deletion())
-            })
-            .collect_vec();
-
         // get all the substitutions found in the sequence
         let mut seq_subs = sequence.substitutions.clone();
+        //println!("seq_subs: {}", seq_subs.iter().join(","));
+        // exclude coordinates that are in the sequence missing or deletions
+        let mut exclude_coordinates =
+            sequence.deletions.iter().map(|d| d.coord).collect_vec();
+        exclude_coordinates.extend(sequence.missing.clone());
+        // get all the substitutions found in this query
+        // exclude missing and deletion coordinates
+        let mut query_subs = query.substitutions.clone();
+        query_subs.retain(|s| !exclude_coordinates.contains(&s.coord));
+        //println!("query_subs: {}", query_subs.iter().join(","));
 
         // optionally filter coordinates
         if let Some(coordinates) = coordinates {
@@ -55,9 +54,9 @@ impl Summary {
         }
 
         // support: sub in seq that is also in query
-        // conflict_alt: sub in eq that is not in query
+        // conflict_alt: sub in seq that is not in candidate query
         seq_subs.iter().for_each(|sub| {
-            if query_subs.contains(&sub) {
+            if query_subs.contains(sub) {
                 parsimony_summary.support.push(*sub);
             } else {
                 parsimony_summary.conflict_alt.push(*sub);
@@ -65,11 +64,8 @@ impl Summary {
         });
 
         // conflict_ref: sub in query that is not in seq
-        parsimony_summary.conflict_ref = query_subs
-            .into_iter()
-            .filter(|sub| !seq_subs.contains(sub))
-            .cloned()
-            .collect_vec();
+        parsimony_summary.conflict_ref =
+            query_subs.into_iter().filter(|sub| !seq_subs.contains(sub)).collect_vec();
 
         // score: support - conflict_alt - conflict_ref
         // why did we previously use only conflict_ref and not conflict_alt?
