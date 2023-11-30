@@ -362,6 +362,37 @@ impl Dataset {
         debug!("Search Result:\n{}", result.pretty_print());
         Ok(result)
     }
+
+    /// If a population name is in the phylogeny but not in the sequences,
+    /// find the closest parent that is in the sequences. Might be itself!
+    ///
+    /// I don't love this function name, need better!
+    pub fn get_ancestor_with_sequence(&self, population: &str) -> Result<String, Report> {
+        if self.populations.contains_key(population) {
+            return Ok(population.to_string());
+        }
+        // ancestors can have multiple paths to root, because of recombination
+        let ancestors = self.phylogeny.get_ancestors(population)?;
+        // filter the ancestor paths to just populations we have sequences for
+        // prefer the ancestor path that is the longest
+        let ancestors_filter = ancestors
+            .into_iter()
+            .map(|path| {
+                path.into_iter()
+                    .filter(|p| self.populations.contains_key(p))
+                    .collect_vec()
+            })
+            .max_by(|a, b| a.len().cmp(&b.len()))
+            .unwrap_or_default();
+
+        // use the last element in the path (closest parent)
+        let ancestor = ancestors_filter.last();
+        if let Some(ancestor) = ancestor {
+            Ok(ancestor.clone())
+        } else {
+            Err(eyre!("No ancestor of {population} has sequence data."))
+        }
+    }
 }
 
 // ----------------------------------------------------------------------------

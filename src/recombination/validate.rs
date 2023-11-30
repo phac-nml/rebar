@@ -2,7 +2,6 @@ use crate::dataset::{Dataset, SearchResult};
 use crate::recombination::Recombination;
 use color_eyre::eyre::{eyre, Report, Result};
 use itertools::Itertools;
-//use log::debug;
 use log::warn;
 use petgraph::Direction;
 use std::fmt;
@@ -187,11 +186,20 @@ pub fn validate(
 /// Compare expected and observed recombination parents.
 pub fn compare_parents(
     observed: &Vec<String>,
-    expected: &Vec<String>,
+    expected: &[String],
     dataset: &Dataset,
 ) -> Result<bool, Report> {
-    // debug!("observed: {observed:?}");
-    // debug!("expected: {expected:?}");
+    //println!("observed: {observed:?}");
+    //println!("expected: {expected:?}");
+
+    // check if the expected parents are actually in the dataset populations
+    // ie. we actually have sequence data for them
+    let expected_filter = expected
+        .iter()
+        .map(|p| dataset.get_ancestor_with_sequence(p).unwrap_or(p.clone()))
+        .collect_vec();
+
+    let expected = &expected_filter;
 
     // one is empty, other is not
     if (observed.is_empty() && !expected.is_empty())
@@ -230,7 +238,7 @@ pub fn compare_parents(
     });
     observed_parents = observed_parents.into_iter().unique().collect();
     observed_parents.retain(|p| expected.contains(p));
-    // debug!("observed_parents: {observed_parents:?}");
+    //println!("observed_parents: {observed_parents:?}");
     if observed_parents.len() == expected.len() {
         return Ok(true);
     }
@@ -242,7 +250,7 @@ pub fn compare_parents(
         .unique()
         .collect_vec();
     observed_children.retain(|p| expected.contains(p));
-    // debug!("observed_children: {observed_children:?}");
+    //println!("observed_children: {observed_children:?}");
     if observed_children.len() == expected.len() {
         return Ok(true);
     }
@@ -254,7 +262,7 @@ pub fn compare_parents(
     observed_combine.append(&mut observed_children);
     observed_combine = observed_combine.into_iter().unique().collect();
     observed_combine.retain(|pop| expected.contains(pop));
-    // debug!("observed_combine: {observed_combine:?}");
+    //println!("observed_combine: {observed_combine:?}");
     if observed_combine.len() == expected.len() {
         return Ok(true);
     }
