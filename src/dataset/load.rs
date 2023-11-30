@@ -90,7 +90,7 @@ pub fn parse_populations(
     // read in populations from fasta
     let populations_reader = fasta::Reader::from_file(populations_path)
         .map_err(|e| eyre!(e))
-        .wrap_err("Failed to read file: {populations_path:?}")?;
+        .wrap_err(format!("Failed to read file: {populations_path:?}"))?;
 
     // read in reference from fasta
     let reference = read_reference(reference_path, mask)?;

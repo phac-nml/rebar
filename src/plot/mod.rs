@@ -2,21 +2,120 @@ pub mod constants;
 pub mod polygon;
 pub mod text;
 
+use crate::cli;
 use crate::utils::table::Table;
 use color_eyre::eyre::{eyre, Report, Result};
 use color_eyre::Help;
 use itertools::Itertools;
-use log::debug;
+use log::{debug, info, warn};
 use raqote::*;
+use std::fs::create_dir_all;
 use std::path::Path;
 
+/// Plot rebar output
+pub fn plot(args: &cli::plot::Args) -> Result<(), Report> {
+    // ------------------------------------------------------------------------
+    // Parse Args
+
+    let dataset_dir = &args.dataset_dir;
+    if !dataset_dir.exists() {
+        return Err(eyre!("--dataset-dir {dataset_dir:?} does not exist."));
+    }
+    let run_dir = &args.run_dir;
+    if !run_dir.exists() {
+        return Err(eyre!("--run-dir {run_dir:?} does not exist."));
+    }
+
+    // ------------------------------------------------------------------------
+    // Check Mandatory Paths
+
+    let linelist = &run_dir.join("linelist.tsv");
+    if !linelist.exists() {
+        return Err(eyre!(
+            "Linelist file {linelist:?} does not exist in --run-dir {run_dir:?}."
+        ));
+    }
+    let barcodes_dir = &run_dir.join("barcodes");
+    if !linelist.exists() {
+        return Err(eyre!(
+            "Barcodes directory {barcodes_dir:?} does not exist in --run-dir {run_dir:?}."
+        ));
+    }
+
+    let annotations_path = dataset_dir.join("annotations.tsv");
+    let annotations = if annotations_path.exists() {
+        Some(annotations_path)
+    } else {
+        warn!(
+            "Annotations {annotations_path:?} do not exist in --dataset-dir {dataset_dir:?}."
+        );
+        None
+    };
+
+    // create plot directory if it doesn't exist
+    let output_dir = args.output_dir.clone().unwrap_or(run_dir.join("plots"));
+    if !output_dir.exists() {
+        info!("Creating plot directory: {output_dir:?}");
+        create_dir_all(&output_dir)?;
+    }
+
+    // ------------------------------------------------------------------------
+    // List of Barcodes Files
+
+    let mut barcodes_files: Vec<std::path::PathBuf> = Vec::new();
+
+    // Input File Specified
+    let barcodes_file = &args.barcodes_file;
+    if let Some(barcodes_file) = barcodes_file {
+        if !barcodes_file.exists() {
+            return Err(eyre!("Barcodes file {barcodes_file:?} does not exist."));
+        }
+        barcodes_files.push(barcodes_file.clone());
+    }
+    // Otherwise, use all files in barcodes_dir
+    else {
+        let files = std::fs::read_dir(barcodes_dir)?;
+        for result in files {
+            let file_path = result?.path();
+            let file_ext = file_path.extension().unwrap_or(std::ffi::OsStr::new(""));
+            if file_ext == "tsv" {
+                barcodes_files.push(file_path.clone());
+            } else {
+                warn!("Skipping barcodes file with unknown extension: {file_path:?}")
+            }
+        }
+    }
+
+    // ------------------------------------------------------------------------
+    // Plot Each Barcodes
+
+    for barcodes_file in barcodes_files {
+        info!("Plotting barcodes file: {:?}", barcodes_file);
+        let output_prefix = barcodes_file
+            .file_stem()
+            .expect("Failed to get file stem of {barcodes_file:?}")
+            .to_str()
+            .expect("Failed to convert file of stem {barcodes_file:?} to str.");
+        let output_path = output_dir.join(format!("{}.png", output_prefix));
+        create(
+            &barcodes_file,
+            linelist,
+            annotations.as_deref(),
+            &output_path,
+        )?;
+        info!("Plotting success.");
+    }
+
+    info!("Done.");
+    Ok(())
+}
+
 #[allow(unused_variables)]
-pub async fn create(
+pub fn create(
     barcodes_path: &Path,
     linelist_path: &Path,
     annotations_path: Option<&Path>,
     output_path: &Path,
-    font_cache: &Path,
 ) -> Result<(), Report> {
     // ------------------------------------------------------------------------
     // Import Data

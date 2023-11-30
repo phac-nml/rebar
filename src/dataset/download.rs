@@ -1,6 +1,7 @@
 use crate::cli;
 use crate::dataset;
 use crate::dataset::attributes::{check_compatibility, Name, Summary};
+use crate::dataset::{sarscov2, toy1};
 use crate::{utils, utils::remote_file::RemoteFile};
 //use crate::sequence::Substitution;
 use color_eyre::eyre::{eyre, Report, Result};
@@ -70,8 +71,9 @@ pub async fn dataset(args: &mut cli::dataset::download::Args) -> Result<(), Repo
     } else {
         match args.name {
             Name::SarsCov2 => {
-                dataset::sarscov2::download::reference(&args.tag, &output_path).await?
+                sarscov2::download::reference(&args.tag, &output_path).await?
             }
+            Name::Toy1 => toy1::download::reference(&args.tag, &output_path)?,
             _ => todo!(),
         }
     };
@@ -87,8 +89,9 @@ pub async fn dataset(args: &mut cli::dataset::download::Args) -> Result<(), Repo
     } else {
         match args.name {
             Name::SarsCov2 => {
-                dataset::sarscov2::download::populations(&args.tag, &output_path).await?
+                sarscov2::download::populations(&args.tag, &output_path).await?
             }
+            Name::Toy1 => toy1::download::populations(&args.tag, &output_path)?,
             _ => todo!(),
         }
     };
@@ -100,7 +103,8 @@ pub async fn dataset(args: &mut cli::dataset::download::Args) -> Result<(), Repo
     info!("Creating annotations: {output_path:?}");
 
     let annotations = match args.name {
-        Name::SarsCov2 => dataset::sarscov2::annotations::build()?,
+        Name::SarsCov2 => sarscov2::annotations::build()?,
+        Name::Toy1 => toy1::annotations::build()?,
         _ => todo!(),
     };
     annotations.write(&output_path)?;
@@ -113,8 +117,9 @@ pub async fn dataset(args: &mut cli::dataset::download::Args) -> Result<(), Repo
 
     let phylogeny = match args.name {
         Name::SarsCov2 => {
-            dataset::sarscov2::phylogeny::build(&mut summary, &args.output_dir).await?
+            sarscov2::phylogeny::build(&mut summary, &args.output_dir).await?
         }
+        Name::Toy1 => toy1::phylogeny::build()?,
         _ => todo!(),
     };
     phylogeny.write(&output_path)?;
@@ -147,6 +152,7 @@ pub async fn dataset(args: &mut cli::dataset::download::Args) -> Result<(), Repo
 
     let mut edge_cases = match args.name {
         Name::SarsCov2 => dataset::sarscov2::edge_cases::default()?,
+        Name::Toy1 => dataset::toy1::edge_cases::default()?,
         _ => todo!(),
     };
     let manual_populations =

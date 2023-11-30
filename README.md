@@ -31,7 +31,13 @@ wget -O rebar https://github.com/phac-nml/rebar/releases/download/v0.1.3/rebar-x
 
 ## Usage
 
-1. Download a dataset, version-controlled to a specific date.
+1. Preview pre-built datasets.
+
+    ```bash
+    rebar dataset list
+    ```
+
+1. Download a pre-built dataset, version-controlled to a specific date (try any date!).
 
     ```bash
     rebar dataset download --name sars-cov-2 --tag 2023-11-17 --output-dir dataset/sars-cov-2/2023-11-17
@@ -135,7 +141,7 @@ Special thanks go to the following people, who are instrumental to the design an
   </tr>
 </table>
 
-Thanks go to the following people, who participated in the development of [ncov-recombinant](https://github.com/ktmeaton/ncov-recombinant), which `rebar` is based on:
+Thanks go to the following people, who participated in the development of `rebar` and [ncov-recombinant](https://github.com/ktmeaton/ncov-recombinant):
 
 <table>
   <tr>
@@ -157,11 +163,47 @@ Thanks go to the following people, who participated in the development of [ncov-
       <a href="https://github.com/yatisht/usher" title="Data: UShER">🔣</a>
       <a href="https://github.com/yatisht/usher" title="Ideas: UShER">🤔</a>
     </td>
-    <td align="center"><a href="https://www.inspq.qc.ca/en/auteurs/2629/all"><img src="https://i1.rgstatic.net/ii/profile.image/278724097396748-1443464411327_Q128/Benjamin-Delisle.jpg?s=100" width="100px;" alt=""/><br /><sub><b>Benjamin Delisle</b></sub></a><br /><a href="https://github.com/phac-nml/rebar/issues?q=author%3Abenjamindeslisle" title="Bug eports">🐛</a> <a href="https://github.com/phac-nml/rebar/commits?author=benjamindeslisle" title="Tests">⚠️</a></td>  
+    <td align="center"><a href="https://www.inspq.qc.ca/en/auteurs/2629/all"><img src="https://i1.rgstatic.net/ii/profile.image/278724097396748-1443464411327_Q128/Benjamin-Delisle.jpg?s=100" width="100px;" alt=""/><br /><sub><b>Benjamin Delisle</b></sub></a><br /><a href="https://github.com/phac-nml/rebar/issues?q=author%3Abenjamindeslisle" title="Bug reports">🐛</a> <a href="https://github.com/phac-nml/rebar/commits?author=benjamindeslisle" title="Tests">⚠️</a></td>  
     <td align="center"><a href="https://ca.linkedin.com/in/dr-vani-priyadarsini-ikkurti-4a2ab676"><img src="https://media-exp1.licdn.com/dms/image/C5603AQHaG8Xx4QLXSQ/profile-displayphoto-shrink_200_200/0/1569339145568?e=2147483647&v=beta&t=3WrvCciW-x8J3Aw4JHGrWOpuqiikrrGV2KsDaISnHIw" width="100px;" alt=""/><br /><sub><b>Vani Priyadarsini Ikkurthi</b></sub></a><br /><a href="https://github.com/phac-nml/rebar/issues?q=author%3Avanipriyadarsiniikkurthi" title="Bug reports">🐛</a> <a href="https://github.com/phac-nml/rebar/commits?author=vanipriyadarsiniikkurthi" title="Tests">⚠️</a></td>
     <td align="center"><a href="https://ca.linkedin.com/in/mark-horsman-52a14740"><img src="https://ui-avatars.com/api/?name=Mark+Horsman?s=100" width="100px;" alt=""/><br /><sub><b>Mark Horsman</b></sub></a><br /><a href="#ideas-markhorsman" title="Ideas, Planning, & Feedback">🤔</a> <a href="#design-markhorsman" title="Design">🎨</a></td>
     <td align="center"><a href="https://github.com/dfornika"><img src="https://avatars.githubusercontent.com/u/145659?v=4?s=100" width="100px;" alt=""/><br /><sub><b>Dan Fornika</b></sub></a><br /><a href="#ideas-dfornika" title="Ideas, Planning, & Feedback">🤔</a> <a href="https://github.com/phac-nml/rebar/commits?author=dfornika" title="Tests">⚠️</a></td>
     <td align="center"><img src="https://ui-avatars.com/api/?name=Tara+Newman?s=100" width="100px;" alt=""/><br /><sub><b>Tara Newman</b></sub><br /><a href="#ideas-TaraNewman" title="Ideas, Planning, & Feedback">🤔</a> <a href="https://github.com/phac-nml/rebar/commits?author=TaraNewman" title="Tests">⚠️</a></td>  
-  </tr>  
+  </tr>
+    <td align="center">
+      <a href="https://github.com/TheZetner"><img src="https://avatars.githubusercontent.com/u/11616351?v=4s=100" width="100px;" alt=""/>
+        <br />
+        <sub><b>Adrian Zetner</b></sub>
+      </a>
+      <br />
+      <a href="" title="Code Review">🔣</a>
+      <a href="r" title="Ideas">🤔</a>
+    </td>
+    <td align="center">
+      <a href="https://github.com/ConnorChato"><img src="https://avatars.githubusercontent.com/u/24962136?v=4?s=100" width="100px;" alt=""/>
+        <br />
+        <sub><b>Connor Chato</b></sub>
+      </a>
+      <br />
+      <a href="" title="Code Review">🔣</a>
+      <a href="r" title="Ideas">🤔</a>
+    </td>
+    <td align="center">
+      <a href="https://github.com/mattheww95"><img src="https://avatars.githubusercontent.com/u/76452933?v=4?s=100" width="100px;" alt=""/>
+        <br />
+        <sub><b>Matthew Wells</b></sub>
+      </a>
+      <br />
+      <a href="r" title="Cross-Platoform Compilation">📦</a>
+    </td>  
+    <td align="center">
+      <a href="https://github.com/AndreaTy"><img src="https://ui-avatars.com/api/?name=AndreaTyler?s=100" width="100px;" alt=""/>
+        <br />
+        <sub><b>Andrea Tyler</b></sub>
+      </a>
+      <br />
+      <a href="" title="Code Review">🔣</a>
+    </td>
+  <tr>
 
+  </tr>
 </table>

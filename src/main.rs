@@ -21,23 +21,19 @@ async fn main() -> Result<(), Report> {
 
     // check which CLI command we're running (dataset, run, plot)
     match args.command {
-        // --------------------------------------------------------------------
         // Dataset
         Command::Dataset(args) => match args.command {
-            dataset::Command::List(args) => rebar::list_datasets(&args).await?,
+            dataset::Command::List(args) => rebar::dataset::list::datasets(&args)?,
             dataset::Command::Download(mut args) => {
-                rebar::download_dataset(&mut args).await?
+                rebar::dataset::download::dataset(&mut args).await?
             }
         },
-        // --------------------------------------------------------------------
         // Run
-        Command::Run(mut args) => rebar::run(&mut args)?,
-        // --------------------------------------------------------------------
+        Command::Run(mut args) => rebar::run::run(&mut args)?,
         // Plot
-        Command::Plot(args) => rebar::plot(*args).await?,
-        // --------------------------------------------------------------------
+        Command::Plot(args) => rebar::plot::plot(&args)?,
         // Simulate
-        Command::Simulate(args) => rebar::simulate(&args)?,
+        Command::Simulate(args) => rebar::simulate::simulate(&args)?,
     }
 
     Ok(())

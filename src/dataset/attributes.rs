@@ -24,6 +24,9 @@ pub enum Name {
     #[serde(rename = "sars-cov-2")]
     #[strum(props(implemented = "true"))]
     SarsCov2,
+    #[serde(rename = "toy1")]
+    #[strum(props(implemented = "true"))]
+    Toy1,
     #[serde(rename = "rsv-a")]
     #[strum(props(implemented = "false"))]
     RsvA,
@@ -45,6 +48,7 @@ impl Name {
                 compatibility.dataset.min_date =
                     Some(NaiveDate::parse_from_str("2023-02-09", "%Y-%m-%d")?);
             }
+            Name::Toy1 => compatibility.cli.version = Some(">=0.2.0".to_string()),
             _ => compatibility.cli.version = Some(">=1.0.0".to_string()),
         }
         Ok(compatibility)
@@ -55,6 +59,7 @@ impl fmt::Display for Name {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let name = match self {
             Name::SarsCov2 => String::from("sars-cov-2"),
+            Name::Toy1 => String::from("toy1"),
             Name::RsvA => String::from("rsv-a"),
             Name::RsvB => String::from("rsv-b"),
             Name::Custom => String::from("custom"),
@@ -70,6 +75,7 @@ impl FromStr for Name {
     fn from_str(name: &str) -> Result<Self, Report> {
         let name = match name {
             "sars-cov-2" => Name::SarsCov2,
+            "toy1" => Name::Toy1,
             "rsv-a" => Name::RsvA,
             "rsv-b" => Name::RsvB,
             "custom" => Name::Custom,

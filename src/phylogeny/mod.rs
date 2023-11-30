@@ -21,8 +21,10 @@ use std::string::ToString;
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct Phylogeny {
     pub graph: Graph<String, isize>,
-    pub order: Vec<String>,
+    // we will parse recombinants on load/read
+    #[serde(skip_serializing, skip_deserializing)]
     pub recombinants: Vec<String>,
+    #[serde(skip_serializing, skip_deserializing)]
     pub recombinants_all: Vec<String>,
 }
 
@@ -36,7 +38,6 @@ impl Phylogeny {
     pub fn new() -> Self {
         Phylogeny {
             graph: Graph::new(),
-            order: Vec::new(),
             recombinants: Vec::new(),
             recombinants_all: Vec::new(),
         }
@@ -128,8 +129,6 @@ impl Phylogeny {
             }
         }
 
-        // Remove from order
-        phylogeny.order.retain(|n| !descendants.contains(n));
         // Remove from recombinants
         phylogeny.recombinants.retain(|r| !descendants.contains(r));
 
@@ -140,8 +139,11 @@ impl Phylogeny {
     pub fn read(path: &Path) -> Result<Phylogeny, Report> {
         let phylogeny = std::fs::read_to_string(path)
             .wrap_err_with(|| format!("Failed to read file: {path:?}."))?;
-        let phylogeny = serde_json::from_str(&phylogeny)
+        let mut phylogeny: Phylogeny = serde_json::from_str(&phylogeny)
             .wrap_err_with(|| format!("Failed to parse file: {path:?}."))?;
+
+        phylogeny.recombinants = phylogeny.get_recombinants()?;
+        phylogeny.recombinants_all = phylogeny.get_recombinants_all()?;
 
         Ok(phylogeny)
     }
@@ -374,7 +376,11 @@ impl Phylogeny {
             // Which ancestors were found in all populations?
             if populations.len() == names.len() {
                 // Which ancestor has the max depth?
-                let depth = ancestor_depths[&ancestor];
+
+                let depth = ancestor_depths
+                    .get(&ancestor)
+                    .cloned()
+                    .expect("Ancestor {ancestor} was not found in ancestor depths.");
                 if depth > max_depth {
                     max_depth = depth;
                     common_ancestor = ancestor;

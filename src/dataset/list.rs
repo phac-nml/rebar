@@ -6,7 +6,7 @@ use itertools::Itertools;
 use strum::{EnumProperty, IntoEnumIterator};
 
 /// List datasets
-pub async fn datasets(args: &cli::dataset::list::Args) -> Result<(), Report> {
+pub fn datasets(args: &cli::dataset::list::Args) -> Result<(), Report> {
     // table of name, tag, cli_version
     let mut table = Table::new();
     table.headers = vec![
@@ -39,7 +39,7 @@ pub async fn datasets(args: &cli::dataset::list::Args) -> Result<(), Report> {
         let min_date = if let Some(min_date) = compatibility.dataset.min_date {
             min_date.format("%Y-%m-%d").to_string()
         } else {
-            String::new()
+            "latest".to_string()
         };
         let max_date = if let Some(max_date) = compatibility.dataset.max_date {
             max_date.format("%Y-%m-%d").to_string()

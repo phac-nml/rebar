@@ -76,17 +76,17 @@ jobs:
 
       - name: validate
         run: |
-          ${{ env.RUN_CMD }} run  --dataset-dir dataset/sars-cov-2/latest --output-dir validate --populations "*" --threads 2
+          ${{ env.RUN_CMD }} run  --dataset-dir dataset/sars-cov-2/latest --output-dir output/validate --populations "*" --threads 2
           if [[ $(grep "fail" validate/linelist.tsv) ]]; then exit 1; fi
 
       - name: plot
         run: |
-          ${{ env.RUN_CMD }} plot --dataset-dir dataset/sars-cov-2/latest --output-dir validate --plot-dir validate/plots
+          ${{ env.RUN_CMD }} plot --dataset-dir dataset/sars-cov-2/latest --run-dir output/validate
 
       - name: upload
         uses: actions/upload-artifact@v3
         with:
           name: validate-${{ matrix.arch }}
-          path: validate
+          path: output/validate
           if-no-files-found: error
           retention-days: 7

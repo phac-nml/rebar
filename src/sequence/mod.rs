@@ -155,6 +155,7 @@ impl Sequence {
                 return Err(
                     eyre!("5' and 3' masking ({mask:?}) is incompatible with sequence length {}", sample.seq.len())
                     .suggestion("Please change your --mask parameter.")
+                    .suggestion("Maybe you want to disable masking all together with --mask 0,0 ?")
                 );
             }
         }

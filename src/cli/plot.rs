@@ -12,8 +12,8 @@ pub struct Args {
     /// Output directory from rebar run.
     ///
     /// Will plot all TSV files under barcodes/
-    #[clap(short = 'o', long, required = true)]
-    pub output_dir: PathBuf,
+    #[clap(short = 'r', long, required = true)]
+    pub run_dir: PathBuf,
 
     /// A single barcodes TSV file to plot.
     #[clap(short = 'b', long)]
@@ -21,11 +21,24 @@ pub struct Args {
 
     /// Output directory for plots.
     ///
-    /// Otherwise will default to 'plots' under the --output-dir
-    #[clap(short = 'p', long)]
-    pub plot_dir: Option<PathBuf>,
+    /// Otherwise will default to 'plots/' under the --run-dir
+    #[clap(short = 'o', long)]
+    pub output_dir: Option<PathBuf>,
+}
 
-    /// Directory to download fonts to.
-    #[clap(short = 'f', long, default_value = PathBuf::from(".cache/fonts").into_os_string())]
-    pub font_cache: PathBuf,
+impl Default for Args {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl Args {
+    pub fn new() -> Self {
+        Args {
+            dataset_dir: PathBuf::new(),
+            run_dir: PathBuf::new(),
+            barcodes_file: None,
+            output_dir: None,
+        }
+    }
 }
