@@ -55,8 +55,6 @@ jobs:
     runs-on: ${{ matrix.os }}
 
     steps:
-      - name: checkout repo
-        uses: actions/checkout@v3
 
       - name: download binary from build
         uses: actions/download-artifact@v3
