@@ -81,7 +81,7 @@ jobs:
           path: target/${{ matrix.arch }}/release
 
       - name: install
-        if: ${{ matrix.arch != 'docker' }}
+        if: matrix.os == 'windows-latest'
         run: |
           chmod +x target/${{ matrix.arch }}/release/${{ matrix.binary }}
           cp target/${{ matrix.arch }}/release/${{ matrix.binary }} .
@@ -91,6 +91,18 @@ jobs:
         if:  matrix.arch == 'docker'
         run: |
           docker load --input target/${{ matrix.arch }}/release/rebar.tar
+
+      - name: data download (non-windows)
+        if: ${{ matrix.arch != 'windows-latest' }}
+        run: |
+          wget https://raw.githubusercontent.com/phac-nml/rebar/${{ github.sha }}/data/example2.fasta
+
+      - name: data download (windows)
+        if: matrix.arch == 'windows-latest'
+        run: |
+          $url = "https://raw.githubusercontent.com/phac-nml/rebar/${{ github.sha }}/data/example2.fasta"
+          $client = New-Object System.Net.WebClient
+          $client.DownloadFile($url, "example2.fasta")
 
       - name: dataset list
         run: |
