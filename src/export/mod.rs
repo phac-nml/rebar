@@ -1,8 +1,9 @@
 use crate::dataset::{Dataset, SearchResult};
 use crate::recombination::{validate, Recombination};
 use crate::utils;
-use color_eyre::eyre::{eyre, Report, Result};
+use color_eyre::eyre::{Report, Result};
 use itertools::Itertools;
+use log::warn;
 
 // ----------------------------------------------------------------------------
 // LineList
@@ -36,15 +37,6 @@ pub fn linelist(
 
     // iterate in parallel, checking for same sequence id
     for (best_match, recombination) in results {
-        // check that they're in the correct order
-        if recombination.sequence.id != best_match.sequence_id {
-            return Err(eyre!(
-                "Recombination ID {} is not the same as Best Match ID: {}",
-                recombination.sequence.id,
-                best_match.sequence_id,
-            ));
-        }
-
         // initialize the table row
         let mut row = vec![String::new(); table.headers.len()];
 
@@ -119,8 +111,22 @@ pub fn linelist(
                     subs_by_origin.push(subs_format)
                 }
             });
-        } else {
-            let support = &best_match.support[&best_match.consensus_population];
+        }
+        // I've got this error before, not sure in what cases it happens, maybe
+        // sars-cov-2 Pop B?
+        else {
+            if !best_match.support.contains_key(&best_match.consensus_population) {
+                warn!(
+                    "Sequence {:?} has no support recorded for it's consensus population {:?}",
+                    &best_match.sequence_id,
+                    &best_match.consensus_population,
+                );
+            }
+            let support = best_match
+                .support
+                .get(&best_match.consensus_population)
+                .cloned()
+                .unwrap_or_default();
 
             if !support.is_empty() {
                 let subs_format = format!(

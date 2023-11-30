@@ -1,38 +1,39 @@
 use crate::phylogeny::Phylogeny;
 use color_eyre::eyre::{Report, Result};
-use itertools::Itertools;
-use std::path::PathBuf;
 
 pub fn build() -> Result<Phylogeny, Report> {
     let mut phylogeny = Phylogeny::new();
-    phylogeny.order = vec!["A", "B", "C"].into_iter().map(String::from).collect_vec();
 
     // Add root node
     let name = "root".to_string();
-    phylogeny.graph.add_node(name.clone());
-    let root_id = phylogeny.get_node(&name)?;
+    let root_id = phylogeny.graph.add_node(name.clone());
 
+    // Add A node
     let name = "A".to_string();
-    phylogeny.graph.add_node(name.clone());
-    let a_id = phylogeny.get_node(&name)?;
+    let a_id = phylogeny.graph.add_node(name.clone());
     phylogeny.graph.add_edge(root_id, a_id, 1);
 
+    // Add B node
     let name = "B".to_string();
-    phylogeny.graph.add_node(name.clone());
-    let b_id = phylogeny.get_node(&name)?;
+    let b_id = phylogeny.graph.add_node(name.clone());
     phylogeny.graph.add_edge(root_id, b_id, 1);
 
+    // Add C node
     let name = "C".to_string();
-    phylogeny.graph.add_node(name.clone());
-    let c_id = phylogeny.get_node(&name)?;
-    phylogeny.graph.add_edge(a_id, c_id, 1);
-    phylogeny.graph.add_edge(b_id, c_id, 1);
-    phylogeny.recombinants.push(name.clone());
+    let c_id = phylogeny.graph.add_node(name.clone());
+    phylogeny.graph.add_edge(root_id, c_id, 1);
 
-    phylogeny.recombinants_all = phylogeny.get_recombinants_all()?;
+    // Add recombinant D node
+    let name = "D".to_string();
+    let d_id = phylogeny.graph.add_node(name.clone());
+    phylogeny.graph.add_edge(a_id, d_id, 1);
+    phylogeny.graph.add_edge(b_id, d_id, 1);
 
-    let output_path = PathBuf::from("phylogeny.json");
-    phylogeny.write(&output_path)?;
+    // Add recursive recombinant E node
+    let name = "E".to_string();
+    let e_id = phylogeny.graph.add_node(name.clone());
+    phylogeny.graph.add_edge(d_id, e_id, 1);
+    phylogeny.graph.add_edge(c_id, e_id, 1);
 
     Ok(phylogeny)
 }

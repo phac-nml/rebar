@@ -4,7 +4,7 @@ use crate::recombination::{detect_recombination, validate, Hypothesis, Recombina
 use crate::sequence::Sequence;
 use color_eyre::eyre::{eyre, Report, Result};
 use itertools::Itertools;
-use log::debug;
+use log::{debug, warn};
 use std::collections::BTreeMap;
 use strum::IntoEnumIterator;
 
@@ -243,13 +243,12 @@ pub fn all_parents<'seq>(
 
         // if the conflict range between hypotheses is large (>=10), prefer min_conflict
         // otherwise, prefer max_score
-        let best_hypothesis = if conflict_range >= conflict_threshold {
+        let best_hypotheses = if conflict_range >= conflict_threshold {
             debug!("Best hypothesis selected by MIN CONFLICT. Conflict range ({conflict_range}) >= threshold ({conflict_threshold}).");
             hypotheses
                 .iter()
                 .filter_map(|(hyp, (_r, _p, _s, c))| (c == min_conflict).then_some(hyp))
-                .next()
-                .unwrap()
+                .collect_vec()
         } else {
             debug!("Best hypothesis selected by MAX SCORE. Conflict range ({conflict_range}) < threshold ({conflict_threshold})");
             let max_score =
@@ -257,11 +256,30 @@ pub fn all_parents<'seq>(
             hypotheses
                 .iter()
                 .filter_map(|(hyp, (_r, _p, s, _c))| (s == max_score).then_some(hyp))
-                .next()
-                .unwrap()
+                .collect_vec()
         };
 
-        best_hypothesis.clone()
+        // if hypotheses are tied, prefer them in enum order (first before last)
+        // note: this currently means Designated is preferred over non-designated.
+        //       prefer this for now, since we can use --naive to disable designated
+        let hypothesis_ranks: BTreeMap<Hypothesis, usize> =
+            Hypothesis::iter().enumerate().map(|(i, h)| (h, i)).collect();
+        let best_hyp_rank = best_hypotheses
+            .iter()
+            .map(|hyp| {
+                hypothesis_ranks
+                    .get(hyp)
+                    .expect("Hypothesis ranks does not contain hypothesis {hyp:?}")
+            })
+            .min()
+            .unwrap();
+        let best_hypothesis = hypothesis_ranks
+            .iter()
+            .filter_map(|(hyp, r)| (r == best_hyp_rank).then_some(hyp))
+            .next()
+            .unwrap();
+
+        best_hypothesis.to_owned()
     };
 
     debug!("best_hypothesis: {best_hypothesis:?}");
@@ -270,7 +288,9 @@ pub fn all_parents<'seq>(
     if best_hypothesis == Hypothesis::NonRecombinant {
         return Err(eyre!("Best hypothesis is Non-Recombinant."));
     }
-    let result = hypotheses.remove(&best_hypothesis).unwrap();
+    let result = hypotheses
+        .remove(&best_hypothesis)
+        .expect("Hypotheses does not contain the best hypothesis {best_hypothesis:?}");
     let mut recombination = result.0.unwrap();
     let primary_parent = result.1[0].clone();
 
@@ -424,7 +444,16 @@ pub fn secondary_parents<'seq>(
         let conflict_ref = parents
             .iter()
             // get conflict REF between this parent and the sequence
-            .flat_map(|p| &p.conflict_ref[&p.consensus_population])
+            .flat_map(|p| {
+                if !p.conflict_ref.contains_key(&p.consensus_population) {
+                    warn!(
+                        "Parent {:?} has no conflict_ref recorded for it's consensus population {:?}",
+                        &p.sequence_id,
+                        &p.consensus_population,
+                    );
+                }
+                p.conflict_ref.get(&p.consensus_population).cloned().unwrap_or_default()
+            })
             .unique()
             // search for parents that have the REF base (no ALT)
             .filter(|sub| {

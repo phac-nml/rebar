@@ -10,13 +10,13 @@ The names of SARS-CoV-2 lineages as input.
     rebar run \
       --dataset-dir dataset/sars-cov-2/2023-11-17  \
       --populations "AY.4.2*,BA.5.2,XBC.1.6*,XBB.1.5.1,XBL" \
-      --output-dir output/example1
+      --output-dir output/example/population
     ```
 
 1. Plot breakpoints and parental regions.
 
     ```bash
-    rebar plot --dataset-dir dataset/sars-cov-2/2023-11-17 --output-dir output/example1
+    rebar plot --dataset-dir dataset/sars-cov-2/2023-11-17 --output-dir output/example/population
     ```
 
 The populations (`--populations`) can include any sequence name found in the dataset's `populations.fasta`. For `sars-cov-2`, sequence names are the designated lineages. The wildcard character ("\*") will include the lineage and all its descendants. **NOTE**: If using "\*", make sure to use quotes (ex. `--lineages "XBC*,XBB.1.16*"`)!
@@ -37,10 +37,50 @@ An alignment of SARS-CoV-2 genomes as input.
     rebar run \
       --dataset dataset/sars-cov-2/2023-11-17 \
       --alignment example2.fasta \
-      --output-dir output/example2
+      --output-dir output/example/alignment
     ```
 
 Please note that the `--alignment` should be aligned to the same reference as in the dataset `reference.fasta` (we strongly recommend [nextclade](https://clades.nextstrain.org/)).
+
+## Example 3 | Debug
+
+You can see the inner-workings of the `rebar` algorithm by using `--verbosity debug`. Let's test this on the SARS-CoV-2 recombinant `XCC` which has known parents `XBB.1.9.1` and `CH.1.1.1`.
+
+```bash
+rebar run \
+    --dataset-dir dataset/sars-cov-2/2023-11-17  \
+    --populations "XCC" \
+    --output-dir output/example/debug \
+    --verbosity debug
+```
+
+The debugging output will report detailed information on dataset searches for the primary parent (best match/conensus population). In addition, it will search for secondary parents (recombination) by testing four different recombination hypotheses:
+
+1. Non-Recombinant
+1. Designated Recombinant (using known parents from the dataset)
+1. Recursive Recombinant (allowing parents to be recombinants themselves)
+1. Non-Recursive Recombinant (not allowing parents to be recombinants)
+
+The best match/primary parent is found to be for `XCC` is... itself, excellent! `XCC` is a known recombinant, so that rules out **Hypothesis \#1**.
+
+Since `XCC` is a known recombinant, `rebar` will evaluate **Hypothesis 2**. The primary parent search will be redone focusing exclusively on designated parents (`XBB.1.9.1` and `CH.1.1.1`).
+
+search for a secondary parent in designated parents for **Hypothesis 2** (`XBB.1.9.1` and `CH.1.1.1`.)
+
+Since we're using a dataset population, `XCC` is an exact match to itself. So there are no mutational conflicts that need to be explained by recombination/secondary parents. No evidence for **Hypothesis #3** is found.
+
+`rebar` will then search for a secondary parent among all possible populations. However since `XCC` is an exact match to itself, there are no mutational conflicts to
+
+Since `XCC` is a known recombinant, `rebar` will search for a secondary parent in designated parents for **Hypothesis 2** (`XBB.1.9.1` and `CH.1.1.1`.)
+`rebar` will only find evidence to support Hypotheses \#2 (designated) and \#4 (recursive).
+
+```text
+Hypotheses: DesignatedRecombinant: score=66, conflict=3, RecursiveRecombinant: score=66, conflict=3
+```
+
+Hypotheses: DesignatedRecombinant: score=66, conflict=3, RecursiveRecombinant: score=66, conflict=3
+
+DesignatedRecombinant: score=78, conflict=0, NonRecursiveRecombinant: score=49, conflict=6
 
 ## Example 3 | Knockout
 
@@ -53,7 +93,7 @@ You can perform a 'knockout' experiment to remove populations from the dataset. 
       --dataset-dir dataset/sars-cov-2/2023-11-17  \
       --populations "XBB" \
       --knockout "XBB" \
-      --output-dir output/example3
+      --output-dir output/example/knockout
     ```
 
 1. Examine the linelist (`output/example3/linelist.tsv`).
@@ -66,6 +106,22 @@ You can perform a 'knockout' experiment to remove populations from the dataset. 
 - The `substitutions` column reveals that it gained 5 substitutions from the `BA.2.75` parent: `T22942G`, `T23019C`, `T23031C`, `C25416T`, `A26275G`.
 - In addition, it has one "private" substitutions that is not found in either parent: `A19326G`.
 - This can be used to contribute evidence for a new lineage proposal in the [pango-designation](https://github.com/cov-lineages/pango-designation/issues) respository.
+
+## Example 4 | Parents
+
+By default, `rebar` will consider all populations in the dataset as possible parents. If you would like to see the evidence for a specific hypothesis, you can restrict the parent search with `--parents`.
+
+1. Detect recombination.
+
+    ```bash
+    rebar run \
+      --dataset-dir dataset/sars-cov-2/2023-11-17  \
+      --populations "XD" \
+      --output-dir output/example/parents \
+      --verbosity debug
+    ```
+
+["B.1.617.2*","BA.1*"]
 
 ## Example 4 | Validate
 

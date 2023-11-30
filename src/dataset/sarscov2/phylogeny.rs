@@ -151,8 +151,8 @@ pub async fn build(
     // Parent Child Relationships
     // ------------------------------------------------------------------------
 
-    let mut graph_data: BTreeMap<String, Vec<String>> = BTreeMap::new();
-    let mut graph_order: Vec<String> = Vec::new();
+    let mut graph_order = Vec::new();
+    let mut graph_data = BTreeMap::new();
 
     for row in lineage_table.rows {
         let lineage = row[lineage_col_i].to_string();
@@ -161,11 +161,6 @@ pub async fn build(
         if lineage.starts_with('*') || lineage == String::new() {
             continue;
         }
-
-        // warn if a lineage has notes but no sequence.
-        // this might be because there are insufficient (<=3) sequences
-        // available in open data repositories (ex. Genbank)
-        // ex. XCU on 2023-11-16
 
         let parents = get_lineage_parents(&lineage, &alias_key)?;
         graph_order.push(lineage.clone());
@@ -177,7 +172,6 @@ pub async fn build(
     // ------------------------------------------------------------------------
 
     let mut phylogeny = Phylogeny::new();
-    phylogeny.order = graph_order;
 
     // Add root node
     let name = "root".to_string();
@@ -186,9 +180,18 @@ pub async fn build(
     // todo!() Do this twice? in case lineages are accidentally out of order?
 
     // Add descendants
-    for name in &phylogeny.order {
+    for name in graph_order {
         let id = phylogeny.graph.add_node(name.clone());
-        let parents = &graph_data[&name.clone()];
+        if !graph_data.contains_key(&name) {
+            return Err(
+                eyre!("Parents of {name} are unknown in the phylogeny graph.")
+                    .suggestion(
+                        "Could the lineage_notes be out of order or misformatted?",
+                    )
+                    .suggestion("Parents are required to appear before children."),
+            );
+        }
+        let parents = graph_data.get(&name).unwrap();
 
         debug!("Population: {name}; Parents: {parents:?}");
 
@@ -280,7 +283,7 @@ pub fn compress_lineage(
             let compress_subset = compress_parts[0..i].join(".");
 
             if alias_key_rev.contains_key(&compress_subset) {
-                compress = alias_key_rev[&compress_subset].clone();
+                compress = alias_key_rev.get(&compress_subset).unwrap().clone();
                 // Get the suffix that was chopped off in subset
                 let compress_suffix = &compress_parts[i..];
 
@@ -326,15 +329,13 @@ pub fn decompress_lineage(
     let lineage_suffix = lineage_parts[1..lineage_level].join(".");
 
     // Decompressing logic
-    if alias_key.contains_key(&lineage_prefix) {
-        let lineage_paths = &alias_key[&lineage_prefix];
-        // Not multiple recombinant parents
-        if lineage_paths.len() == 1 {
-            decompress = lineage_paths[0].clone();
-            // Add back our suffix numbers
-            if lineage_level > 1 {
-                decompress = format!("{decompress}.{lineage_suffix}");
-            }
+    let lineage_paths = alias_key.get(&lineage_prefix).cloned().unwrap_or_default();
+    // Not multiple recombinant parents
+    if lineage_paths.len() == 1 {
+        decompress = lineage_paths[0].clone();
+        // Add back our suffix numbers
+        if lineage_level > 1 {
+            decompress = format!("{decompress}.{lineage_suffix}");
         }
     }
 

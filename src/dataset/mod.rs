@@ -214,7 +214,9 @@ impl Dataset {
             let pop_seq = &self.populations[pop];
             let summary =
                 parsimony::Summary::from_sequence(sequence, pop_seq, coordinates)
-                    .unwrap();
+                    .unwrap_or_else(|_| {
+                        panic!("Failed to create summary from sequence {}", &sequence.id)
+                    });
             result.support.insert(pop.to_owned(), summary.support);
             result.conflict_ref.insert(pop.to_owned(), summary.conflict_ref);
             result.conflict_alt.insert(pop.to_owned(), summary.conflict_alt);
@@ -229,7 +231,8 @@ impl Dataset {
 
         // which population(s) has the highest score?
         // reminder: it can be negative when extreme recombinant genomic size
-        let max_score = result.score.values().max().unwrap();
+        let max_score =
+            result.score.values().max().expect("Failed to get max score of result.");
 
         let max_score_populations = result
             .score
@@ -270,32 +273,38 @@ impl Dataset {
         result.consensus_population = consensus_population.clone();
 
         // if the common_ancestor was not in the populations list, add it
-        let consensus_sequence =
-            if !result.top_populations.contains(&consensus_population) {
-                let pop = &consensus_population;
+        let consensus_sequence = if !result
+            .top_populations
+            .contains(&consensus_population)
+        {
+            let pop = &consensus_population;
 
-                // // Option #1. Actual sequence of the internal MRCA node?
-                // let pop_seq = &self.populations[pop];
-                // let summary = parsimony::Summary::from_sequence(sequence, pop_seq, coordinates)?;
+            // // Option #1. Actual sequence of the internal MRCA node?
+            // let pop_seq = &self.populations[pop];
+            // let summary = parsimony::Summary::from_sequence(sequence, pop_seq, coordinates)?;
 
-                // Option #2. Consensus sequence of top populations?
-                let top_populations =
-                    result.top_populations.iter().map(|s| s.as_ref()).collect_vec();
-                debug!("Creating {pop} consensus genome from top populations.");
-                let pop_seq = self.create_consensus(pop, &top_populations)?;
-                let summary =
-                    parsimony::Summary::from_sequence(sequence, &pop_seq, coordinates)?;
+            // Option #2. Consensus sequence of top populations?
+            let top_populations =
+                result.top_populations.iter().map(|s| s.as_ref()).collect_vec();
+            debug!("Creating {pop} consensus genome from top populations.");
+            let pop_seq = self.create_consensus(pop, &top_populations)?;
+            let summary =
+                parsimony::Summary::from_sequence(sequence, &pop_seq, coordinates)?;
 
-                // Add consensus summary to search result
-                result.support.insert(pop.to_owned(), summary.support);
-                result.conflict_ref.insert(pop.to_owned(), summary.conflict_ref);
-                result.conflict_alt.insert(pop.to_owned(), summary.conflict_alt);
-                result.score.insert(pop.to_owned(), summary.score);
+            // Add consensus summary to search result
+            result.support.insert(pop.to_owned(), summary.support);
+            result.conflict_ref.insert(pop.to_owned(), summary.conflict_ref);
+            result.conflict_alt.insert(pop.to_owned(), summary.conflict_alt);
+            result.score.insert(pop.to_owned(), summary.score);
 
-                pop_seq
-            } else {
-                self.populations[&consensus_population].clone()
-            };
+            pop_seq
+        } else {
+            self
+                .populations
+                .get(&consensus_population)
+                .cloned()
+                .unwrap_or_else(|| panic!("Consensus population {consensus_population} is not in the dataset populations."))
+        };
 
         // Filter out non-top populations
         // helps cut down on verbosity in debug log and data stored
@@ -335,12 +344,19 @@ impl Dataset {
             .collect_vec();
 
         // private subs (conflict_alt and conflict_ref reversed)
-        result.private = result.conflict_alt[&consensus_population].clone();
-        result.conflict_ref[&consensus_population].iter().for_each(|sub| {
-            let mut sub = *sub;
-            std::mem::swap(&mut sub.alt, &mut sub.reference);
-            result.private.push(sub);
-        });
+        result.private =
+            result.conflict_alt.get(&consensus_population).cloned().unwrap_or_default();
+        result
+            .conflict_ref
+            .get(&consensus_population)
+            .cloned()
+            .unwrap_or_default()
+            .iter()
+            .for_each(|sub| {
+                let mut sub = *sub;
+                std::mem::swap(&mut sub.alt, &mut sub.reference);
+                result.private.push(sub);
+            });
         result.private.sort();
 
         debug!("Search Result:\n{}", result.pretty_print());
@@ -395,8 +411,8 @@ impl SearchResult {
         let consensus_score: (String, isize) = score_order
             .iter()
             .find(|(pop, _score)| *pop == self.consensus_population)
-            .unwrap()
-            .clone();
+            .cloned()
+            .expect("Failed to order consensus populations by score.");
 
         score_order.retain(|(pop, _score)| *pop != self.consensus_population);
         score_order.insert(0, consensus_score);
