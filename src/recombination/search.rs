@@ -107,8 +107,24 @@ pub fn all_parents<'seq>(
                 continue;
             }
             if let Some(recombinant) = &best_match.recombinant {
-                let designated_parents = dataset.phylogeny.get_parents(recombinant)?;
-                debug!("Designated Parents: {designated_parents:?}");
+                let mut designated_parents =
+                    dataset.phylogeny.get_parents(recombinant)?;
+                debug!("Designated parents: {designated_parents:?}");
+                // we might not have sequence data for all designated parents.
+                let designated_parents_filter = designated_parents
+                    .iter()
+                    .filter_map(|p| dataset.get_ancestor_with_sequence(p).ok())
+                    .collect_vec();
+
+                if designated_parents != designated_parents_filter {
+                    debug!("Designated parents with sequence data: {designated_parents_filter:?}");
+                    // if the filter yielded a different length, one parent is unsearchable
+                    if designated_parents.len() != designated_parents_filter.len() {
+                        debug!("DesignatedRecombinant hypothesis is impossible to test! At least one parent has no ancestor with sequence data!");
+                        continue;
+                    }
+                    designated_parents = designated_parents_filter;
+                }
                 hyp_populations.retain(|pop| designated_parents.contains(pop));
             }
         }

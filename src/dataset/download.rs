@@ -3,15 +3,11 @@ use crate::dataset;
 use crate::dataset::attributes::{check_compatibility, Name, Summary};
 use crate::dataset::{sarscov2, toy1};
 use crate::{utils, utils::remote_file::RemoteFile};
-//use crate::sequence::Substitution;
-use color_eyre::eyre::{eyre, Report, Result};
-use color_eyre::Help;
-//use indicatif::ProgressBar;
+use color_eyre::eyre::{Report, Result};
 use itertools::Itertools;
 use log::{info, warn};
 use std::fs::create_dir_all;
 use std::path::Path;
-//use std::collections::BTreeMap;
 
 /// Download dataset
 pub async fn dataset(args: &mut cli::dataset::download::Args) -> Result<(), Report> {
@@ -44,20 +40,15 @@ pub async fn dataset(args: &mut cli::dataset::download::Args) -> Result<(), Repo
 
     check_compatibility(&args.name, &args.tag)?;
 
-    // Create the output directory if it doesn't exist
+    // Warn if the directory already exists
     if !args.output_dir.exists() {
         info!("Creating output directory: {:?}", &args.output_dir);
         create_dir_all(&args.output_dir)?;
     } else {
-        // make sure output directory is empty!
-        let output_dir_is_empty = args.output_dir.read_dir()?.next().is_none();
-        if !output_dir_is_empty {
-            return Err(eyre!(
-                "--output-dir {:?} already exists and is not empty!",
-                args.output_dir
-            )
-            .suggestion("Please change your --output-dir to a new or empty directory."));
-        }
+        warn!(
+            "--output-dir {:?} already exists, proceed with caution!",
+            args.output_dir
+        );
     }
 
     // --------------------------------------------------------------------

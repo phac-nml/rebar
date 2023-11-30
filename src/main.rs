@@ -15,6 +15,7 @@ async fn main() -> Result<(), Report> {
 
     // Set logging/verbosity level via RUST_LOG
     std::env::set_var("RUST_LOG", args.verbosity.to_string());
+    //std::env::set_var("RUST_LOG_COLOR", "auto".to_string());
 
     // initialize env_logger crate for logging/verbosity level
     env_logger::init();

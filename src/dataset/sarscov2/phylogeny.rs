@@ -40,7 +40,7 @@ pub async fn build(
     summary.misc.insert("alias_key".to_string(), remote_file);
 
     // ------------------------------------------------------------------------
-    // Parse
+    // Alias
     // ------------------------------------------------------------------------
 
     // read alias key into Map
@@ -49,11 +49,28 @@ pub async fn build(
     let mut alias_key = read_alias_key(alias_key_path)?;
 
     // MANUAL!
+    // These are potential conflicts in the prior information, that will
+    // cause validation to fail
+
+    // Potentially, XAS needs deletions to resolve between BA.4/BA.5 parent?
+    warn!("Changing XAS designated parent from BA.5 to BA.4: https://github.com/cov-lineages/pango-designation/issues/882");
+    let recombinant = "XAS".to_string();
+    let parents = vec!["BA.4".to_string(), "BA.2".to_string()];
+    alias_key.insert(recombinant, parents);
+
+    warn!("Relaxing XBB designated parent from BM.1.1.1 to BA.2.75.3");
+    let recombinant = "XBB".to_string();
+    let parents = vec!["BJ.1".to_string(), "BA.2.75.3".to_string()];
+    alias_key.insert(recombinant, parents);
+
     warn!("Relaxing XBF designated parent from BA.5.2.3 to BA.5.2");
-    alias_key.insert(
-        "XBF".to_string(),
-        vec!["BA.5.2".to_string(), "CJ.1".to_string()],
-    );
+    let recombinant = "XBF".to_string();
+    let parents = vec!["BA.5.2".to_string(), "CJ.1".to_string()];
+    alias_key.insert(recombinant, parents);
+
+    // ------------------------------------------------------------------------
+    // Lineage Notes
+    // ------------------------------------------------------------------------
 
     // read lineage notes into Table
     let lineage_notes_path = &summary.misc["lineage_notes"].local_path;
@@ -66,7 +83,9 @@ pub async fn build(
     let notes_lineages = lineage_table
         .rows
         .iter()
-        .filter(|row| !row[lineage_col_i].starts_with('*'))
+        .filter(|row| {
+            !row[lineage_col_i].starts_with('*') && row[lineage_col_i].is_empty()
+        })
         .map(|row| row[lineage_col_i].to_string())
         .collect_vec();
 
@@ -86,66 +105,6 @@ pub async fn build(
         let lineage = record.id().to_string();
         alignment_populations.push(lineage);
     }
-
-    // ------------------------------------------------------------------------
-    // Consistency Check
-    // ------------------------------------------------------------------------
-
-    // All population names in all files
-    let mut all_populations = alignment_populations.clone();
-    all_populations.extend(notes_lineages.clone());
-    all_populations.extend(alias_key.keys().cloned().collect_vec());
-    all_populations.sort();
-    all_populations.dedup();
-
-    // create table to store consistency info
-    let inconsistency_table_path = output_dir.join("inconsistency.tsv");
-    let mut inconsistency_table = Table::new();
-
-    warn!("Writing dataset inconsistency table: {inconsistency_table_path:?}");
-
-    inconsistency_table.headers = vec!["population", "present", "absent"]
-        .into_iter()
-        .map(String::from)
-        .collect_vec();
-
-    let population_col_i = inconsistency_table.header_position("population")?;
-    let present_col_i = inconsistency_table.header_position("present")?;
-    let absent_col_i = inconsistency_table.header_position("absent")?;
-
-    // check consistency between populations fasta, lineage_notes, and alias_key
-    all_populations.iter().for_each(|pop| {
-        let mut present_file_names = Vec::new();
-        let mut absent_file_names = Vec::new();
-
-        if alias_key.contains_key(pop) {
-            present_file_names.push(&alias_key_file_name)
-        } else if !pop.contains('.') {
-            absent_file_names.push(&alias_key_file_name)
-        }
-
-        if notes_lineages.contains(pop) {
-            present_file_names.push(&lineage_notes_file_name)
-        } else {
-            absent_file_names.push(&lineage_notes_file_name)
-        }
-
-        if alignment_populations.contains(pop) {
-            present_file_names.push(&populations_file_name)
-        } else {
-            absent_file_names.push(&populations_file_name)
-        }
-
-        if !absent_file_names.is_empty() {
-            let mut row = vec![String::new(); inconsistency_table.headers.len()];
-            row[population_col_i] = pop.to_string();
-            row[present_col_i] = present_file_names.iter().join(",");
-            row[absent_col_i] = absent_file_names.iter().join(",");
-            inconsistency_table.rows.push(row);
-        }
-    });
-
-    inconsistency_table.write(&inconsistency_table_path)?;
 
     // ------------------------------------------------------------------------
     // Parent Child Relationships
@@ -213,6 +172,94 @@ pub async fn build(
     }
 
     phylogeny.recombinants_all = phylogeny.get_recombinants_all()?;
+
+    // ------------------------------------------------------------------------
+    // Consistency Check
+    // ------------------------------------------------------------------------
+
+    // All population names in all files
+    let mut all_populations = alignment_populations.clone();
+    all_populations.extend(notes_lineages.clone());
+    all_populations.extend(alias_key.keys().cloned().collect_vec());
+    all_populations.sort();
+    all_populations.dedup();
+
+    // create table to store consistency info
+    let inconsistency_table_path = output_dir.join("inconsistency.tsv");
+    let mut inconsistency_table = Table::new();
+
+    info!("Writing dataset inconsistency table: {inconsistency_table_path:?}");
+
+    inconsistency_table.headers = vec!["population", "present", "absent"]
+        .into_iter()
+        .map(String::from)
+        .collect_vec();
+
+    let population_col_i = inconsistency_table.header_position("population")?;
+    let present_col_i = inconsistency_table.header_position("present")?;
+    let absent_col_i = inconsistency_table.header_position("absent")?;
+
+    // missing population sequences
+    let mut missing_pop_seq = Vec::new();
+
+    // check consistency between populations fasta, lineage_notes, alias_key, phylogeny
+    all_populations.iter().for_each(|pop| {
+        let mut present_file_names = Vec::new();
+        let mut absent_file_names = Vec::new();
+
+        // Alias Key
+        if alias_key.contains_key(pop) {
+            present_file_names.push(&alias_key_file_name);
+        } else if !pop.contains('.') {
+            absent_file_names.push(&alias_key_file_name);
+        }
+
+        // Lineage Notes
+        if notes_lineages.contains(pop) {
+            present_file_names.push(&lineage_notes_file_name);
+        } else {
+            absent_file_names.push(&lineage_notes_file_name);
+        }
+
+        // Populations Fasta
+        if alignment_populations.contains(pop) {
+            present_file_names.push(&populations_file_name);
+        } else {
+            absent_file_names.push(&populations_file_name);
+            missing_pop_seq.push(pop.clone());
+        }
+
+        // Phylogeny
+        // self.graph.node_references()
+
+        if !absent_file_names.is_empty() {
+            let mut row = vec![String::new(); inconsistency_table.headers.len()];
+            row[population_col_i] = pop.to_string();
+            row[present_col_i] = present_file_names.iter().join(",");
+            row[absent_col_i] = absent_file_names.iter().join(",");
+            inconsistency_table.rows.push(row);
+        }
+    });
+
+    // info!("Pruning inconsistent populations from the phylogeny.");
+
+    // missing_pop_seq
+    //     .iter()
+    //     .for_each(|pop| {
+    //         // check if pop is still in phylogeny
+    //         if phylogeny.get_names().unwrap_or_default().contains(pop) {
+    //             let children = phylogeny.get_descendants(pop).unwrap_or_default();
+    //             let children_missing = missing_pop_seq.iter().filter(|c| children.contains(c)).collect_vec();
+
+    //             println!("{pop}: {children:?}");
+    //             // only prune the clade if all children are missing (ex. monophyletic)
+    //             if children.len() == children_missing.len() {
+    //                 phylogeny.prune(pop).unwrap_or_default();
+    //             }
+    //         }
+    //     });
+
+    inconsistency_table.write(&inconsistency_table_path)?;
 
     Ok(phylogeny)
 }

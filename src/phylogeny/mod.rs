@@ -65,6 +65,19 @@ impl Phylogeny {
         }
     }
 
+    /// Get populations names (all named nodes)
+    pub fn get_names(&self) -> Result<Vec<String>, Report> {
+        let mut names: Vec<String> = Vec::new();
+
+        for (_i, n) in self.graph.node_references() {
+            if !names.contains(n) && !n.is_empty() {
+                names.push(n.clone())
+            }
+        }
+
+        Ok(names)
+    }
+
     /// Get recombinant node names.
     pub fn get_recombinants(&self) -> Result<Vec<String>, Report> {
         let mut recombinants: Vec<String> = Vec::new();
@@ -111,7 +124,7 @@ impl Phylogeny {
     }
 
     /// Prune a clade from the graph.
-    pub fn prune(&self, name: &str) -> Result<Phylogeny, Report> {
+    pub fn prune(&mut self, name: &str) -> Result<(), Report> {
         let mut phylogeny = self.clone();
 
         // Find the node that matches the name
@@ -132,7 +145,7 @@ impl Phylogeny {
         // Remove from recombinants
         phylogeny.recombinants.retain(|r| !descendants.contains(r));
 
-        Ok(phylogeny)
+        Ok(())
     }
 
     /// Read phylogeny from file.

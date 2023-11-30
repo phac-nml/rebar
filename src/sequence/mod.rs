@@ -161,6 +161,17 @@ impl Sequence {
         }
 
         if let Some(reference) = reference {
+            if sample.seq.len() != reference.seq.len() {
+                return Err(
+                    eyre!(
+                        "Reference sequence ({ref_len}) and {record_id} ({record_len}) are different lengths!",
+                        ref_len=reference.seq.len(),
+                        record_id=sample.id,
+                        record_len=sample.seq.len(),
+                    )
+                    .suggestion("Are you sure your --alignment is aligned correctly?")
+                );
+            }
             sample.genome_length = reference.seq.len();
             // Construct iterator to traverse sample and reference bases together
             let it = sample.seq.iter().zip(reference.seq.iter());

@@ -3,7 +3,7 @@ use crate::recombination::{validate, Recombination};
 use crate::utils;
 use color_eyre::eyre::{Report, Result};
 use itertools::Itertools;
-use log::warn;
+//use std::collections::BTreeMap;
 
 // ----------------------------------------------------------------------------
 // LineList
@@ -25,7 +25,7 @@ pub fn linelist(
         "edge_case",
         "unique_key",
         "regions",
-        "substitutions",
+        //"substitutions",
         "genome_length",
         "dataset_name",
         "dataset_tag",
@@ -97,59 +97,51 @@ pub fn linelist(
         row[table.header_position("cli_version")?] =
             env!("CARGO_PKG_VERSION").to_string();
 
-        // --------------------------------------------------------------------
-        // Substitutions, annotated by parental origin or private
-        // todo!() think about if we want reversions in here or not...
+        // // --------------------------------------------------------------------
+        // // Substitutions, annotated by parental origin or private
+        // // todo!() think about if we want reversions in here or not...
 
-        let mut subs_by_origin = Vec::new();
-        // by parent
-        if recombination.recombinant.is_some() {
-            recombination.parents.iter().for_each(|p| {
-                let support = &recombination.support[p];
-                if !support.is_empty() {
-                    let subs_format = format!("{}|{p}", support.iter().join(","));
-                    subs_by_origin.push(subs_format)
-                }
-            });
-        }
-        // I've got this error before, not sure in what cases it happens, maybe
-        // sars-cov-2 Pop B?
-        else {
-            if !best_match.support.contains_key(&best_match.consensus_population) {
-                warn!(
-                    "Sequence {:?} has no support recorded for it's consensus population {:?}",
-                    &best_match.sequence_id,
-                    &best_match.consensus_population,
-                );
-            }
-            let support = best_match
-                .support
-                .get(&best_match.consensus_population)
-                .cloned()
-                .unwrap_or_default();
+        // let mut origins = Vec::new();
+        // let mut subs_by_origin = BTreeMap::new();
 
-            if !support.is_empty() {
-                let subs_format = format!(
-                    "{}|{}",
-                    support.iter().join(","),
-                    &best_match.consensus_population
-                );
-                subs_by_origin.push(subs_format);
-            }
-        };
+        // // #1. recombination parents
+        // if recombination.recombinant.is_some() {
+        //     recombination.parents.iter().for_each(|p| {
+        //         let subs = recombination.support.get(p).cloned().unwrap_or_default();
+        //         subs_by_origin.insert(p.clone(), subs);
+        //         origins.push(p.clone());
+        //     });
+        // }
 
-        // private substitutions
-        let mut private = if recombination.recombinant.is_some() {
-            recombination.private.values().flatten().collect_vec()
-        } else {
-            best_match.private.iter().collect_vec()
-        };
-        if !private.is_empty() {
-            private.sort();
-            let subs_format = format!("{}|private", private.iter().join(","));
-            subs_by_origin.push(subs_format);
-        }
-        row[table.header_position("substitutions")?] = subs_by_origin.iter().join(";");
+        // // #2. consensus/best match (if not one of the parents)
+        // let p = &best_match.consensus_population;
+        // if !subs_by_origin.contains_key(p) {
+        //     let mut subs = best_match.support.get(p).cloned().unwrap_or_default();
+        //     subs.retain(|s| !subs_by_origin.values().flatten().contains(s));
+        //     subs_by_origin.insert(p.clone(), subs);
+        //     origins.push(p.clone());
+        // };
+
+        // // #3. private substitutions
+        // let p = "private".to_string();
+        // let mut subs = if recombination.recombinant.is_some() {
+        //     recombination.private.values().flatten().sorted().cloned().collect_vec()
+        // } else {
+        //     best_match.private.clone()
+        // };
+        // subs.retain(|s| !subs_by_origin.values().flatten().contains(s));
+        // subs_by_origin.insert(p.clone(), subs);
+        // origins.push(p.clone());
+
+        // let substitutions = origins
+        //     .iter()
+        //     .filter_map(|o| {
+        //         let subs = subs_by_origin.get(o).cloned().unwrap_or_default();
+        //         let subs_format = format!("{}|{o}", subs.iter().join(","));
+        //         (!subs.is_empty()).then_some(subs_format)
+        //     })
+        //     .join(";");
+        // row[table.header_position("substitutions")?] = substitutions;
 
         table.rows.push(row);
     }
