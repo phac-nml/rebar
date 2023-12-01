@@ -2,7 +2,7 @@ use crate::dataset::{Dataset, SearchResult};
 use crate::recombination::Recombination;
 use color_eyre::eyre::{eyre, Report, Result};
 use itertools::Itertools;
-use log::warn;
+use log::{debug, warn};
 use petgraph::Direction;
 use std::fmt;
 use std::str::FromStr;
@@ -189,8 +189,8 @@ pub fn compare_parents(
     expected: &[String],
     dataset: &Dataset,
 ) -> Result<bool, Report> {
-    //println!("observed: {observed:?}");
-    //println!("expected: {expected:?}");
+    debug!("Observed parents: {observed:?}");
+    debug!("Expected parents: {expected:?}");
 
     // check if the expected parents are actually in the dataset populations
     // ie. we actually have sequence data for them
@@ -237,33 +237,53 @@ pub fn compare_parents(
         });
     });
     observed_parents = observed_parents.into_iter().unique().collect();
-    observed_parents.retain(|p| expected.contains(p));
-    //println!("observed_parents: {observed_parents:?}");
+    debug!("Parents of observed: {observed_parents:?}");
+    observed_parents.retain(|p| expected.contains(p) || observed.contains(p));
+    debug!("Parents of observed that match: {observed_parents:?}");
     if observed_parents.len() == expected.len() {
         return Ok(true);
     }
 
-    // expected is child of observed, but no recombinant descendants
-    let mut observed_children = observed
-        .iter()
-        .flat_map(|pop| dataset.phylogeny.get_children(pop).unwrap_or_default())
-        .unique()
-        .collect_vec();
-    observed_children.retain(|p| expected.contains(p));
-    //println!("observed_children: {observed_children:?}");
-    if observed_children.len() == expected.len() {
+    // observed is a parent of expected, but no recombinant descendants
+    // Ex. XCU: expected = BQ.1; observed=BA.5
+    // for each observed parent, walk away from the root, stopping a path
+    // if a recombinant node is encountered
+    let mut expected_parents = Vec::new();
+    expected.iter().for_each(|pop| {
+        // get all possible paths from parent population to root
+        // ex. BA.1 (single path), XE, (two paths, through BA.1, BA.2), XBL (four paths, recursive)
+        let paths = dataset
+            .phylogeny
+            .get_paths(pop, "root", Direction::Incoming)
+            .unwrap_or_default();
+        paths.iter().for_each(|populations| {
+            for p in populations {
+                expected_parents.push(p.clone());
+                // after we hit the first recombinant, break
+                if dataset.phylogeny.is_recombinant(p).unwrap_or(false) {
+                    break;
+                }
+            }
+        });
+    });
+
+    debug!("Parents of expected: {expected_parents:?}");
+    expected_parents.retain(|p| observed.contains(p) || expected.contains(p));
+    debug!("Parents of expected that match: {expected_parents:?}");
+    if expected_parents.len() == observed.len() {
         return Ok(true);
     }
 
     // combine
     // XBE: expected ["BA.5.2","BE.4.1"], observed: ["BA.5.2.6","BE.4"]
-    let mut observed_combine = observed.clone();
-    observed_combine.append(&mut observed_parents);
-    observed_combine.append(&mut observed_children);
-    observed_combine = observed_combine.into_iter().unique().collect();
-    observed_combine.retain(|pop| expected.contains(pop));
-    //println!("observed_combine: {observed_combine:?}");
-    if observed_combine.len() == expected.len() {
+    let mut combine = observed.clone();
+    combine.append(&mut observed_parents);
+    combine.append(&mut expected_parents);
+    combine = combine.into_iter().unique().collect();
+    debug!("Observed children and parents: {combine:?}");
+    combine.retain(|pop| expected.contains(pop));
+    debug!("Observed children and parents that match expected: {combine:?}");
+    if combine.len() == expected.len() {
         return Ok(true);
     }
 
