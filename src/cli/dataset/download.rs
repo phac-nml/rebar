@@ -12,7 +12,7 @@ pub struct Args {
 
     /// Dataset tag.
     ///
-    /// can be 'latest' or a date (YYYY-MM-DD)
+    /// A date (YYYY-MM-DD), or 'nightly', or 'custom'
     #[clap(short = 't', long, required = true)]
     pub tag: Tag,
 

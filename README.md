@@ -5,7 +5,7 @@
 [![GitHub issues](https://img.shields.io/github/issues/phac-nml/rebar.svg)](https://github.com/phac-nml/rebar/issues)
 [![Build CI](https://github.com/phac-nml/rebar/actions/workflows/build.yaml/badge.svg)](https://github.com/phac-nml/rebar/actions/workflows/build.yaml)
 [![Test CI](https://github.com/phac-nml/rebar/actions/workflows/test.yaml/badge.svg)](https://github.com/phac-nml/rebar/actions/workflows/test.yaml)
-[![Latest CI](https://github.com/phac-nml/rebar/actions/workflows/latest.yaml/badge.svg)](https://github.com/phac-nml/rebar/actions/workflows/latest.yaml)
+[![Nightly CI](https://github.com/phac-nml/rebar/actions/workflows/nightly.yaml/badge.svg)](https://github.com/phac-nml/rebar/actions/workflows/nightly.yaml)
 
 **RE**combination **BAR**code detector
 
@@ -20,6 +20,8 @@
 ![A plot of the breakpoints and parental regions for the recombinant SARS-CoV-2 lineage XBB.1.16. At the top are rectangles arranged side-by-side horizontally. These are colored and labelled by each parent (ex. BJ.1., CJ.1) and are intepreted as reading left to right, 5' to 3'. Below these regions are genomic annotations, which show the coordinates for each gene. At the bottom are horizontal tracks, where each row is a sample, and each column is a mutation. Mutations are colored according to which parent the recombination region derives from.](assets/images/XBB_BJ.1_CJ.1_22897-22941.png)
 
 ## Install
+
+`rebar` is a standalone binary file that you can simply download and run:
 
 ```bash
 wget -O rebar https://github.com/phac-nml/rebar/releases/download/v0.1.3/rebar-x86_64-unknown-linux-musl
@@ -40,14 +42,14 @@ wget -O rebar https://github.com/phac-nml/rebar/releases/download/v0.1.3/rebar-x
 1. Download a pre-built dataset, version-controlled to a specific date (try any date!).
 
     ```bash
-    rebar dataset download --name sars-cov-2 --tag 2023-11-17 --output-dir dataset/sars-cov-2/2023-11-17
+    rebar dataset download --name sars-cov-2 --tag 2023-11-30 --output-dir dataset/sars-cov-2/2023-11-30
     ```
 
 1. Detect recombination in dataset populations.
 
     ```bash
     rebar run \
-      --dataset-dir dataset/sars-cov-2/2023-11-17  \
+      --dataset-dir dataset/sars-cov-2/2023-11-30  \
       --populations "AY.4.2*,BA.5.2,XBC.1.6*,XBB.1.5.1,XBL" \
       --output-dir example1
     ```
@@ -55,7 +57,7 @@ wget -O rebar https://github.com/phac-nml/rebar/releases/download/v0.1.3/rebar-x
 1. Plot breakpoints and parental regions.
 
     ```bash
-    rebar plot --dataset-dir dataset/sars-cov-2/2023-11-17 --output-dir example1
+    rebar plot --dataset-dir dataset/sars-cov-2/2023-11-30 --output-dir example1
     ```
 
 Please see the [examples](docs/examples.md) docs for more tutorials including:
@@ -74,11 +76,6 @@ Visualization of substitutions, parental origins, and breakpoints: `<output-dir>
 ### Table
 
 A linelist summary of results: `<output-dir>/linelist.tsv`
-
-|strain               |validate|validate_details|population|recombinant|parents  |breakpoints|edge_case|unique_key               |regions                          |substitutions                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |genome_length|dataset_name|dataset_tag|cli_version|
-|:--------------------|:-------|:---------------|:---------|:----------|:--------|:----------|:--------|:------------------------|:--------------------------------|:-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|:------------|:-----------|:----------|:----------|
-|population_XBB.1.16  |pass    |                |XBB.1.16  |XBB        |BJ.1,CJ.1|22897-22941|false    |XBB_BJ.1_CJ.1_22897-22941|261-22896\|BJ.1,22942-29118\|CJ.1|A405G,T670G,C2790T,C3037T,G4184A,C4321T,C9344T,A9424G,C9534T,C9866T,C10029T,C10198T,G10447A,C10449A,C12880T,C14408T,G15451A,C15714T,C15738T,T15939C,T16342C,C17410T,T17859C,A18163G,C19955T,A20055G,C21618T,T21810C,G21987A,C22000A,C22109G,T22200A,G22577C,G22578A,G22599C,C22664A,C22674T,T22679C,C22686T,A22688G,G22775A,A22786C,G22813T,T22882G,G22895C,T22896C\|BJ.1;T22942G,T23018C,T23019C,T23031C,C25416T,A26275G\|CJ.1;C11750T,C11956T,T12730A,A14856G,G18703T,A19326G,A22101T,G22317T,C22995G,A22995C,G27915T,T28297C,A28447G\|private        |29903        |sars-cov-2  |2023-11-17 |0.1.0      |
-|population_XBB.1.16.1|pass    |                |XBB.1.16.1|XBB        |BJ.1,CJ.1|22897-22941|false    |XBB_BJ.1_CJ.1_22897-22941|261-22896\|BJ.1,22942-29118\|CJ.1|A405G,T670G,C2790T,C3037T,G4184A,C4321T,C9344T,A9424G,C9534T,C9866T,C10029T,C10198T,G10447A,C10449A,C12880T,C14408T,G15451A,C15714T,C15738T,T15939C,T16342C,C17410T,T17859C,A18163G,C19955T,A20055G,C21618T,T21810C,G21987A,C22000A,C22109G,T22200A,G22577C,G22578A,G22599C,C22664A,C22674T,T22679C,C22686T,A22688G,G22775A,A22786C,G22813T,T22882G,G22895C,T22896C\|BJ.1;T22942G,T23018C,T23019C,T23031C,C25416T,A26275G\|CJ.1;C11750T,C11956T,T12730A,A14856G,G18703T,A19326G,A22101T,G22317T,C22995G,A22995C,C23202T,G27915T,T28297C,A28447G\|private|29903        |sars-cov-2  |2023-11-17 |0.1.0      |
 
 ## Credits
 

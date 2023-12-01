@@ -15,7 +15,7 @@ env:
   GITHUB_USERNAME: ${{ github.actor }}
   GITHUB_TOKEN: ${{ github.token }}
   DOCKER_IMAGE: "ghcr.io/${{ github.repository }}:${{ github.ref_name }}"
-  DATASET_TAG: "2023-11-17"
+  DATASET_TAG: "2023-11-30"
 
 jobs:
 

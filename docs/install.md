@@ -5,21 +5,21 @@
 ### Linux
 
 ```bash
-wget -O rebar https://github.com/phac-nml/rebar/releases/download/v0.1.3/rebar-x86_64-unknown-linux-musl
+wget -O rebar https://github.com/phac-nml/rebar/releases/latest/download/rebar-x86_64-unknown-linux-musl
 ./rebar --help
 ```
 
 ### macOS
 
 ```bash
-wget -O rebar https://github.com/phac-nml/rebar/releases/download/v0.1.3/rebar-x86_64-apple-darwin
+wget -O rebar https://github.com/phac-nml/rebar/releases/latest/download/rebar-x86_64-apple-darwin
 ./rebar --help
 ```
 
 #### Windows
 
 ```powershell
-wget "https://github.com/phac-nml/rebar/releases/download/v0.1.3/rebar-x86_64-pc-windows-gnu" -OutFile rebar.exe
+wget "https://github.com/phac-nml/rebar/releases/latest/download/rebar-x86_64-pc-windows-gnu" -OutFile rebar.exe
 .\rebar.exe --help
 ```
 
