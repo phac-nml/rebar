@@ -241,24 +241,6 @@ pub async fn build(
         }
     });
 
-    // info!("Pruning inconsistent populations from the phylogeny.");
-
-    // missing_pop_seq
-    //     .iter()
-    //     .for_each(|pop| {
-    //         // check if pop is still in phylogeny
-    //         if phylogeny.get_names().unwrap_or_default().contains(pop) {
-    //             let children = phylogeny.get_descendants(pop).unwrap_or_default();
-    //             let children_missing = missing_pop_seq.iter().filter(|c| children.contains(c)).collect_vec();
-
-    //             println!("{pop}: {children:?}");
-    //             // only prune the clade if all children are missing (ex. monophyletic)
-    //             if children.len() == children_missing.len() {
-    //                 phylogeny.prune(pop).unwrap_or_default();
-    //             }
-    //         }
-    //     });
-
     inconsistency_table.write(&inconsistency_table_path)?;
 
     Ok(phylogeny)
