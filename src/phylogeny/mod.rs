@@ -123,27 +123,52 @@ impl Phylogeny {
         Ok(non_recombinants)
     }
 
-    /// Prune a clade from the graph.
-    pub fn prune(&mut self, name: &str) -> Result<(), Report> {
-        let mut phylogeny = self.clone();
+    /// Remove a single named node in the graph.
+    ///
+    /// Connect parents to children to fill the hole.
+    pub fn remove(&mut self, name: &str) -> Result<(), Report> {
+        // Delete the node
+        debug!("Removing node: {name}");
 
-        // Find the node that matches the name
-        let descendants = self.get_descendants(name)?;
+        let node = self.get_node(name)?;
 
-        for name in &descendants {
-            debug!("Pruning node: {name}");
-            let node = self.get_node(name)?;
-            // Remove from graph
-            let removal = phylogeny.graph.remove_node(node);
-            // If we have already checked that the node exists, why does this fail?
-            // Ex. XBB knockout, fails on XBL
-            if removal.is_none() {
-                debug!("Node {node:?} was not found in the graph.");
-            }
+        // get some attributes before we remove it
+        let parents = self.get_parents(name)?;
+        let mut children = self.get_children(name)?;
+        let is_recombinant = self.is_recombinant(name)?;
+
+        // Delete the node
+        self.graph.remove_node(node).unwrap_or_default();
+
+        // If it was an interior node, connect parents and child
+        children.iter().for_each(|c| {
+            let c_node = self.get_node(c).expect("Child {c} is not in graph.");
+            //debug!("Connecting child {c} to new parent(s): {parents:?}");
+            parents.iter().for_each(|p| {
+                let p_node = self.get_node(p).expect("Parent {p} is not in graph.");
+                self.graph.add_edge(p_node, c_node, 1);
+            })
+        });
+
+        // If it was a primary recombinant node, make all children primary recombinants
+        if is_recombinant {
+            self.recombinants.append(&mut children);
         }
 
-        // Remove from recombinants
-        phylogeny.recombinants.retain(|r| !descendants.contains(r));
+        // Update the recombinants attributes
+        self.recombinants.retain(|n| n != name);
+        self.recombinants_all.retain(|n| n != name);
+        Ok(())
+    }
+
+    /// Prune a clade from the graph.
+    ///
+    /// Removes named node and all descendants.
+    pub fn prune(&mut self, name: &str) -> Result<(), Report> {
+        let descendants = self.get_descendants(name)?;
+        for d in descendants {
+            self.remove(&d)?;
+        }
 
         Ok(())
     }
@@ -251,6 +276,9 @@ impl Phylogeny {
             let child_name = self.get_name(&child_node)?;
             children.push(child_name);
         }
+
+        // children order is last added to first added, reverse this
+        children.reverse();
 
         Ok(children)
     }

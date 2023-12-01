@@ -26,7 +26,7 @@ pub fn run(args: &mut cli::run::Args) -> Result<(), Report> {
         create_dir_all(&args.output_dir)?;
     } else {
         warn!(
-            "--output-dir {:?} already exists, proceed with caution!",
+            "Proceed with caution! --output-dir {:?} already exists.",
             args.output_dir
         );
     }
@@ -83,9 +83,18 @@ pub fn run(args: &mut cli::run::Args) -> Result<(), Report> {
     if let Some(populations) = &args.input.populations {
         info!("Parsing input populations: {populations:?}");
 
+        // limit the amount of warnings emitted
+        let mut num_warnings = 0;
+        let max_warnings = 10;
+
         dataset.expand_populations(populations)?.into_iter().for_each(|p| {
             if !dataset.populations.contains_key(&p) {
-                warn!("Population {p} is not in the dataset populations fasta.");
+                if num_warnings < max_warnings {
+                    warn!("Population {p} is not in the dataset populations fasta.");
+                } else {
+                    warn!("... (Additional warnings ommitted)");
+                }
+                num_warnings += 1;
             } else {
                 debug!("Adding population {p} to query sequences.");
                 let mut sequence = dataset.populations.get(&p).unwrap().clone();
@@ -140,48 +149,32 @@ pub fn run(args: &mut cli::run::Args) -> Result<(), Report> {
     if let Some(knockout) = &args.knockout {
         info!("Performing dataset knockout: {knockout:?}");
 
-        let mut expanded_knockout = Vec::new();
-
-        for p in knockout {
-            // Replace the wildcard, knockout will always include descendants
-            let p = p.replace('*', "");
-
-            // Identify descendants
-            let exclude_populations = if dataset.phylogeny.is_empty() {
-                vec![p.to_string()]
-            } else {
-                dataset.phylogeny.get_descendants(&p)?
-            };
-
-            // remove from populations
-            debug!("Removing {p}* from the populations fasta.");
-            dataset.populations.retain(|id, _| !exclude_populations.contains(id));
-
-            // remove from mutations
-            debug!("Removing {p}* from the mutations.");
-            dataset.mutations = dataset
-                .mutations
-                .into_iter()
-                .filter_map(|(sub, mut populations)| {
-                    populations.retain(|p| !exclude_populations.contains(p));
-                    if populations.is_empty() {
-                        None
-                    } else {
-                        Some((sub, populations))
-                    }
-                })
-                .collect();
-
-            // remove from phylogeny
-            if !dataset.phylogeny.is_empty() {
-                debug!("Removing {p}* from the phylogeny.");
-                dataset.phylogeny.prune(&p)?;
-            }
-
-            expanded_knockout.extend(exclude_populations);
+        // Check to make sure wildcards are used in all knockouts
+        // Weird things happend if you don't!
+        let knockout_no_wildcard =
+            knockout.iter().filter(|p| !p.contains('*')).collect_vec();
+        if !knockout_no_wildcard.is_empty() {
+            warn!("Proceed with caution! Weird things can happen when you run a knockout without descendants (no '*'): {knockout_no_wildcard:?}.")
         }
 
-        args.knockout = Some(expanded_knockout);
+        // Expanded populations (in case wildcard * is provided)
+        let knockout_expanded = dataset.expand_populations(knockout)?;
+        debug!("Expanded dataset knockout: {knockout:?}");
+        debug!("Removing knockout populations from the fasta.");
+        dataset.populations.retain(|id, _| !knockout_expanded.contains(id));
+
+        debug!("Removing knockout populations from the mutations.");
+        dataset.mutations.iter_mut().for_each(|(_sub, populations)| {
+            populations.retain(|p| !knockout_expanded.contains(p));
+        });
+
+        if !dataset.phylogeny.is_empty() {
+            for p in &knockout_expanded {
+                dataset.phylogeny.remove(p)?;
+            }
+        }
+
+        args.knockout = Some(knockout_expanded);
     }
 
     // ------------------------------------------------------------------------

@@ -46,7 +46,7 @@ pub async fn dataset(args: &mut cli::dataset::download::Args) -> Result<(), Repo
         create_dir_all(&args.output_dir)?;
     } else {
         warn!(
-            "--output-dir {:?} already exists, proceed with caution!",
+            "Proceed with caution! --output-dir {:?} already exists.",
             args.output_dir
         );
     }
