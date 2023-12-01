@@ -112,21 +112,21 @@ jobs:
         run: |
           ${{ env.RUN_CMD }} dataset download --name sars-cov-2 --tag ${{ env.DATASET_TAG }} --output-dir dataset/sars-cov-2/${{ env.DATASET_TAG }}
 
-      - name: example 1
-        run: |
-          ${{ env.RUN_CMD }} run  --dataset-dir dataset/sars-cov-2/${{ env.DATASET_TAG }} --output-dir output/example1 --populations "AY.4.2*,BA.5.2,XBC.1.6*,XBB.1.5.1,XBL"
-          ${{ env.RUN_CMD }} plot --dataset-dir dataset/sars-cov-2/${{ env.DATASET_TAG }} --run-dir output/example1
-
-      - name: example 2
-        run: |
-          ${{ env.RUN_CMD }} run  --dataset-dir dataset/sars-cov-2/${{ env.DATASET_TAG }} --output-dir output/example2 --alignment example2.fasta
-          ${{ env.RUN_CMD }} plot --dataset-dir dataset/sars-cov-2/${{ env.DATASET_TAG }} --run-dir output/example2
-
       - name: toy1
         run: |
           ${{ env.RUN_CMD }} dataset download --output-dir dataset/toy1 --name toy1 --tag custom
           ${{ env.RUN_CMD }} run  --dataset-dir dataset/toy1 --output-dir output/toy1 --populations "*" --mask 0,0 --min-length 1
-          ${{ env.RUN_CMD }} plot --dataset-dir dataset/toy1 --run-dir output/toy1
+          ${{ env.RUN_CMD }} plot --annotations dataset/sars-cov-2/${{ env.DATASET_TAG }}/annotations.tsv --run-dir output/toy1
+
+      - name: alignment
+        run: |
+          ${{ env.RUN_CMD }} run  --dataset-dir dataset/sars-cov-2/${{ env.DATASET_TAG }} --output-dir output/alignment --alignment example2.fasta
+          ${{ env.RUN_CMD }} plot --annotations dataset/sars-cov-2/${{ env.DATASET_TAG }}/annotations.tsv --run-dir output/alignment
+
+      - name: populations
+        run: |
+          ${{ env.RUN_CMD }} run  --dataset-dir dataset/sars-cov-2/${{ env.DATASET_TAG }} --output-dir output/populations --populations "*"
+          ${{ env.RUN_CMD }} plot --annotations dataset/sars-cov-2/${{ env.DATASET_TAG }}/annotations.tsv --run-dir output/populations
 
       - name: validate (non-windows)
         if: ${{ matrix.os != 'windows-latest' }}

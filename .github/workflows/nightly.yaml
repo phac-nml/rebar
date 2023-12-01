@@ -78,7 +78,7 @@ jobs:
 
       - name: plot
         run: |
-          ${{ env.RUN_CMD }} plot --dataset-dir dataset/sars-cov-2/nightly --run-dir output/sars-cov-2/nightly/validate
+          ${{ env.RUN_CMD }} plot --annotations dataset/sars-cov-2/${{ env.DATASET_TAG }}/annotations.tsv --run-dir output/sars-cov-2/nightly/validate
 
       - name: validate
         run: |

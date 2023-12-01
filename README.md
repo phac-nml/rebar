@@ -40,7 +40,7 @@ A small, test dataset (`toy1`) serves as a template for creating custom datasets
 ```bash
 rebar dataset download --name toy1 --tag custom --output-dir dataset/toy1
 rebar run --dataset-dir dataset/toy1 --populations "*" --mask 0,0 --min-length 3 --output-dir output/toy1
-rebar plot --dataset-dir dataset/toy1 --run-dir output/toy1
+rebar plot  --run-dir output/toy1 --annotations dataset/toy1/annotations.tsv
 ```
 
 Please see the [dataset](docs/dataset.md) docs for a summary of the dataset components.
@@ -52,7 +52,7 @@ Download a SARS-CoV-2 dataset, version-controlled to the date 2023-11-30 (try an
 ```bash
 rebar dataset download --name sars-cov-2 --tag 2023-11-30 --output-dir dataset/sars-cov-2/2023-11-30
 rebar run --dataset-dir dataset/sars-cov-2/2023-11-30  --populations "AY.4.2*,BA.5.2,XBC.1.6*,XBB.1.5.1,XBL" --output-dir output/sars-cov-2
-rebar plot --dataset-dir dataset/sars-cov-2/2023-11-30 --output-dir output/sars-cov-2
+rebar plot --run-dir output/sars-cov-2 --annotations dataset/sars-cov-2/2023-11-30/annotations.tsv
 ```
 
 ### Other
