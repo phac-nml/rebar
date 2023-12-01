@@ -94,8 +94,18 @@ jobs:
         run: |
           docker run ${{ steps.meta.outputs.tags }} rebar --help
 
+      - name: build and push
+        uses: docker/build-push-action@v5
+        if: startsWith(github.event.ref, 'refs/tags/v')
+        with:
+          context: .
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+
       - name: upload image artifact
         uses: actions/upload-artifact@v3
+        if: always()
         with:
           name: rebar-docker
           path: rebar.tar
