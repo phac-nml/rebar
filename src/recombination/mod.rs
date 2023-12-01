@@ -37,7 +37,6 @@ pub struct Recombination<'seq> {
     pub conflict_alt: BTreeMap<String, Vec<Substitution>>,
     pub private: BTreeMap<String, Vec<Substitution>>,
     pub score: BTreeMap<String, isize>,
-    pub substitutions: BTreeMap<String, Vec<Substitution>>,
     #[serde(skip_serializing)]
     pub table: Table,
 }
@@ -60,7 +59,6 @@ impl<'seq> Recombination<'seq> {
             conflict_alt: BTreeMap::new(),
             private: BTreeMap::new(),
             score: BTreeMap::new(),
-            substitutions: BTreeMap::new(),
         }
     }
 
@@ -105,6 +103,59 @@ impl<'seq> Recombination<'seq> {
             private:\n{private}
             "
         )
+    }
+
+    pub fn get_substitution_origins(
+        &self,
+        best_match: &SearchResult,
+    ) -> Result<BTreeMap<String, Vec<Substitution>>, Report> {
+        // todo!() think about if we want reversions in here or not...
+        let mut subs_by_origin = BTreeMap::new();
+
+        // recombination parents
+        if self.recombinant.is_some() {
+            self.parents.iter().for_each(|p| {
+                let subs = self.support.get(p).cloned().unwrap_or_default();
+                subs_by_origin.insert(p.clone(), subs);
+            });
+        }
+
+        // consensus/best match and private
+        let p = &best_match.consensus_population;
+
+        let support = best_match.support.get(p).cloned().unwrap_or_default();
+
+        let (best_match_subs, private_subs) = if self.recombinant.is_some() {
+            // Ex. XBB (XBB consensus, BJ.1 and BA.2.75 as parents)
+            // Ex. XBB --knockout XBB, (BJ.1 consensus, BJ.1 and BA.2.75 as parents)
+            //     A19326G comes from parent XBB
+            // Ex. XBB.1 --knockout XBB.1, (XBB consensus, BJ.1 and BA.2.75 as parents)
+            //     A19326G comes from parent XBB
+            //     G22317T will be private (XBB.1 specific)
+
+            // check the private recombination subs against best match
+            let mut private_subs =
+                self.private.values().flatten().sorted().cloned().collect_vec();
+            let mut best_match_subs = private_subs.clone();
+            best_match_subs.retain(|s| support.contains(s));
+            // private subs are the remaining ones not found in best match
+            private_subs.retain(|s| !best_match_subs.contains(s));
+            (best_match_subs, private_subs)
+        } else {
+            let best_match_subs = best_match.support.get(p).cloned().unwrap_or_default();
+            let private_subs = best_match.private.clone();
+            (best_match_subs, private_subs)
+        };
+
+        // best match subs, if not parent already added
+        if !subs_by_origin.contains_key(p) {
+            subs_by_origin.insert(p.clone(), best_match_subs);
+        }
+
+        // private
+        subs_by_origin.insert("private".to_string(), private_subs);
+
+        Ok(subs_by_origin)
     }
 }
 
@@ -261,11 +312,15 @@ pub fn detect_recombination<'seq>(
     let mut coords = parents
         .iter()
         .flat_map(|p| p.substitutions.iter().map(|s| s.coord).collect_vec())
-        .unique()
         .collect_vec();
-    coords.sort();
 
-    let mut privates = Vec::new();
+    // add sequence substitutions (to check for privates)
+    coords = coords
+        .into_iter()
+        .chain(sequence.substitutions.iter().map(|s| s.coord).collect_vec())
+        .unique()
+        .sorted()
+        .collect_vec();
 
     for coord in coords {
         // init row with columns
@@ -274,6 +329,10 @@ pub fn detect_recombination<'seq>(
         // add coord to row
         row[coord_col_i] = coord.to_string();
 
+        // Keep track of base diversity, if they're all the same, this
+        // isn't an informative/differentiating site
+        let mut bases = Vec::new();
+
         // get Reference base directly from sequence
         let ref_base = &reference.seq[coord - 1];
         row[ref_col_i] = ref_base.to_string();
@@ -281,13 +340,10 @@ pub fn detect_recombination<'seq>(
         // get Sample base directly form sequence
         let seq_base = &sequence.seq[coord - 1];
         row[seq_col_i] = seq_base.to_string();
+        bases.push(*seq_base);
 
         // init sequence base origins (could be multiple)
         let mut origins = Vec::new();
-
-        // Keep track of parent bases diversity, if they're all the same, this
-        // isn't an informative/differentiating site
-        let mut parent_bases = Vec::new();
 
         for parent in &parents {
             let parent_base = parent
@@ -306,30 +362,29 @@ pub fn detect_recombination<'seq>(
             // Add bases to table
             let parent_col_i = table.header_position(&parent.consensus_population)?;
             row[parent_col_i] = parent_base.to_string();
-            parent_bases.push(parent_base);
+            bases.push(parent_base);
         }
 
         // Is this coord a discriminating site?
         // Remove subs that are identical between all parents
-        parent_bases = parent_bases.into_iter().unique().collect();
+        bases = bases.into_iter().unique().collect();
 
-        // If only 1 unique parent base was found, non-discriminating
-        if parent_bases.len() == 1 {
+        // If only 1 unique parent base was found,  non-discriminating
+        if bases.len() == 1 {
             continue;
         }
 
-        // Option #1. No known origins, is private mutation
+        // No known origins, is private mutation
         if origins.is_empty() {
-            let private = sequence.substitutions.iter().find(|sub| sub.coord == coord);
-            privates.push(private);
+            origins.push("private".to_string());
         }
-        // Option #2. Is fully descriminating (only 1 parent matches)
-        else if origins.len() == 1 {
+        // Is fully descriminating (only 1 parent matches) or private
+        if origins.len() == 1 {
             // add origins to row
             row[origin_col_i] = origins.iter().join(",");
             table.rows.push(row);
         }
-        // Option #3. Non-discriminating
+        // Non-discriminating
         // todo!() revisit this when we test >= 3 parents
         else {
             continue;
@@ -343,8 +398,11 @@ pub fn detect_recombination<'seq>(
     // Group Substitutions into Parental Regions
     // --------------------------------------------------------------------
 
+    let mut table_no_private = table.clone();
+    table_no_private.rows.retain(|row| row[origin_col_i] != "private");
+
     // First: 5' -> 3', filter separately on min_consecutive then min_length
-    let mut regions_5p = identify_regions(&table)?;
+    let mut regions_5p = identify_regions(&table_no_private)?;
     regions_5p = filter_regions(
         &regions_5p,
         Direction::Forward,
@@ -359,7 +417,7 @@ pub fn detect_recombination<'seq>(
     );
 
     // Second: 3' -> 5', filter separately on min_consecutive then min_length
-    let mut regions_3p = identify_regions(&table)?;
+    let mut regions_3p = identify_regions(&table_no_private)?;
     regions_3p = filter_regions(
         &regions_3p,
         Direction::Reverse,
