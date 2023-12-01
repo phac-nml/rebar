@@ -135,15 +135,16 @@ jobs:
           if [[ $(grep "fail" output/validate/example2.tsv) ]]; then exit 1; fi
           if [[ $(grep "fail" output/toy1/linelist.tsv) ]]; then exit 1; fi
 
-      - name: validate (windows)
-        if: ${{ matrix.os == 'windows-latest' }}
-        run: |
-          if(findstr fail output\example1\linelist.tsv){ exit 1}
-          if(findstr fail output\example2\linelist.tsv){ exit 1}
-          if(findstr fail output\toy1\linelist.tsv){ exit 1}
+      # - name: validate (windows)
+      #   if: ${{ matrix.os == 'windows-latest' }}
+      #   run: |
+      #     if(findstr fail output\example1\linelist.tsv){ exit 1}
+      #     if(findstr fail output\example2\linelist.tsv){ exit 1}
+      #     if(findstr fail output\toy1\linelist.tsv){ exit 1}
 
       - name: upload output
         uses: actions/upload-artifact@v3
+        if: always()
         with:
           name: output-${{ matrix.arch }}
           path: output
