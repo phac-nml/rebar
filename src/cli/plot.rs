@@ -5,10 +5,6 @@ use std::path::PathBuf;
 #[derive(Clone, Debug, Parser)]
 #[clap(verbatim_doc_comment)]
 pub struct Args {
-    /// rebar dataset directory.
-    #[clap(short = 'd', long, required = true)]
-    pub dataset_dir: PathBuf,
-
     /// Output directory from rebar run.
     ///
     /// Will plot all TSV files under barcodes/
@@ -18,6 +14,10 @@ pub struct Args {
     /// A single barcodes TSV file to plot.
     #[clap(short = 'b', long)]
     pub barcodes_file: Option<PathBuf>,
+
+    /// Dataset genome annotations.
+    #[clap(short = 'a', long)]
+    pub annotations: Option<PathBuf>,
 
     /// Output directory for plots.
     ///
@@ -44,7 +44,7 @@ impl Default for Args {
 impl Args {
     pub fn new() -> Self {
         Args {
-            dataset_dir: PathBuf::new(),
+            annotations: None,
             run_dir: PathBuf::new(),
             barcodes_file: None,
             output_dir: None,

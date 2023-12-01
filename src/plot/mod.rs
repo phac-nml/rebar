@@ -17,10 +17,6 @@ pub fn plot(args: &cli::plot::Args) -> Result<(), Report> {
     // ------------------------------------------------------------------------
     // Parse Args
 
-    let dataset_dir = &args.dataset_dir;
-    if !dataset_dir.exists() {
-        return Err(eyre!("--dataset-dir {dataset_dir:?} does not exist."));
-    }
     let run_dir = &args.run_dir;
     if !run_dir.exists() {
         return Err(eyre!("--run-dir {run_dir:?} does not exist."));
@@ -42,15 +38,11 @@ pub fn plot(args: &cli::plot::Args) -> Result<(), Report> {
         ));
     }
 
-    let annotations_path = dataset_dir.join("annotations.tsv");
-    let annotations = if annotations_path.exists() {
-        Some(annotations_path)
-    } else {
-        warn!(
-            "Annotations {annotations_path:?} do not exist in --dataset-dir {dataset_dir:?}."
-        );
-        None
-    };
+    if let Some(annotations) = &args.annotations {
+        if !annotations.exists() {
+            return Err(eyre!("Annotations do not exist: {annotations:?}"));
+        }
+    }
 
     // create plot directory if it doesn't exist
     let output_dir = args.output_dir.clone().unwrap_or(run_dir.join("plots"));
@@ -100,12 +92,12 @@ pub fn plot(args: &cli::plot::Args) -> Result<(), Report> {
         let result = create(
             &barcodes_file,
             linelist,
-            annotations.as_deref(),
+            args.annotations.as_deref(),
             &output_path,
             args.all_coords,
         );
         match result {
-            Ok(()) => info!("Plotting success."),
+            Ok(()) => (),
             Err(e) => {
                 if e.to_string().contains("not found in the linelist") {
                     warn!("The following error was encountered but ignored: {:?}", e);
