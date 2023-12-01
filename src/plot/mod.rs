@@ -169,11 +169,11 @@ pub fn create(
     // get coords
     let coords = barcodes.rows.iter().map(|row| &row[coord_i]).unique().collect_vec();
 
-    // get parents (origins column)
+    // get parents (origins column), exclude 'private' as name
     let parents = barcodes
         .rows
         .iter()
-        .filter(|row| row[origin_i] != "?")
+        .filter(|row| row[origin_i] != "?" && row[origin_i] != "private")
         .map(|row| row[origin_i].to_string())
         .unique()
         .collect_vec();
@@ -293,10 +293,12 @@ pub fn create(
 
     let mut section_y = constants::X_INC; // white-space top
 
-    // legend is reference (1) + num parents * 2
+    // legend is reference (1) + num parents * 2 + private (1)
     let legend_height = constants::BUFFER
         + constants::X_INC * (1. + (parents.len() as f32 * 2.0))
-        + constants::BUFFER * (1. + (parents.len() as f32 * 2.0));
+        + constants::BUFFER * (1. + (parents.len() as f32 * 2.0))
+        + constants::X_INC
+        + constants::BUFFER;
 
     let legend_width = constants::BUFFER
         + constants::X_INC
@@ -886,6 +888,8 @@ pub fn create(
             let pop_header_i = barcodes.header_position(population)?;
             let pop_base = barcodes.rows[coord_i][pop_header_i].to_string();
             let pop_color: Source;
+            // will give black outline if is private
+            let mut pop_outline = constants::TRANSPARENT;
 
             // is this the reference genome?
             if &**population == "Reference" {
@@ -916,6 +920,7 @@ pub fn create(
                 // otherwise, just make it white to show ambiguous origins
                 else {
                     pop_color = constants::WHITE;
+                    pop_outline = constants::BLACK;
                 }
             }
 
@@ -924,7 +929,7 @@ pub fn create(
                 &draw_x,
                 &draw_y,
                 &pop_color,
-                &constants::TRANSPARENT,
+                &pop_outline,
                 &constants::BASIC_STROKE_STYLE,
             )?;
 
@@ -1088,6 +1093,33 @@ pub fn create(
         args.vertical_alignment = text::VerticalAlignment::Center;
         text::draw_raqote(&mut args)?;
     }
+
+    // ------------------------------------------------------------------------
+    // Private
+
+    // Box
+    y += constants::X_INC + constants::BUFFER;
+    let box_y = y + (constants::X_INC / 2.) - (sub_box_w / 2.);
+    let draw_x = vec![box_x, box_x, box_x + sub_box_w, box_x + sub_box_w];
+    let draw_y = vec![box_y, box_y + sub_box_w, box_y + sub_box_w, box_y];
+
+    polygon::draw_raqote(
+        &mut canvas,
+        &draw_x,
+        &draw_y,
+        &constants::WHITE,
+        &constants::BLACK,
+        &constants::BASIC_STROKE_STYLE,
+    )?;
+
+    // Label
+    let mut args = text::DrawRaqoteArgs::from_canvas(&mut canvas);
+    args.text = "Private Mutation".to_string();
+    args.x = box_x + sub_box_w + constants::BUFFER;
+    args.y = y + (constants::X_INC / 2.0);
+    args.horizontal_alignment = text::HorizontalAlignment::Left;
+    args.vertical_alignment = text::VerticalAlignment::Center;
+    text::draw_raqote(&mut args)?;
 
     // ------------------------------------------------------------------------
     // Export
