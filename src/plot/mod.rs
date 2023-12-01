@@ -102,6 +102,7 @@ pub fn plot(args: &cli::plot::Args) -> Result<(), Report> {
             linelist,
             annotations.as_deref(),
             &output_path,
+            args.all_coords,
         );
         match result {
             Ok(()) => info!("Plotting success."),
@@ -123,12 +124,14 @@ pub fn create(
     linelist_path: &Path,
     annotations_path: Option<&Path>,
     output_path: &Path,
+    all_coords: bool,
 ) -> Result<(), Report> {
     // ------------------------------------------------------------------------
     // Import Data
     // ------------------------------------------------------------------------
 
-    let barcodes = Table::read(barcodes_path)?;
+    let mut barcodes = Table::read(barcodes_path)?;
+
     let unique_key = barcodes_path.file_stem().unwrap().to_str().unwrap();
 
     // filter the linelist to the current key
@@ -165,6 +168,11 @@ pub fn create(
         .next()
         .unwrap()
         .parse::<usize>()?;
+
+    // check if we should include/exclude private mutations
+    if !all_coords {
+        barcodes.rows.retain(|row| row[origin_i] != "private");
+    }
 
     // get coords
     let coords = barcodes.rows.iter().map(|row| &row[coord_i]).unique().collect_vec();
@@ -366,14 +374,17 @@ pub fn create(
 
     let draw_x = vec![box_x, box_x, box_x + box_w, box_x + box_w];
     let draw_y = vec![box_y, box_y + box_h, box_y + box_h, box_y];
-    polygon::draw_raqote(
+
+    let draw = polygon::draw_raqote(
         &mut canvas,
         &draw_x,
         &draw_y,
         &constants::GREY,
         &constants::TRANSPARENT,
         &constants::BASIC_STROKE_STYLE,
-    )?;
+    );
+
+    draw?;
 
     // iterate over parental regions in linelist
     let regions_i = linelist.header_position("regions")?;
