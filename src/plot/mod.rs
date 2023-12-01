@@ -231,7 +231,12 @@ pub fn create(
     let num_coords = barcodes.rows.len();
 
     // longest sequence text id (in pixels)
-    let longest_sequence_id = sequence_ids
+    let mut default_ids =
+        vec!["Reference", "Private"].into_iter().map(String::from).collect_vec();
+    let mut sequence_ids_length_check = sequence_ids.clone();
+    sequence_ids_length_check.append(&mut default_ids);
+
+    let longest_sequence_id = sequence_ids_length_check
         .iter()
         .map(|id| {
             text::to_image(
