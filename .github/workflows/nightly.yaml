@@ -1,4 +1,4 @@
-name: Latest
+name: Nightly
 
 on:
   push:
@@ -70,24 +70,24 @@ jobs:
 
       - name: dataset download
         run: |
-          ${{ env.RUN_CMD }} dataset download --name sars-cov-2 --tag latest --output-dir dataset/sars-cov-2/latest
+          ${{ env.RUN_CMD }} dataset download --name sars-cov-2 --tag nightly --output-dir dataset/sars-cov-2/nightly
 
       - name: run
         run: |
-          ${{ env.RUN_CMD }} run  --dataset-dir dataset/sars-cov-2/latest --output-dir output/validate --populations "*" --threads 2
+          ${{ env.RUN_CMD }} run  --dataset-dir dataset/sars-cov-2/nightly --output-dir output/sars-cov-2/nightly/validate --populations "*" --threads 2
 
       - name: plot
         run: |
-          ${{ env.RUN_CMD }} plot --dataset-dir dataset/sars-cov-2/latest --run-dir output/validate
+          ${{ env.RUN_CMD }} plot --dataset-dir dataset/sars-cov-2/nightly --run-dir output/sars-cov-2/nightly/validate
 
       - name: validate
         run: |
-          if [[ $(grep "fail" output/validate/linelist.tsv) ]]; then exit 1; fi
+          if [[ $(grep "fail" output/sars-cov-2/nightly/validate/linelist.tsv) ]]; then exit 1; fi
 
       - name: upload
         uses: actions/upload-artifact@v3
         with:
           name: validate-${{ matrix.arch }}
-          path: output/validate
+          path: output/sars-cov-2/nightly/validate
           if-no-files-found: error
           retention-days: 7

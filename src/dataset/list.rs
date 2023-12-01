@@ -39,12 +39,12 @@ pub fn datasets(args: &cli::dataset::list::Args) -> Result<(), Report> {
         let min_date = if let Some(min_date) = compatibility.dataset.min_date {
             min_date.format("%Y-%m-%d").to_string()
         } else {
-            "latest".to_string()
+            "nightly".to_string()
         };
         let max_date = if let Some(max_date) = compatibility.dataset.max_date {
             max_date.format("%Y-%m-%d").to_string()
         } else {
-            "latest".to_string()
+            "nightly".to_string()
         };
 
         // Add to row
