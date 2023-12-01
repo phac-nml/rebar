@@ -33,49 +33,69 @@ wget -O rebar https://github.com/phac-nml/rebar/releases/download/v0.1.3/rebar-x
 
 ## Usage
 
-1. Preview pre-built datasets.
+### Custom Dataset
 
-    ```bash
-    rebar dataset list
-    ```
+A small, test dataset (`toy1`) serves as a template for creating custom datasets, and for easer visualization of the method and output.
 
-1. Download a pre-built dataset, version-controlled to a specific date (try any date!).
+```bash
+rebar dataset download --name toy1 --tag custom --output-dir dataset/toy1
+rebar run --dataset-dir dataset/toy1 --populations "*" --mask 0,0 --min-length 3 --output-dir output/toy1
+rebar plot --dataset-dir dataset/toy1 --run-dir output/toy1
+```
 
-    ```bash
-    rebar dataset download --name sars-cov-2 --tag 2023-11-30 --output-dir dataset/sars-cov-2/2023-11-30
-    ```
+Please see the [dataset](docs/dataset.md) docs for a summary of the dataset components.
 
-1. Detect recombination in dataset populations.
+### SARS-CoV-2
 
-    ```bash
-    rebar run \
-      --dataset-dir dataset/sars-cov-2/2023-11-30  \
-      --populations "AY.4.2*,BA.5.2,XBC.1.6*,XBB.1.5.1,XBL" \
-      --output-dir example1
-    ```
+Download a SARS-CoV-2 dataset, version-controlled to the date 2023-11-30 (try any date!).
 
-1. Plot breakpoints and parental regions.
+```bash
+rebar dataset download --name sars-cov-2 --tag 2023-11-30 --output-dir dataset/sars-cov-2/2023-11-30
+rebar run --dataset-dir dataset/sars-cov-2/2023-11-30  --populations "AY.4.2*,BA.5.2,XBC.1.6*,XBB.1.5.1,XBL" --output-dir output/sars-cov-2
+rebar plot --dataset-dir dataset/sars-cov-2/2023-11-30 --output-dir output/sars-cov-2
+```
 
-    ```bash
-    rebar plot --dataset-dir dataset/sars-cov-2/2023-11-30 --output-dir example1
-    ```
+### Other
 
 Please see the [examples](docs/examples.md) docs for more tutorials including:
 
-- Using an alignment of genomes as input.
+- Using your own alignment of genomes as input.
+- Testing specific parent combinations.
 - Performing a 'knockout' experiment.
 - Validating all populations in a dataset.
-- Running a custom dataset.
 
 ## Output
 
+### Linelist
+
+A linelist summary of results (ex. `output/toy1/linelist.tsv`).
+
+|strain      |validate|validate_details|population|recombinant|parents|breakpoints|edge_case|unique_key |regions         |genome_length|dataset_name|dataset_tag|cli_version|
+|:-----------|:-------|:---------------|:---------|:----------|:------|:----------|:--------|:----------|:---------------|:------------|:-----------|:----------|:----------|
+|population_A|pass    |                |A         |           |       |           |false    |           |                |20           |toy1        |custom     |0.2.0      |
+|population_B|pass    |                |B         |           |       |           |false    |           |                |20           |toy1        |custom     |0.2.0      |
+|population_C|pass    |                |C         |           |       |           |false    |           |                |20           |toy1        |custom     |0.2.0      |
+|population_D|pass    |                |D         |D          |A,B    |12-12      |false    |D_A_B_12-12|1-11\|A,12-20\|B|20           |toy1        |custom     |0.2.0      |
+|population_E|pass    |                |E         |E          |C,D    |4-4        |false    |E_C_D_4-4  |1-3\|C,4-20\|D  |20           |toy1        |custom     |0.2.0      |
+
 ### Plots
 
-Visualization of substitutions, parental origins, and breakpoints: `<output-dir>/plots/`. Please see the [Why rebar?](#why-rebar) section for an example!
+A visualization of substitutions, parental origins, and breakpoints (`ex. output/toy1/plots/`).
 
-### Table
+![rebar plot of population D in dataset toy1](assets/images/toy1_D_default.png)
 
-A linelist summary of results: `<output-dir>/linelist.tsv`
+### Barcodes
+
+The discriminating sites with mutations between samples and their parents (`ex. output/toy1/barcodes/`).
+
+|coord|origin|Reference|A  |B  |population_D|
+|:----|:-----|:--------|:--|:--|:-----------|
+|1    |A     |A        |C  |T  |C           |
+|2    |A     |A        |C  |T  |C           |
+|3    |A     |A        |C  |T  |C           |
+|4    |A     |A        |C  |T  |C           |
+|5    |A     |A        |C  |T  |C           |
+|...    |...     |...       |...  |...  |...           |
 
 ## Credits
 
