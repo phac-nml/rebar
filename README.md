@@ -7,15 +7,25 @@
 [![Test CI](https://github.com/phac-nml/rebar/actions/workflows/test.yaml/badge.svg)](https://github.com/phac-nml/rebar/actions/workflows/test.yaml)
 [![Nightly CI](https://github.com/phac-nml/rebar/actions/workflows/nightly.yaml/badge.svg)](https://github.com/phac-nml/rebar/actions/workflows/nightly.yaml)
 
-**RE**combination **BAR**code detector
+`rebar` is a **RE**combination **BAR**code detector!
 
 ## Why rebar?
 
-`rebar` is a command-line application that _detects_ and _visualizes_ recombination between genomic sequences. It follows the [PHA4GE Guidance for Detecting and Characterizing SARS-CoV-2 Recombinants](https://github.com/pha4ge/pipeline-resources/blob/main/docs/sc2-recombinants.md) which outlines three steps:
+1. **`rebar` _detects_ and _visualizes_ genomic recombination.**
 
-1. Assess the genomic evidence for recombination.
-1. Identify the breakpoint coordinates and parental regions.
-1. Classify sequences as _designated_ or _novel_ recombinant lineages.
+    It follows the [PHA4GE Guidance for Detecting and Characterizing SARS-CoV-2 Recombinants](https://github.com/pha4ge/pipeline-resources/blob/main/docs/sc2-recombinants.md) which outlines three steps:
+
+    1. Assess the genomic evidence for recombination.
+    1. Identify the breakpoint coordinates and parental regions.
+    1. Classify sequences as _designated_ or _novel_ recombinant lineages.
+
+1. **`rebar` peforms generalized _clade assignment_**.
+
+    While specifically designed for recombinants, `rebar` works on non-recombinants tool! It will report a sequence's closest known match in the dataset, as well any mutation conflicts that were observed. The linelist and visual outputs can be used to detect novel variants, such as the SARS-CoV-2 [pango-designation](https://github.com/cov-lineages/pango-designation/issues) process.
+
+1. **`rebar` is for _exploring hypotheses_.**
+
+    The recombination search can be customized to test your hypotheses about which parents and genomic regions are recombining. If that sounds overwhelming, you can always just use the pre-configured datasets (ex. SARS-CoV-2) that are validated against known recombinants.
 
 ![A plot of the breakpoints and parental regions for the recombinant SARS-CoV-2 lineage XBB.1.16. At the top are rectangles arranged side-by-side horizontally. These are colored and labelled by each parent (ex. BJ.1., CJ.1) and are intepreted as reading left to right, 5' to 3'. Below these regions are genomic annotations, which show the coordinates for each gene. At the bottom are horizontal tracks, where each row is a sample, and each column is a mutation. Mutations are colored according to which parent the recombination region derives from.](assets/images/XBB_BJ.1_CJ.1_22897-22941.png)
 
@@ -24,7 +34,7 @@
 `rebar` is a standalone binary file that you can simply download and run:
 
 ```bash
-wget -O rebar https://github.com/phac-nml/rebar/releases/download/v0.1.3/rebar-x86_64-unknown-linux-musl
+wget -O rebar https://github.com/phac-nml/rebar/releases/latest/download/rebar-x86_64-unknown-linux-musl
 ./rebar --help
 ```
 
@@ -42,8 +52,6 @@ rebar dataset download --name toy1 --tag custom --output-dir dataset/toy1
 rebar run --dataset-dir dataset/toy1 --populations "*" --mask 0,0 --min-length 3 --output-dir output/toy1
 rebar plot  --run-dir output/toy1 --annotations dataset/toy1/annotations.tsv
 ```
-
-Please see the [dataset](docs/dataset.md) docs for a summary of the dataset components.
 
 ### SARS-CoV-2
 
@@ -63,6 +71,8 @@ Please see the [examples](docs/examples.md) docs for more tutorials including:
 - Testing specific parent combinations.
 - Performing a 'knockout' experiment.
 - Validating all populations in a dataset.
+
+Please see the [dataset](docs/dataset.md) and [run](docs/run.md) docs for more methodology.
 
 ## Output
 
