@@ -119,7 +119,6 @@ jobs:
 
       - name: example 2
         run: |
-          wget https://raw.githubusercontent.com/phac-nml/rebar/${{ github.sha }}/data/example2.fasta
           ${{ env.RUN_CMD }} run  --dataset-dir dataset/sars-cov-2/${{ env.DATASET_TAG }} --output-dir output/example2 --alignment example2.fasta
           ${{ env.RUN_CMD }} plot --dataset-dir dataset/sars-cov-2/${{ env.DATASET_TAG }} --run-dir output/example2
 
