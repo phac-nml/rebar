@@ -81,7 +81,7 @@ jobs:
           path: target/${{ matrix.arch }}/release
 
       - name: install
-        if: matrix.os == 'windows-latest'
+        if: ${{ matrix.arch != 'docker' }}
         run: |
           chmod +x target/${{ matrix.arch }}/release/${{ matrix.binary }}
           cp target/${{ matrix.arch }}/release/${{ matrix.binary }} .

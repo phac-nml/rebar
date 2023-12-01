@@ -72,13 +72,16 @@ jobs:
         run: |
           ${{ env.RUN_CMD }} dataset download --name sars-cov-2 --tag latest --output-dir dataset/sars-cov-2/latest
 
+      - name: run
+        run: |
+          ${{ env.RUN_CMD }} run  --dataset-dir dataset/sars-cov-2/latest --output-dir output/validate --populations "*" --threads 2
+
       - name: plot
         run: |
           ${{ env.RUN_CMD }} plot --dataset-dir dataset/sars-cov-2/latest --run-dir output/validate
 
       - name: validate
         run: |
-          ${{ env.RUN_CMD }} run  --dataset-dir dataset/sars-cov-2/latest --output-dir output/validate --populations "*" --threads 2
           if [[ $(grep "fail" output/validate/linelist.tsv) ]]; then exit 1; fi
 
       - name: upload
