@@ -97,13 +97,20 @@ pub fn plot(args: &cli::plot::Args) -> Result<(), Report> {
             .to_str()
             .expect("Failed to convert file of stem {barcodes_file:?} to str.");
         let output_path = output_dir.join(format!("{}.png", output_prefix));
-        create(
+        let result = create(
             &barcodes_file,
             linelist,
             annotations.as_deref(),
             &output_path,
-        )?;
-        info!("Plotting success.");
+        );
+        match result {
+            Ok(()) => info!("Plotting success."),
+            Err(e) => {
+                if e.to_string().contains("not found in the linelist") {
+                    warn!("The following error was encountered but ignored: {:?}", e);
+                }
+            }
+        }
     }
 
     info!("Done.");
@@ -131,8 +138,8 @@ pub fn create(
     if linelist.rows.is_empty() {
         return Err(
             eyre!("The barcodes unique key ({unique_key}) was not found in the linelist: {linelist_path:?}")
-            .suggestion("Are you sure the barcodes file ({barcodes_path:?}) corresponds to the linelist?")
-            .suggestion("Did you select the correct --output-dir?")
+            .suggestion(format!("Are you sure the barcodes file ({barcodes_path:?}) corresponds to the linelist?"))
+            .suggestion("Have you used the same --run-dir for multiple rebar runs?")
         );
     }
 
