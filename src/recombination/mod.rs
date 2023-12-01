@@ -391,15 +391,18 @@ pub fn detect_recombination<'seq>(
         }
     }
 
+    let mut table_no_private = table.clone();
+    table_no_private.rows.retain(|row| row[origin_col_i] != "private");
+
     // Debugging Table
-    debug!("Recombination table:\n\n{}", table.to_markdown()?);
+    debug!(
+        "Recombination table:\n\n{}",
+        table_no_private.to_markdown()?
+    );
 
     // --------------------------------------------------------------------
     // Group Substitutions into Parental Regions
     // --------------------------------------------------------------------
-
-    let mut table_no_private = table.clone();
-    table_no_private.rows.retain(|row| row[origin_col_i] != "private");
 
     // First: 5' -> 3', filter separately on min_consecutive then min_length
     let mut regions_5p = identify_regions(&table_no_private)?;
