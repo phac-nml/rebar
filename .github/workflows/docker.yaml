@@ -88,12 +88,15 @@ jobs:
 
       - name: load
         run: |
-          docker load --input rebar.tar
+          load=$(docker load --input rebar.tar | tee /dev/stderr)
+          TAGS=$(echo $load | sed "s/Loaded image: /${{ env.REGISTRY }}\//g")
+          echo TAGS="$TAGS" >> $GITHUB_ENV
 
       # output.tags can be an array (ex. v0.2.0, main, latest)
       - name: help
         run: >
-          for tag in ${{ steps.meta.outputs.tags }}; do
+          for tag in $TAGS; do
+            echo $tag
             docker run $tag rebar --help
           done
 
