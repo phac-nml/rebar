@@ -28,7 +28,7 @@ wget "https://github.com/phac-nml/rebar/releases/latest/download/rebar-x86_64-pc
 > **Coming Soon!** The conda install option will be available when this page is live: https://anaconda.org/bioconda/rebar
 
 ```bash
-conda create -n rebar rebar
+conda create -c bioconda -n rebar rebar
 conda activate rebar
 rebar --help
 ```
