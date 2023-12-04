@@ -27,7 +27,7 @@ jobs:
         run: |
           mkdir target/release
           mv target/rebar-x86_64-unknown-linux-musl/rebar target/release/rebar-x86_64-unknown-linux-musl
-          mv target/rebar-x86_64-pc-windows-gnu/rebar target/release/rebar-x86_64-pc-windows-gnu
+          mv target/rebar-x86_64-pc-windows-gnu/rebar.exe target/release/rebar-x86_64-pc-windows-gnu.exe
           mv target/rebar-x86_64-apple-darwin/rebar target/release/rebar-x86_64-apple-darwin
           mv target/rebar-docker/rebar.tar target/release/rebar-docker.tar
           ls -l target/release/
@@ -36,7 +36,7 @@ jobs:
         uses: ncipollo/release-action@v1
         with:
           # comma-separated
-          artifacts: "target/release/rebar-x86_64-unknown-linux-musl,target/release/rebar-x86_64-pc-windows-gnu,target/release/rebar-x86_64-apple-darwin,target/release/rebar-docker.tar"
+          artifacts: "target/release/rebar-x86_64-unknown-linux-musl,target/release/rebar-x86_64-pc-windows-gnu.exe,target/release/rebar-x86_64-apple-darwin,target/release/rebar-docker.tar"
           artifactErrorsFailBuild: true
           draft: true
           generateReleaseNotes: true
