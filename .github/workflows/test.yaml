@@ -14,7 +14,7 @@ on:
 env:
   GITHUB_USERNAME: ${{ github.actor }}
   GITHUB_TOKEN: ${{ github.token }}
-  DOCKER_IMAGE: "ghcr.io/${{ github.repository }}:${{ github.ref_name }}"
+  DOCKER_IMAGE: "ghcr.io/${{ github.repository }}"
   DATASET_TAG: "2023-11-30"
 
 jobs:
@@ -53,6 +53,20 @@ jobs:
 
     steps:
 
+      - name: download build output
+        uses: actions/download-artifact@v3
+        with:
+          name: rebar-${{ matrix.arch }}
+          path: target/${{ matrix.arch }}/release
+
+      # parse tag from load output, PR have unusual formats
+      - name: load docker image
+        if:  matrix.arch == 'docker'
+        run: |
+          load=$(docker load --input target/${{ matrix.arch }}/release/rebar.tar | tee /dev/stderr)
+          TAG=$(echo $load | tr ":" "\n" | tail -n1)
+          echo DOCKER_TAG="$TAG" >> $GITHUB_ENV
+
       # ------------------------------------------------------------------------
       # How we execute the program depends on the architecture
 
@@ -62,7 +76,7 @@ jobs:
 
       - name: set run command (docker)
         if: matrix.arch == 'docker'
-        run: echo RUN_CMD="docker run -v .:/rebar -e GITHUB_USERNAME=${{ github.actor }} -e GITHUB_TOKEN=${{ github.token }} $DOCKER_IMAGE ${{ matrix.binary }}" >> $GITHUB_ENV
+        run: echo RUN_CMD="docker run -v .:/rebar -e GITHUB_USERNAME=${{ github.actor }} -e GITHUB_TOKEN=${{ github.token }} "$DOCKER_IMAGE:$DOCKER_TAG" ${{ matrix.binary }}" >> $GITHUB_ENV
 
       - name: set run command (linux, mac)
         if: matrix.arch == 'x86_64-unknown-linux-musl' || matrix.arch == 'x86_64-apple-darwin'
@@ -74,23 +88,12 @@ jobs:
       # ------------------------------------------------------------------------
       # Install
 
-      - name: download build output
-        uses: actions/download-artifact@v3
-        with:
-          name: rebar-${{ matrix.arch }}
-          path: target/${{ matrix.arch }}/release
-
       - name: install
         if: ${{ matrix.arch != 'docker' }}
         run: |
           chmod +x target/${{ matrix.arch }}/release/${{ matrix.binary }}
           cp target/${{ matrix.arch }}/release/${{ matrix.binary }} .
           ${{ env.RUN_CMD }} --help
-
-      - name: load docker image
-        if:  matrix.arch == 'docker'
-        run: |
-          docker load --input target/${{ matrix.arch }}/release/rebar.tar
 
       - name: data download (non-windows)
         if: ${{ matrix.os != 'windows-latest' }}
