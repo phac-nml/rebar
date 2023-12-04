@@ -23,6 +23,16 @@ wget "https://github.com/phac-nml/rebar/releases/latest/download/rebar-x86_64-pc
 .\rebar.exe --help
 ```
 
+## Conda
+
+> **Coming Soon!** The conda install option will be available when this page is live: https://anaconda.org/bioconda/rebar
+
+```bash
+conda create -n rebar rebar
+conda activate rebar
+rebar --help
+```
+
 ## Docker
 
 ### GitHub Release
@@ -100,7 +110,3 @@ At the moment (2023-12-04), the Github Container Registry is locked to 'private'
     singularity run --home $(pwd) rebar_latest.sif \
     rebar --help
     ```
-
-## Conda
-
-\*\*Coming Soon!\*\*
