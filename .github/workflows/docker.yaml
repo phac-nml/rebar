@@ -90,9 +90,12 @@ jobs:
         run: |
           docker load --input rebar.tar
 
+      # output.tags can be an array (ex. v0.2.0, main, latest)
       - name: help
-        run: |
-          docker run ${{ steps.meta.outputs.tags }} rebar --help
+        run: >
+          for tag in ${{ steps.meta.outputs.tags }}; do
+            docker run $tag rebar --help
+          done
 
       - name: build and push
         uses: docker/build-push-action@v5

@@ -59,12 +59,12 @@ jobs:
           name: rebar-${{ matrix.arch }}
           path: target/${{ matrix.arch }}/release
 
-      # parse tag from load output, PR have unusual formats
+      # parse tag from load output, PR have unusual formats, also sometimes multiple tags
       - name: load docker image
         if:  matrix.arch == 'docker'
         run: |
           load=$(docker load --input target/${{ matrix.arch }}/release/rebar.tar | tee /dev/stderr)
-          TAG=$(echo $load | tr ":" "\n" | tail -n1)
+          TAG=$(echo $load | sed 's/Loaded image: //g' | head -n 1 | cut -d ":" -f 2)
           echo DOCKER_TAG="$TAG" >> $GITHUB_ENV
 
       # ------------------------------------------------------------------------
