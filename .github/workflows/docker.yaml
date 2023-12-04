@@ -89,7 +89,7 @@ jobs:
       - name: load
         run: |
           load=$(docker load --input rebar.tar | tee /dev/stderr)
-          TAGS=$(echo $load | sed "s/Loaded image: /${{ env.REGISTRY }}\//g")
+          TAGS=$(echo $load | sed "s/Loaded image: //g")
           echo TAGS="$TAGS" >> $GITHUB_ENV
 
       # output.tags can be an array (ex. v0.2.0, main, latest)
