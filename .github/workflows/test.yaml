@@ -64,7 +64,8 @@ jobs:
         if:  matrix.arch == 'docker'
         run: |
           load=$(docker load --input target/${{ matrix.arch }}/release/rebar.tar | tee /dev/stderr)
-          TAG=$(echo $load | sed 's/Loaded image: //g' | head -n 1 | cut -d ":" -f 2)
+          echo -e $load
+          TAG=$(echo -e $load | sed 's/Loaded image: //g' | head -n 1 | cut -d ":" -f 2 | cut -d " " -f 1)
           echo DOCKER_TAG="$TAG" >> $GITHUB_ENV
 
       # ------------------------------------------------------------------------
