@@ -3,7 +3,6 @@
 [![All Contributors](https://img.shields.io/badge/all_contributors-11-orange.svg?style=flat-square)](#credits)
 [![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](https://github.com/phac-nml/rebar/blob/master/LICENSE)
 [![GitHub issues](https://img.shields.io/github/issues/phac-nml/rebar.svg)](https://github.com/phac-nml/rebar/issues)
-[![Build CI](https://github.com/phac-nml/rebar/actions/workflows/build.yaml/badge.svg)](https://github.com/phac-nml/rebar/actions/workflows/build.yaml)
 [![Test CI](https://github.com/phac-nml/rebar/actions/workflows/test.yaml/badge.svg)](https://github.com/phac-nml/rebar/actions/workflows/test.yaml)
 [![Nightly CI](https://github.com/phac-nml/rebar/actions/workflows/nightly.yaml/badge.svg)](https://github.com/phac-nml/rebar/actions/workflows/nightly.yaml)
 
