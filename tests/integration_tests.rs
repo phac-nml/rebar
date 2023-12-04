@@ -34,7 +34,7 @@ async fn toy1() -> Result<(), Report> {
 
     // Plot
     let args = cli::plot::Args {
-        dataset_dir: output_dir.join("dataset"),
+        annotations: Some(output_dir.join("dataset").join("annotations.tsv")),
         run_dir: output_dir.join("run"),
         ..Default::default()
     };
@@ -68,7 +68,7 @@ async fn sarscov2_populations() -> Result<(), Report> {
 
     // Plot
     let args = cli::plot::Args {
-        dataset_dir: output_dir.join("dataset"),
+        annotations: Some(output_dir.join("dataset").join("annotations.tsv")),
         run_dir: output_dir.join("run"),
         ..Default::default()
     };
