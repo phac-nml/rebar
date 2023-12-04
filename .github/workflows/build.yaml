@@ -2,14 +2,6 @@
 name: Build
 
 on:
-  push:
-    branches:
-      - '*'
-  pull_request:
-    branches:
-      - '*'
-  release:
-    types: [published]
   workflow_call:
 
 jobs:
