@@ -2,6 +2,7 @@
 
 [![All Contributors](https://img.shields.io/badge/all_contributors-11-orange.svg?style=flat-square)](#credits)
 [![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](https://github.com/phac-nml/rebar/blob/master/LICENSE)
+[![Github All Releases](https://img.shields.io/github/downloads/phac-nml/rebar/total.svg)](https://github.com/phac-nml/rebar/releases)
 [![GitHub issues](https://img.shields.io/github/issues/phac-nml/rebar.svg)](https://github.com/phac-nml/rebar/issues)
 [![Test CI](https://github.com/phac-nml/rebar/actions/workflows/test.yaml/badge.svg)](https://github.com/phac-nml/rebar/actions/workflows/test.yaml)
 [![Nightly CI](https://github.com/phac-nml/rebar/actions/workflows/nightly.yaml/badge.svg)](https://github.com/phac-nml/rebar/actions/workflows/nightly.yaml)
@@ -30,7 +31,16 @@
 
 ## Install
 
-`rebar` is a standalone binary file that you can simply download and run:
+`rebar` is a standalone binary file that you can simply download and run from the command-line.
+
+| OS      | Arch   | File                                                                                                                          | Download Count                                                                                         |
+| ------- | ------ | ----------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------ |
+| Linux   | 64-bit | [rebar-x86_64-unknown-linux-musl](https://github.com/phac-nml/rebar/releases/latest/download/rebar-x86_64-unknown-linux-musl) | ![linux download badge](https://img.shields.io/github/downloads/phac-nml/rebar/latest/rebar-x86_64-unknown-linux-musl.svg) |
+| macOS   | 64-bit | [rebar-x86_64-apple-darwin](https://github.com/phac-nml/rebar/releases/lastest/download/rebar-x86_64-apple-darwin)             | ![macOS download badge](https://img.shields.io/github/downloads/phac-nml/rebar/latest/rebar-x86_64-apple-darwin.svg)       |
+| Windows | 64-bit | [rebar-x86_64-pc-windows-gnu.exe](https://github.com/phac-nml/rebar/releases//latest/download/rebar-x86_64-pc-windows-gnu.exe) | ![windows download badge](https://img.shields.io/github/downloads/phac-nml/rebar/latest/rebar-x86_64-pc-windows-gnu.exe)     |
+| Docker  | 64-bit | [rebar-docker.tar](https://github.com/phac-nml/rebar/releases/latest/download/rebar-docker.tar)                               | ![docker download badge](https://img.shields.io/github/downloads/phac-nml/rebar/latest/rebar-docker.tar)                    |
+
+Or, download on the command-line:
 
 ```bash
 wget -O rebar https://github.com/phac-nml/rebar/releases/latest/download/rebar-x86_64-unknown-linux-musl
