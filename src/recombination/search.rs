@@ -17,13 +17,13 @@ use strum::IntoEnumIterator;
 /// Uses a recursion_limit for safety. It is not intended to
 /// run this wrapper function more than once recursively.
 #[allow(clippy::needless_if)]
-pub fn all_parents<'seq>(
-    sequence: &'seq Sequence,
+pub fn all_parents(
+    sequence: &Sequence,
     dataset: &Dataset,
     best_match: &mut SearchResult,
-    populations: &[&String],
+    populations: &[String],
     args: &run::Args,
-) -> Result<Recombination<'seq>, Report> {
+) -> Result<Recombination, Report> {
     // copy args, we don't want to modify the original global parameters
     let mut args = args.clone();
     // copy search populations, we will refine these based on edge cases and
@@ -94,7 +94,7 @@ pub fn all_parents<'seq>(
             continue;
         }
 
-        let mut hyp_populations: Vec<&String> = populations.clone();
+        let mut hyp_populations = populations.clone();
 
         // ----------------------------------------------------------------------------
         // Hypothesis: Designated Recombinant.
@@ -159,7 +159,7 @@ pub fn all_parents<'seq>(
         // we only need to rerun the primary parent search if the search populations
         // DOES NOT contain the hyp_populations
         let primary_search: Result<SearchResult, Report> =
-            if hyp_populations.contains(&&best_match.consensus_population) {
+            if hyp_populations.contains(&best_match.consensus_population) {
                 Ok(best_match.clone())
             } else {
                 dataset.search(sequence, Some(&hyp_populations), None)
@@ -168,7 +168,7 @@ pub fn all_parents<'seq>(
         // exclude is inverse of
         //let hyp_exclude = dataset.populations.keys().filter(|pop| !hyp_populations.contains(collect_vec()
         let mut hyp_args = args.clone();
-        hyp_args.parents = Some(hyp_populations.into_iter().cloned().collect_vec());
+        hyp_args.parents = Some(hyp_populations);
 
         // Check if primary search found anything
         if let Ok(primary_parent) = primary_search {
@@ -349,15 +349,15 @@ pub fn all_parents<'seq>(
 }
 
 // Search for the secondary recombination parent(s).
-pub fn secondary_parents<'seq>(
-    sequence: &'seq Sequence,
+pub fn secondary_parents(
+    sequence: &Sequence,
     dataset: &Dataset,
     parents: &[SearchResult],
     args: &run::Args,
-) -> Result<(Recombination<'seq>, Vec<SearchResult>), Report> {
+) -> Result<(Recombination, Vec<SearchResult>), Report> {
     // Initialize our 'Recombination' result, that we will modify and update
     // as we iterate through potential parents
-    let mut recombination = Recombination::new(sequence);
+    let mut recombination = Recombination::new();
 
     // All the parents we know of when the function is starting
     // Will probably just be the primary parent (1)?
@@ -368,9 +368,9 @@ pub fn secondary_parents<'seq>(
     // The inclusion parents may have been set by the args
     // Otherwise, use all populations in dataset
     let mut include_populations = if let Some(parents) = &args.parents {
-        parents.iter().collect_vec()
+        parents.iter().cloned().collect_vec()
     } else {
-        dataset.populations.keys().collect_vec()
+        dataset.populations.keys().cloned().collect_vec()
     };
 
     // Keep track of how many parent search iterations we've done
@@ -507,7 +507,7 @@ pub fn secondary_parents<'seq>(
         // Remove currently known parents from the search list
         let current_parents =
             parents.iter().map(|result| &result.consensus_population).collect_vec();
-        include_populations.retain(|pop| !current_parents.contains(pop));
+        include_populations.retain(|pop| !current_parents.contains(&pop));
 
         // Exclude populations that have substitutions at ALL of the conflict_ref
         if !conflict_ref.is_empty() {
@@ -525,7 +525,7 @@ pub fn secondary_parents<'seq>(
                     (count == conflict_ref.len()).then_some(pop)
                 })
                 .collect_vec();
-            include_populations.retain(|pop| !conflict_ref_populations.contains(pop));
+            include_populations.retain(|pop| !conflict_ref_populations.contains(&pop));
         }
         // --------------------------------------------------------------------
         // INCLUDE POPULATIONS
@@ -548,13 +548,17 @@ pub fn secondary_parents<'seq>(
             })
             .collect_vec();
 
-        include_populations.retain(|pop| conflict_alt_populations.contains(pop));
+        include_populations.retain(|pop| conflict_alt_populations.contains(&pop));
 
         // trunclate list for display
         let display_populations = if include_populations.len() <= 10 {
             include_populations.iter().join(", ")
         } else {
-            format!("{} ...", include_populations[0..10].iter().join(", "),)
+            format!(
+                "{} ... ({} omitted)",
+                include_populations[0..10].iter().join(", "),
+                include_populations.len() - 10
+            )
         };
         debug!("Prioritizing conflict_alt resolution: {display_populations:?}");
 

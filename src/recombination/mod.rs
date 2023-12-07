@@ -22,14 +22,12 @@ use strum::{EnumIter, EnumProperty};
 // Recombination
 
 #[derive(Clone, Debug, Serialize)]
-pub struct Recombination<'seq> {
-    pub sequence: &'seq Sequence,
+pub struct Recombination {
     pub unique_key: String,
     pub recombinant: Option<String>,
     pub parents: Vec<String>,
     pub breakpoints: Vec<Breakpoint>,
     pub regions: BTreeMap<usize, Region>,
-    pub genome_length: usize,
     pub edge_case: bool,
     pub hypothesis: Option<Hypothesis>,
     pub support: BTreeMap<String, Vec<Substitution>>,
@@ -41,17 +39,21 @@ pub struct Recombination<'seq> {
     pub table: Table,
 }
 
-impl<'seq> Recombination<'seq> {
-    pub fn new(sequence: &'seq Sequence) -> Self {
+impl Default for Recombination {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl Recombination {
+    pub fn new() -> Self {
         Recombination {
-            sequence,
             unique_key: String::new(),
             recombinant: None,
             parents: Vec::new(),
             breakpoints: Vec::new(),
             regions: BTreeMap::new(),
             table: Table::new(),
-            genome_length: sequence.genome_length,
             edge_case: false,
             hypothesis: None,
             support: BTreeMap::new(),
@@ -252,14 +254,14 @@ impl std::fmt::Display for Region {
 ///  * `reference` |
 ///  * `args` | &run::Args | CLI run parameters.
 ///
-pub fn detect_recombination<'seq>(
-    sequence: &'seq Sequence,
+pub fn detect_recombination(
+    sequence: &Sequence,
     parents: &Vec<SearchResult>,
     parent_candidate: Option<&SearchResult>,
     reference: &Sequence,
     args: &run::Args,
-) -> Result<Recombination<'seq>, Report> {
-    let mut recombination = Recombination::new(sequence);
+) -> Result<Recombination, Report> {
+    let mut recombination = Recombination::new();
 
     // if no parent candidates were provided, just use the first parent
     let parent_candidate = match parent_candidate {
@@ -763,7 +765,8 @@ pub fn identify_breakpoints(
 
 /// Combine recombination tables.
 pub fn combine_tables(
-    recombinations: &[Recombination],
+    sequences: &[&Sequence],
+    recombinations: &[&Recombination],
     reference: &Sequence,
 ) -> Result<Table, Report> {
     // ------------------------------------------------------------------------
@@ -784,9 +787,6 @@ pub fn combine_tables(
         }
     }
 
-    // identify sequence IDs to combine
-    let sequence_ids = recombinations.iter().map(|rec| &rec.sequence.id).collect_vec();
-
     // identify parents to combine, just use first, since we verified all same
     let parents = recombinations.iter().map(|rec| &rec.parents).next().unwrap();
 
@@ -794,26 +794,26 @@ pub fn combine_tables(
     // Construct Table Headers
 
     // final result to mutate and return
-    let mut combine_table = Table::new();
+    let mut table = Table::new();
 
     // Mandatory headers
     // convert to String, &str won't work here, since we're going to create
     // table row values within a for loop scope later
-    combine_table.headers =
+    table.headers =
         vec!["coord", "origin", "Reference"].into_iter().map(String::from).collect_vec();
 
     // Dynamic headers (parents and sequence IDs)
-    for parent in parents {
-        combine_table.headers.push(parent.clone())
-    }
-    for sequence_id in sequence_ids {
-        combine_table.headers.push(sequence_id.clone())
-    }
+    parents.iter().for_each(|p| {
+        table.headers.push(p.clone());
+    });
+    sequences.iter().for_each(|s| {
+        table.headers.push(s.id.clone());
+    });
 
     // get output col idx of mandatory columns
-    let coord_output_i = combine_table.header_position("coord")?;
-    let origin_output_i = combine_table.header_position("origin")?;
-    let ref_output_i = combine_table.header_position("Reference")?;
+    let coord_output_i = table.header_position("coord")?;
+    let origin_output_i = table.header_position("origin")?;
+    let ref_output_i = table.header_position("Reference")?;
 
     // ------------------------------------------------------------------------
     // Combine Coordinate Bases
@@ -832,7 +832,7 @@ pub fn combine_tables(
     // combine tables, row by row (coord by coord)
     for coord in &coords {
         // init row with empty strings for all columns
-        let mut row = vec![String::new(); combine_table.headers.len()];
+        let mut row = vec![String::new(); table.headers.len()];
         // get reference base directly from sequence
         let ref_base = reference.seq[coord - 1].to_string();
         row[ref_output_i] = ref_base.to_string();
@@ -842,11 +842,10 @@ pub fn combine_tables(
         let mut origins = vec![];
 
         // iterate through recombinants, identifying ref, parents, seq bases
-        for recombination in recombinations {
+        for (recombination, sequence) in recombinations.iter().zip(sequences.iter()) {
             // get sequence base directly from sequence
-            let rec_base = recombination.sequence.seq[coord - 1].to_string();
-            let rec_output_i =
-                combine_table.header_position(&recombination.sequence.id)?;
+            let rec_base = sequence.seq[coord - 1].to_string();
+            let rec_output_i = table.header_position(&sequence.id)?;
             row[rec_output_i] = rec_base;
 
             // check which coords appeared in this sample
@@ -878,7 +877,7 @@ pub fn combine_tables(
                     for parent in parents {
                         let parent_input_i =
                             recombination.table.header_position(parent)?;
-                        let parent_output_i = combine_table.header_position(parent)?;
+                        let parent_output_i = table.header_position(parent)?;
                         let parent_base =
                             &recombination.table.rows[row_input_i][parent_input_i];
                         row[parent_output_i] = parent_base.to_string();
@@ -895,8 +894,8 @@ pub fn combine_tables(
             row[origin_output_i] = origins[0].clone();
         }
         // Add processed row to table
-        combine_table.rows.push(row);
+        table.rows.push(row);
     }
 
-    Ok(combine_table)
+    Ok(table)
 }
