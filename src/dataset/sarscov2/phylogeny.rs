@@ -1,10 +1,12 @@
 use crate::{dataset, phylogeny::Phylogeny, utils::table::Table};
-use bio::io::fasta;
 use color_eyre::eyre::{eyre, Report, Result, WrapErr};
 use color_eyre::Help;
 use itertools::Itertools;
 use log::{debug, info, warn};
+use noodles::fasta;
 use std::collections::BTreeMap;
+use std::fs::File;
+use std::io::BufReader;
 use std::path::Path;
 
 pub async fn build(
@@ -92,19 +94,19 @@ pub async fn build(
     // read populations fasta, to check if any lineages are missing in notes
     let populations_path = &summary.populations.local_path;
     let populations_file_name = populations_path.file_name().unwrap().to_str().unwrap();
-    let alignment_reader = fasta::Reader::from_file(populations_path)
-        .map_err(|e| eyre!(e))
-        .wrap_err("Failed to read file: {populations_path:?}")?;
+
+    let file = File::open(populations_path);
+    let mut reader = file.map(BufReader::new).map(fasta::Reader::new)?;
 
     // keep track of population names in alignment, cross-reference against
     // lineage notes + alias_key later
     let mut alignment_populations = Vec::new();
-    for result in alignment_reader.records() {
-        let record =
-            result.wrap_err(eyre!("Failed to parse file: {populations_path:?}"))?;
-        let lineage = record.id().to_string();
+    reader.records().try_for_each(|result| {
+        let record = result.wrap_err(eyre!("Failed to parse fasta record."))?;
+        let lineage = record.name().to_string();
         alignment_populations.push(lineage);
-    }
+        Ok::<(), Report>(())
+    })?;
 
     // ------------------------------------------------------------------------
     // Parent Child Relationships

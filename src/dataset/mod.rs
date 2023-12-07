@@ -12,6 +12,7 @@ use color_eyre::eyre::{eyre, Report, Result, WrapErr};
 use indoc::formatdoc;
 use itertools::Itertools;
 use log::debug;
+use noodles::fasta;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 use std::default::Default;
@@ -84,10 +85,11 @@ impl Dataset {
             })
             .join("");
 
-        // create bio record
-        let description = None;
-        let record =
-            bio::io::fasta::Record::with_attrs(name, description, consensus.as_bytes());
+        // create new fasta record
+        let definition = fasta::record::Definition::new(name, None);
+        let sequence = fasta::record::Sequence::from(consensus.as_bytes().to_vec());
+        let record = fasta::Record::new(definition, sequence);
+
         // parse and create Sequence record
         // dataset is already masked, no need
         let mask = Vec::new();
@@ -97,6 +99,8 @@ impl Dataset {
     }
 
     /// Expand list of populations with wildcarding.
+    ///
+    /// Returns only population names that have sequence data.
     pub fn expand_populations(
         &self,
         populations: &[String],
@@ -105,24 +109,34 @@ impl Dataset {
         let expanded = populations
             .iter()
             .map(|p| {
-                // if population is '*', use all populations in dataset
+                // if population is '*', use all populations
                 if p == "*" {
                     Ok(self.populations.keys().cloned().collect_vec())
                 }
-                // if population is 'X*', use all recombinants in dataset
+                // if population is 'X*', use all recombinants (and descendants)
                 else if p == "X*" {
-                    Ok(self.phylogeny.get_recombinants_all()?)
+                    // get all recombinant names
+                    let mut recombinants =
+                        self.phylogeny.get_recombinants_all().unwrap_or_default();
+                    // restrict to ones with sequence data
+                    recombinants.retain(|r| self.populations.keys().contains(r));
+                    Ok(recombinants)
                 }
                 // if population ends with '*' expand descendants
                 else if p.ends_with('*') {
                     let p = p.replace('*', "");
-                    self.phylogeny.get_descendants(&p)
+                    let mut descendants =
+                        self.phylogeny.get_descendants(&p).unwrap_or_default();
+                    descendants.retain(|d| self.populations.keys().contains(d));
+                    Ok(descendants)
                 }
                 // simple population name, that is in the dataset
                 else if self.populations.contains_key(p) {
                     Ok(vec![p.to_string()])
                 } else {
-                    Err(eyre!("{p} is not present in the dataset."))
+                    Err(eyre!(
+                        "Population {p} is not in the dataset populations fasta."
+                    ))
                 }
             })
             // flatten and handle the `Result` layer
@@ -140,8 +154,8 @@ impl Dataset {
     pub fn search(
         &self,
         sequence: &Sequence,
-        populations: Option<&Vec<&String>>,
-        coordinates: Option<&Vec<usize>>,
+        populations: Option<&[String]>,
+        coordinates: Option<&[usize]>,
     ) -> Result<SearchResult, Report> {
         // initialize an empty result, this will be the final product of this function
         let mut result = SearchResult::new(sequence);
@@ -263,6 +277,7 @@ impl Dataset {
         // --------------------------------------------------------------------
         // Consensus Population
         // summarize top populations by common ancestor
+
         let consensus_population = if self.phylogeny.is_empty() {
             //result.top_populations.iter().join("|")
             // just take first?
