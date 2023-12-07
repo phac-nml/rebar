@@ -111,6 +111,8 @@ pub fn validate(
         let observed_population = &best_match.consensus_population;
         let validate_population = expected_population == *observed_population;
 
+        debug!("Validate population: observed={observed_population}, expected={expected_population}");
+
         // ----------------------------------------------------------------
         // Recombinant
         //
@@ -123,6 +125,8 @@ pub fn validate(
 
         let validate_recombinant = expected_recombinant == *observed_recombinant;
 
+        debug!("Validate recombinant: observed={observed_recombinant:?}, expected={expected_recombinant:?}");
+
         // ----------------------------------------------------------------
         // Parent Validation
 
@@ -133,6 +137,7 @@ pub fn validate(
             Vec::new()
         };
 
+        debug!("Validate parents: observed={observed_parents:?}, expected={expected_parents:?}");
         // parent validation is already done in recombination::detect_recombination
         // to decide whether it's a novel variant or not. It seems wasteful to run it again...
 
