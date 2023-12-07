@@ -268,8 +268,11 @@ pub fn create(
         .ok_or_else(|| eyre!("Failed to calculated the maximum coord length"))?;
 
     // longest legend label (in pixels)
+    let default_labels =
+        vec!["Reference", "Private"].into_iter().map(String::from).collect_vec();
     let longest_legend_label = parents
         .iter()
+        .chain(default_labels.iter())
         .map(|id| {
             text::to_image(
                 &format!("{id} Reference"),
