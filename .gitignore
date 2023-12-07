@@ -4,3 +4,7 @@
 /dataset/
 /output/
 /target/
+
+# performance
+perf.data*
+flamegraph*
