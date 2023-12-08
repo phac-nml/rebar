@@ -89,53 +89,6 @@ pub fn run(args: &mut cli::run::Args) -> Result<(), Report> {
     let mut parent_search_populations = dataset.populations.keys().cloned().collect_vec();
 
     // ------------------------------------------------------------------------
-    // Parse and expand input parents
-
-    // if args.parents supplied on the CLI
-    if let Some(parents) = &args.parents {
-        info!("Parsing input parents: {:?}", &parents);
-        let parents_expanded = dataset.expand_populations(parents)?;
-        parent_search_populations.retain(|pop| parents_expanded.contains(pop));
-        args.parents = Some(parents_expanded);
-    }
-
-    // ------------------------------------------------------------------------
-    // Knockout
-
-    // if args.knockout supplied on the CLI
-    if let Some(knockout) = &args.knockout {
-        info!("Performing dataset knockout: {knockout:?}");
-
-        // Check to make sure wildcards are used in all knockouts
-        // Weird things happend if you don't!
-        let knockout_no_wildcard =
-            knockout.iter().filter(|p| !p.contains('*')).collect_vec();
-        if !knockout_no_wildcard.is_empty() {
-            warn!("Proceed with caution! Weird things can happen when you run a knockout without descendants (no '*'): {knockout_no_wildcard:?}.")
-        }
-
-        // Expanded populations (in case wildcard * is provided)
-        let knockout_expanded = dataset.expand_populations(knockout)?;
-        debug!("Expanded dataset knockout: {knockout:?}");
-        debug!("Removing knockout populations from the fasta.");
-        dataset.populations.retain(|id, _| !knockout_expanded.contains(id));
-
-        debug!("Removing knockout populations from the mutations.");
-        dataset.mutations.iter_mut().for_each(|(_sub, populations)| {
-            populations.retain(|p| !knockout_expanded.contains(p));
-        });
-
-        if !dataset.phylogeny.is_empty() {
-            for p in &knockout_expanded {
-                dataset.phylogeny.remove(p)?;
-            }
-        }
-
-        parent_search_populations.retain(|pop| !knockout_expanded.contains(pop));
-        args.knockout = Some(knockout_expanded);
-    }
-
-    // ------------------------------------------------------------------------
     // Input Parsing
     // ------------------------------------------------------------------------
 
@@ -150,6 +103,7 @@ pub fn run(args: &mut cli::run::Args) -> Result<(), Report> {
     // get sequences for each request population
     let sequences = if let Some(populations) = &args.input.populations {
         info!("Parsing input populations: {populations:?}");
+
         dataset
             .expand_populations(populations)?
             .into_iter()
@@ -209,6 +163,53 @@ pub fn run(args: &mut cli::run::Args) -> Result<(), Report> {
 
     let records = population_records.chain(alignment_records);
     let num_records = num_population_records + num_alignment_records;
+
+    // ------------------------------------------------------------------------
+    // Parse and expand input parents
+
+    // if args.parents supplied on the CLI
+    if let Some(parents) = &args.parents {
+        info!("Parsing input parents: {:?}", &parents);
+        let parents_expanded = dataset.expand_populations(parents)?;
+        parent_search_populations.retain(|pop| parents_expanded.contains(pop));
+        args.parents = Some(parents_expanded);
+    }
+
+    // ------------------------------------------------------------------------
+    // Knockout
+
+    // if args.knockout supplied on the CLI
+    if let Some(knockout) = &args.knockout {
+        info!("Performing dataset knockout: {knockout:?}");
+
+        // Check to make sure wildcards are used in all knockouts
+        // Weird things happend if you don't!
+        let knockout_no_wildcard =
+            knockout.iter().filter(|p| !p.contains('*')).collect_vec();
+        if !knockout_no_wildcard.is_empty() {
+            warn!("Proceed with caution! Weird things can happen when you run a knockout without descendants (no '*'): {knockout_no_wildcard:?}.")
+        }
+
+        // Expanded populations (in case wildcard * is provided)
+        let knockout_expanded = dataset.expand_populations(knockout)?;
+        debug!("Expanded dataset knockout: {knockout:?}");
+        debug!("Removing knockout populations from the fasta.");
+        dataset.populations.retain(|id, _| !knockout_expanded.contains(id));
+
+        debug!("Removing knockout populations from the mutations.");
+        dataset.mutations.iter_mut().for_each(|(_sub, populations)| {
+            populations.retain(|p| !knockout_expanded.contains(p));
+        });
+
+        if !dataset.phylogeny.is_empty() {
+            for p in &knockout_expanded {
+                dataset.phylogeny.remove(p)?;
+            }
+        }
+
+        parent_search_populations.retain(|pop| !knockout_expanded.contains(pop));
+        args.knockout = Some(knockout_expanded);
+    }
 
     // ------------------------------------------------------------------------
     // Linelist
