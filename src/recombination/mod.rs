@@ -181,6 +181,7 @@ pub enum Hypothesis {
     DesignatedRecombinant,
     RecursiveRecombinant,
     NonRecursiveRecombinant,
+    KnockoutRecombinant,
 }
 
 impl std::fmt::Display for Hypothesis {
@@ -189,6 +190,7 @@ impl std::fmt::Display for Hypothesis {
             Hypothesis::NonRecombinant => "non_recombinant",
             Hypothesis::DesignatedRecombinant => "designated_recombinant",
             Hypothesis::RecursiveRecombinant => "recursive_recombinant",
+            Hypothesis::KnockoutRecombinant => "knockout_recombinant",
             Hypothesis::NonRecursiveRecombinant => "non_recursive_recombinant",
         };
         write!(f, "{hypothesis}")

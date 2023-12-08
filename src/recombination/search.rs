@@ -110,6 +110,7 @@ pub fn all_parents(
                 let mut designated_parents =
                     dataset.phylogeny.get_parents(recombinant)?;
                 debug!("Designated parents: {designated_parents:?}");
+
                 // we might not have sequence data for all designated parents.
                 let designated_parents_filter = designated_parents
                     .iter()
@@ -125,7 +126,29 @@ pub fn all_parents(
                     }
                     designated_parents = designated_parents_filter;
                 }
-                hyp_populations.retain(|pop| designated_parents.contains(pop));
+
+                // Option #1. no wildcarding, parental strict
+                // hyp_populations.retain(|pop| designated_parents.contains(pop));
+
+                // Option #2. add wildcarding for all descendants (exclude novel recombination)
+                // ex. XJ is designated as BA.1 and BA.2, specifically, BD.1 (BA.1.17.2.1) and BA.2.65
+                // ex  XDF is designated as "XBB*","EG.5.1.3", specifically EG.10.1 and EG.5.1.3
+
+                let designated_wildcards = designated_parents
+                    .into_iter()
+                    .map(|p| format!("{p}*-r"))
+                    .collect_vec();
+                let designated_parents_expanded = dataset
+                    .expand_populations(&designated_wildcards)?
+                    .into_iter()
+                    .unique()
+                    .collect_vec();
+
+                hyp_populations.retain(|pop| designated_parents_expanded.contains(pop));
+
+                // exclude recombinant itself and descendants from parent search
+                //let recombinant_descendants = dataset.phylogeny.get_descendants(recombinant)?;
+                //hyp_populations.retain(|pop| !recombinant_descendants.contains(pop));
             }
         }
 
@@ -134,6 +157,15 @@ pub fn all_parents(
         // One or more parent(s) are recombinants or recombinant descendants
         // This is a default search, no filter edits needed
         if hypothesis == Hypothesis::RecursiveRecombinant {}
+
+        // ----------------------------------------------------------------------------
+        // Hypothesis: Recombinant, Allow Recursion, Knockout
+        // Don't allow best_match to be primary parent
+        // One or more parent(s) are recombinants or recombinant descendants
+        // This is a default search, no filter edits needed
+        if hypothesis == Hypothesis::KnockoutRecombinant {
+            hyp_populations.retain(|pop| *pop != best_match.consensus_population);
+        }
 
         // ----------------------------------------------------------------------------
         // Hypothesis: Non Recursive Recombinant, Disallow Recursion.
@@ -156,6 +188,7 @@ pub fn all_parents(
             debug!("No parent populations fit this hypothesis.");
             continue;
         }
+
         // we only need to rerun the primary parent search if the search populations
         // DOES NOT contain the hyp_populations
         let primary_search: Result<SearchResult, Report> =
@@ -239,41 +272,13 @@ pub fn all_parents(
     let best_hypothesis = if hypotheses.len() == 1 {
         hypotheses.first_key_value().unwrap().0.clone()
     }
-    // evidence for multiple hypotheses
+    // evidence for multiple hypotheses, take max score
     else {
-        // max_score:    Sometimes the hypothesis with the highest score is 'correct'
-        // Ex. XBB.1.18: DesignatedRecombinant: score=77, conflict=5, NonRecursiveRecombinant: score=64, conflict=4
-
-        // min_conflict:  Sometimes the hypothesis with the least conflict is 'correct'
-        //                This seems to be generally the XBB* recursive recombinants,
-        //                the original recombination (BJ.1 x CJ.1) has high support,
-        //                but lots of conflict.
-        // Ex. XCW:       DesignatedRecombinant: score=55, conflict=6, NonRecursiveRecombinant: score=65, conflict=17
-
-        let min_conflict =
-            hypotheses.iter().map(|(_hyp, (_r, _p, _s, c))| c).min().unwrap();
-        let max_conflict =
-            hypotheses.iter().map(|(_hyp, (_r, _p, _s, c))| c).max().unwrap();
-        let conflict_range = max_conflict - min_conflict;
-        let conflict_threshold = 5;
-
-        // if the conflict range between hypotheses is large (>=10), prefer min_conflict
-        // otherwise, prefer max_score
-        let best_hypotheses = if conflict_range >= conflict_threshold {
-            debug!("Best hypothesis selected by MIN CONFLICT. Conflict range ({conflict_range}) >= threshold ({conflict_threshold}).");
-            hypotheses
-                .iter()
-                .filter_map(|(hyp, (_r, _p, _s, c))| (c == min_conflict).then_some(hyp))
-                .collect_vec()
-        } else {
-            debug!("Best hypothesis selected by MAX SCORE. Conflict range ({conflict_range}) < threshold ({conflict_threshold})");
-            let max_score =
-                hypotheses.iter().map(|(_hyp, (_r, _p, s, _c))| s).max().unwrap();
-            hypotheses
-                .iter()
-                .filter_map(|(hyp, (_r, _p, s, _c))| (s == max_score).then_some(hyp))
-                .collect_vec()
-        };
+        let max_score = hypotheses.iter().map(|(_hyp, (_r, _p, s, _c))| s).max().unwrap();
+        let best_hypotheses = hypotheses
+            .iter()
+            .filter_map(|(hyp, (_r, _p, s, _c))| (s == max_score).then_some(hyp))
+            .collect_vec();
 
         // if hypotheses are tied, prefer them in enum order (first before last)
         // note: this currently means Designated is preferred over non-designated.
@@ -382,249 +387,4 @@ pub fn secondary_parents(
         // --------------------------------------------------------------------
 
         // Check if we can break out of the loop based on simple checks like the
-        // max number of iterations max number of parents achieved.
-
-        if num_parents >= args.max_parents {
-            // Maxing out the number of parents is a SUCCESS
-            debug!("Maximum parents reached ({num_parents}).");
-            return Ok((recombination, parents));
-        }
-        if num_iter >= args.max_iter {
-            debug!("Maximum iterations reached ({num_iter}).");
-
-            // Finding minimum parents is a SUCCESS
-            if num_parents >= args.min_parents {
-                return Ok((recombination, parents));
-            }
-            // otherwise FAILURE
-            else {
-                return Err(eyre!(
-                    "Number of parents ({num_parents}) is less than the minimum ({}).",
-                    args.min_parents
-                ));
-            }
-        }
-
-        num_iter += 1;
-        debug!("Parent #{}: Iteration {num_iter}", num_parents + 1);
-
-        // --------------------------------------------------------------------
-        // Conflict Checks
-        // --------------------------------------------------------------------
-
-        // Check for ALT or REF bases present in the sequence that are not resolved
-        // by a recombination parent found so far.
-
-        // identify all substitutions found in all parents so far
-        let parent_substitutions = parents
-            .iter()
-            .flat_map(|parent| &parent.substitutions)
-            .unique()
-            .collect_vec();
-
-        // --------------------------------------------------------------------
-        // Conflict ALT
-
-        let conflict_alt = sequence
-            .substitutions
-            .iter()
-            .filter(|sub| !parent_substitutions.contains(sub))
-            .collect_vec();
-
-        debug!("conflict_alt: {}", conflict_alt.iter().join(", "));
-
-        // Loop Break Check
-        if conflict_alt.len() < args.min_subs {
-            debug!("Sufficient conflict_alt resolution reached, stopping parent search.");
-            // Finding minimum parents is a SUCCESS
-            if num_parents >= args.min_parents {
-                return Ok((recombination, parents));
-            }
-            // Otherwise FAILURE
-            else {
-                return Err(eyre!(
-                    "Number of parents ({num_parents}) is less than the minimum ({}).",
-                    args.min_parents
-                ));
-            }
-        }
-
-        // --------------------------------------------------------------------
-        // Conflict REF
-
-        // Conflict ref is slightly more complicated, because we don't store
-        // REF bases in the dataset. Instead we assume lack of ALT bases means
-        // the REF base is present. This is problematic, as it doesn't yet
-        // account for indels, missing data, multiallelic sites, etc.
-
-        let conflict_ref = parents
-            .iter()
-            // get conflict REF between this parent and the sequence
-            .flat_map(|p| {
-                if !p.conflict_ref.contains_key(&p.consensus_population) {
-                    warn!(
-                        "Parent {:?} has no conflict_ref recorded for it's consensus population {:?}",
-                        &p.sequence_id,
-                        &p.consensus_population,
-                    );
-                }
-                p.conflict_ref.get(&p.consensus_population).cloned().unwrap_or_default()
-            })
-            .unique()
-            // search for parents that have the REF base (no ALT)
-            .filter(|sub| {
-                let parents_with_ref = parents
-                    .iter()
-                    .filter(|p| !p.substitutions.contains(sub))
-                    .collect_vec();
-                // No parents have REF base = unresolved
-                parents_with_ref.is_empty()
-            })
-            .collect_vec();
-        debug!("conflict_ref: {}", conflict_ref.iter().join(", "));
-
-        // --------------------------------------------------------------------
-        // Conflict Combine
-
-        // Combine the conflict REF and conflict ALT coordinates
-        // We will focus our parent search on populations that match
-        // the query sequence at these coordinates.
-        let mut coordinates = conflict_alt
-            .iter()
-            .map(|sub| sub.coord)
-            .chain(conflict_ref.iter().map(|sub| sub.coord))
-            .collect_vec();
-        coordinates.sort();
-        debug!("coordinates: {coordinates:?}");
-
-        if coordinates.is_empty() {
-            return Err(eyre!("No coordinates left to search."));
-        }
-
-        // --------------------------------------------------------------------
-        // EXCLUDE POPULATIONS
-
-        // Remove currently known parents from the search list
-        let current_parents =
-            parents.iter().map(|result| &result.consensus_population).collect_vec();
-        include_populations.retain(|pop| !current_parents.contains(&pop));
-
-        // Exclude populations that have substitutions at ALL of the conflict_ref
-        if !conflict_ref.is_empty() {
-            let conflict_ref_populations = dataset
-                .populations
-                .iter()
-                .filter(|(pop, _seq)| include_populations.contains(pop))
-                .filter_map(|(pop, seq)| {
-                    let count = seq
-                        .substitutions
-                        .iter()
-                        .filter(|sub| conflict_ref.contains(sub))
-                        .collect_vec()
-                        .len();
-                    (count == conflict_ref.len()).then_some(pop)
-                })
-                .collect_vec();
-            include_populations.retain(|pop| !conflict_ref_populations.contains(&pop));
-        }
-        // --------------------------------------------------------------------
-        // INCLUDE POPULATIONS
-
-        // prioritize populations that have min_subs conflict_alt
-        // ie. help resolve the conflict_alt
-
-        let conflict_alt_populations = dataset
-            .populations
-            .iter()
-            .filter(|(pop, _seq)| include_populations.contains(pop))
-            .filter_map(|(pop, seq)| {
-                let count = seq
-                    .substitutions
-                    .iter()
-                    .filter(|sub| conflict_alt.contains(sub))
-                    .collect_vec()
-                    .len();
-                (count >= args.min_subs).then_some(pop)
-            })
-            .collect_vec();
-
-        include_populations.retain(|pop| conflict_alt_populations.contains(&pop));
-
-        // trunclate list for display
-        let display_populations = if include_populations.len() <= 10 {
-            include_populations.iter().join(", ")
-        } else {
-            format!(
-                "{} ... ({} omitted)",
-                include_populations[0..10].iter().join(", "),
-                include_populations.len() - 10
-            )
-        };
-        debug!("Prioritizing conflict_alt resolution: {display_populations:?}");
-
-        // If every single population in the dataset has been excluded, exit here
-        // This might because we supplied args.parents that were not actually
-        // good hypotheses.
-        if include_populations.is_empty() {
-            return Err(eyre!("No populations left to search."));
-        }
-
-        // --------------------------------------------------------------------
-        // Search Dataset #1 and #2 (Coordinate Range vs Precise)
-        // --------------------------------------------------------------------
-
-        //let search_modes = vec!["range", "precise"];
-        let search_modes = vec!["precise", "range"];
-        // In what cases do we want to search the full coordinate range first vs
-        // after the specific coordinates?
-        // When there is a very small number of subs to check, a precise search
-        // actually takes a very long time, because there are so many matches.
-
-        for mode in search_modes {
-            let search_coords = if mode == "precise" {
-                debug!("Searching based on precise coordinates: {coordinates:?}");
-                coordinates.clone()
-            } else {
-                let coord_min = coordinates.iter().min().unwrap();
-                let coord_max = coordinates.iter().max().unwrap();
-                debug!("Searching based on coordinate range: {coord_min} - {coord_max}");
-                (coord_min.to_owned()..coord_max.to_owned()).collect_vec()
-            };
-
-            //debug!("dataset.search");
-
-            let parent_candidate = dataset.search(
-                sequence,
-                Some(&include_populations),
-                Some(&search_coords),
-            );
-
-            // if the search found parents, check for recombination
-            if let Ok(parent_candidate) = parent_candidate {
-                // remove this parent from future searches
-                include_populations
-                    .retain(|pop| **pop != parent_candidate.consensus_population);
-
-                // check for recombination
-                let detect_result = detect_recombination(
-                    sequence,
-                    &parents,
-                    Some(&parent_candidate),
-                    &dataset.reference,
-                    args,
-                );
-
-                // if successful, add this parent to the list and update recombination
-                // break out of the search mode loop
-                if let Ok(detect_result) = detect_result {
-                    num_parents += 1;
-                    // reset the iter counter
-                    num_iter = 0;
-                    parents.push(parent_candidate);
-                    recombination = detect_result;
-                    break;
-                }
-            }
-        }
-    }
-}
+        // max number of iterations max number of par
