@@ -9,6 +9,7 @@ use crate::cli::run;
 use crate::phylogeny::Phylogeny;
 use crate::sequence::{parsimony, Sequence, Substitution};
 use color_eyre::eyre::{eyre, Report, Result, WrapErr};
+use color_eyre::Help;
 use indoc::formatdoc;
 use itertools::Itertools;
 use log::debug;
@@ -99,53 +100,52 @@ impl Dataset {
     }
 
     /// Expand list of populations with wildcarding.
+    /// * for all descendants (including novel recombination)
+    /// *-r for all descendants (excluding novel recombination)
     ///
     /// Returns only population names that have sequence data.
     pub fn expand_populations(
         &self,
         populations: &[String],
     ) -> Result<Vec<String>, Report> {
-        // expand '*' to get descendants
+        // expand wildcards
         let expanded = populations
             .iter()
             .map(|p| {
-                // if population is '*', use all populations
-                if p == "*" {
-                    Ok(self.populations.keys().cloned().collect_vec())
-                }
-                // if population is 'X*', use all recombinants (and descendants)
-                else if p == "X*" {
-                    // get all recombinant names
-                    let mut recombinants =
-                        self.phylogeny.get_recombinants_all().unwrap_or_default();
-                    // restrict to ones with sequence data
-                    recombinants.retain(|r| self.populations.keys().contains(r));
-                    Ok(recombinants)
-                }
-                // if population ends with '*' expand descendants
-                else if p.ends_with('*') {
-                    let p = p.replace('*', "");
-                    let mut descendants =
-                        self.phylogeny.get_descendants(&p).unwrap_or_default();
-                    descendants.retain(|d| self.populations.keys().contains(d));
-                    Ok(descendants)
-                }
-                // simple population name, that is in the dataset
-                else if self.populations.contains_key(p) {
-                    Ok(vec![p.to_string()])
-                } else {
-                    Err(eyre!(
-                        "Population {p} is not in the dataset populations fasta."
-                    ))
-                }
+                // remove wildcarding suffixes
+                let strict = p.replace("*-r", "").replace('*', "");
+                // decide whether recombination is allowed for descendants
+                let recombination = p.ends_with('*');
+
+                // "" = root: "X" = all recombinants, other treat as plain name
+                let populations = match strict.as_str() {
+                    "" => self.populations.keys().cloned().collect_vec(),
+                    "X" => {
+                        if recombination {
+                            self.phylogeny.recombinants_all.clone()
+                        } else {
+                            self.phylogeny.recombinants.clone()
+                        }
+                    }
+                    _ => self.phylogeny.get_descendants(&strict, recombination)?,
+                };
+                Ok(populations)
             })
-            // flatten and handle the `Result` layer
+            // handle the `Result` layer, stop and throw errors if needed
             .collect::<Result<Vec<_>, Report>>()?
             .into_iter()
-            // flatten and handle the `Vec` layer
+            // handle the `Vec` layer, flatten and dedup
             .flatten()
             .unique()
+            // restrict to populations with sequence data
+            .filter(|p| self.populations.contains_key(p))
             .collect_vec();
+
+        if expanded.is_empty() {
+            return Err(eyre!("Populations {populations:?} could not be expanded.")
+                .suggestion("Is there a typo?")
+                .suggestion("If not, perhaps this population has no sequence data?"));
+        }
 
         Ok(expanded)
     }
@@ -163,79 +163,68 @@ impl Dataset {
         // --------------------------------------------------------------------
         // Candidate Matches
 
-        // Identify preliminary candidate matches, based on populations that have
-        // the greatest number of matching substitutions.
-        // NOTE: This is a efficiency shortcut, but the true population is not
-        // guaranteed to be in this initial candidate pool.
-
-        // optionally filter subs to the requested coordinates
-        let search_subs = if let Some(coordinates) = &coordinates {
-            sequence
-                .substitutions
-                .iter()
-                .filter(|sub| coordinates.contains(&sub.coord))
-                .collect_vec()
-        } else {
-            sequence.substitutions.iter().collect()
-        };
-
-        // Count up all matching population subs ("support")
-        let mut max_support = 0;
-        let population_support_counts: BTreeMap<&String, usize> = self
-            .populations
+        let search_subs = sequence
+            .substitutions
             .iter()
-            .filter(|(pop, _seq)| {
-                if let Some(populations) = populations {
-                    populations.contains(pop)
+            // optionally filter on input coordinates
+            .filter(|s| {
+                if let Some(coordinates) = coordinates {
+                    coordinates.contains(&s.coord)
                 } else {
                     true
                 }
             })
-            .filter_map(|(pop, seq)| {
-                let count = seq
-                    .substitutions
-                    .iter()
-                    .filter(|sub| search_subs.contains(sub))
-                    .collect_vec()
-                    .len();
-                if count >= max_support {
-                    max_support = count
+            .collect_vec();
+
+        let population_support: Vec<_> = self
+            .populations
+            .iter()
+            .filter(|(p, _)| {
+                if let Some(populations) = populations {
+                    populations.contains(p)
+                } else {
+                    true
                 }
-                (count > 0).then_some((pop, count))
+            })
+            .map(|(p, seq)| {
+                let support =
+                    seq.substitutions.iter().filter(|s| search_subs.contains(s)).count();
+                (p, support)
             })
             .collect();
+
+        if population_support.is_empty() {
+            return Err(eyre!("No mutations matched a population in the dataset."));
+        }
+
+        let max_support =
+            population_support.iter().map(|(_, c)| c).max().unwrap().to_owned();
 
         // todo!() decide how much wiggle room we want to give in max support
         // if we want to do max_support - 10, we might need to alter pretty_print
         // so that it only displays the first N candidates (ex. 5,10)
         // this will also cause slow downs
-        let population_matches = population_support_counts
+        let population_matches = population_support
             .into_iter()
             .filter_map(|(pop, count)| (count == max_support).then_some(pop))
             //.filter(|(_pop, count)| *count >= (max_support - 10))
             .collect_vec();
 
-        if population_matches.is_empty() {
-            return Err(eyre!("No mutations matched a population in the dataset."));
-        }
-
         // --------------------------------------------------------------------
-        // Conflict
+        // Parsimony Score: Summarize support and conflict bases
 
-        // check which populations have extra subs/lacking subs
-        population_matches.into_iter().for_each(|pop| {
-            // calculate the parsimony score, and store results in map by population
+        population_matches.into_iter().try_for_each(|pop| {
             let pop_seq = &self.populations[pop];
             let summary =
-                parsimony::Summary::from_sequence(sequence, pop_seq, coordinates)
-                    .unwrap_or_else(|_| {
-                        panic!("Failed to create summary from sequence {}", &sequence.id)
-                    });
+                parsimony::Summary::from_sequence(sequence, pop_seq, coordinates)?;
+
             result.support.insert(pop.to_owned(), summary.support);
             result.conflict_ref.insert(pop.to_owned(), summary.conflict_ref);
             result.conflict_alt.insert(pop.to_owned(), summary.conflict_alt);
             result.score.insert(pop.to_owned(), summary.score);
-        });
+
+            Ok::<(), Report>(())
+        })?;
 
         // --------------------------------------------------------------------
         // Top Populations
@@ -248,11 +237,11 @@ impl Dataset {
         let max_score =
             result.score.values().max().expect("Failed to get max score of result.");
 
-        let max_score_populations = result
+        let max_score_populations: Vec<_> = result
             .score
             .iter()
-            .filter_map(|(pop, count)| (count == max_score).then_some(pop))
-            .collect_vec();
+            .filter_map(|(p, c)| (c == max_score).then_some(p))
+            .collect();
 
         // break additional ties by max support
         let max_support = result
@@ -294,11 +283,7 @@ impl Dataset {
         {
             let pop = &consensus_population;
 
-            // // Option #1. Actual sequence of the internal MRCA node?
-            // let pop_seq = &self.populations[pop];
-            // let summary = parsimony::Summary::from_sequence(sequence, pop_seq, coordinates)?;
-
-            // Option #2. Consensus sequence of top populations?
+            // Consensus sequence of top populations
             let top_populations =
                 result.top_populations.iter().map(|s| s.as_ref()).collect_vec();
             debug!("Creating {pop} consensus genome from top populations.");
@@ -387,7 +372,8 @@ impl Dataset {
             return Ok(population.to_string());
         }
         // ancestors can have multiple paths to root, because of recombination
-        let ancestors = self.phylogeny.get_ancestors(population)?;
+        let recombination = false;
+        let ancestors = self.phylogeny.get_ancestors(population, recombination)?;
         // filter the ancestor paths to just populations we have sequences for
         // prefer the ancestor path that is the longest
         let ancestors_filter = ancestors
@@ -454,14 +440,16 @@ impl SearchResult {
         score_order.sort_by(|a, b| b.1.cmp(&a.1));
 
         // put consensus population first, regardless of score
-        let consensus_score: (String, isize) = score_order
-            .iter()
-            .find(|(pop, _score)| *pop == self.consensus_population)
-            .cloned()
-            .expect("Failed to order consensus populations by score.");
+        if self.consensus_population != String::new() {
+            let consensus_score: (String, isize) = score_order
+                .iter()
+                .find(|(pop, _score)| *pop == self.consensus_population)
+                .cloned()
+                .expect("No score found for consensus population.");
 
-        score_order.retain(|(pop, _score)| *pop != self.consensus_population);
-        score_order.insert(0, consensus_score);
+            score_order.retain(|(pop, _score)| *pop != self.consensus_population);
+            score_order.insert(0, consensus_score);
+        }
 
         // restrict display items for brevity
         let display_suffix = if score_order.len() > max_display_items {
