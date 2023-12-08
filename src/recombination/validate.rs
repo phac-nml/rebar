@@ -3,7 +3,7 @@ use crate::recombination::Recombination;
 use color_eyre::eyre::{eyre, Report, Result};
 use itertools::Itertools;
 use log::{debug, warn};
-use petgraph::Direction;
+use std::collections::BTreeMap;
 use std::fmt;
 use std::str::FromStr;
 
@@ -111,7 +111,9 @@ pub fn validate(
         let observed_population = &best_match.consensus_population;
         let validate_population = expected_population == *observed_population;
 
-        debug!("Validate population: observed={observed_population}, expected={expected_population}");
+        debug!(
+            "Validate population: observed={observed_population}, expected={expected_population}"
+        );
 
         // ----------------------------------------------------------------
         // Recombinant
@@ -219,76 +221,66 @@ pub fn compare_parents(
         return Ok(true);
     }
 
-    // expected is parent of observed, but no recombinant descendants
+    // ------------------------------------------------------------------------
+    // allow some flexibility with regards to match parents/child
+
+    let mut expected_fulfilled: BTreeMap<&str, Option<String>> = BTreeMap::new();
+    expected.iter().for_each(|e| {
+        expected_fulfilled.insert(e, None);
+    });
+
+    let recombination = false;
+
+    // ------------------------------------------------------------------------
+    // expected is ancestor of observed, but no recombinant in between
     // Ex. XE: expected = BA.1,BA.2; observed=BA.1.17.2.1,BA.2
-    // for each observed parent, walk towards the root, stopping a path
-    // if a recombinant node is encountered
-    let mut observed_parents = Vec::new();
-    observed.iter().for_each(|pop| {
-        // get all possible paths from parent population to root
-        // ex. BA.1 (single path), XE, (two paths, through BA.1, BA.2), XBL (four paths, recursive)
-        let paths = dataset
-            .phylogeny
-            .get_paths(pop, "root", Direction::Incoming)
-            .unwrap_or_default();
-        paths.iter().for_each(|populations| {
-            for p in populations {
-                observed_parents.push(p.clone());
-                // after we hit the first recombinant, break
-                if dataset.phylogeny.is_recombinant(p).unwrap_or(false) {
-                    break;
-                }
+    let observed_ancestors = observed
+        .iter()
+        .map(|pop| {
+            let paths = dataset.phylogeny.get_ancestors(pop, recombination)?;
+            let ancestors = paths.into_iter().flatten().unique().collect_vec();
+            Ok((pop, ancestors))
+        })
+        .collect::<Result<Vec<_>, Report>>()?;
+
+    observed_ancestors.into_iter().for_each(|(obs, ancestors)| {
+        debug!("Observed {obs} ancestors: {ancestors:?}");
+        expected.iter().for_each(|exp| {
+            if ancestors.contains(exp) {
+                expected_fulfilled.insert(exp, Some(obs.clone()));
             }
         });
     });
-    observed_parents = observed_parents.into_iter().unique().collect();
-    debug!("Parents of observed: {observed_parents:?}");
-    observed_parents.retain(|p| expected.contains(p) || observed.contains(p));
-    debug!("Parents of observed that match: {observed_parents:?}");
-    if observed_parents.len() == expected.len() {
+    debug!("expected_fulfilled: {expected_fulfilled:?}");
+
+    // if no expected parents remain to be fullfilled
+    if !expected_fulfilled.values().contains(&None) {
         return Ok(true);
     }
 
-    // observed is a parent of expected, but no recombinant descendants
-    // Ex. XCU: expected = BQ.1; observed=BA.5
-    // for each observed parent, walk away from the root, stopping a path
-    // if a recombinant node is encountered
-    let mut expected_parents = Vec::new();
-    expected.iter().for_each(|pop| {
-        // get all possible paths from parent population to root
-        // ex. BA.1 (single path), XE, (two paths, through BA.1, BA.2), XBL (four paths, recursive)
-        let paths = dataset
-            .phylogeny
-            .get_paths(pop, "root", Direction::Incoming)
-            .unwrap_or_default();
-        paths.iter().for_each(|populations| {
-            for p in populations {
-                expected_parents.push(p.clone());
-                // after we hit the first recombinant, break
-                if dataset.phylogeny.is_recombinant(p).unwrap_or(false) {
-                    break;
-                }
+    // ------------------------------------------------------------------------
+    // observed is ancestor of expected, but no recombinant in between
+    let expected_ancestors = expected
+        .iter()
+        .map(|pop| {
+            let paths = dataset.phylogeny.get_ancestors(pop, recombination)?;
+            let ancestors = paths.into_iter().flatten().unique().collect_vec();
+            Ok((pop, ancestors))
+        })
+        .collect::<Result<Vec<_>, Report>>()?;
+
+    expected_ancestors.into_iter().for_each(|(exp, ancestors)| {
+        debug!("Expected {exp} ancestors: {ancestors:?}");
+        observed.iter().for_each(|obs| {
+            if ancestors.contains(obs) {
+                expected_fulfilled.insert(exp, Some(obs.clone()));
             }
         });
     });
+    debug!("expected_fulfilled: {expected_fulfilled:?}");
 
-    debug!("Parents of expected: {expected_parents:?}");
-    expected_parents.retain(|p| observed.contains(p) || expected.contains(p));
-    debug!("Parents of expected that match: {expected_parents:?}");
-    if expected_parents.len() == observed.len() {
-        return Ok(true);
-    }
-
-    // combine
-    // XBE: expected ["BA.5.2","BE.4.1"], observed: ["BA.5.2.6","BE.4"]
-    let mut combine = observed.clone();
-    combine.append(&mut observed_parents);
-    combine.append(&mut expected_parents);
-    combine = combine.into_iter().unique().collect();
-    debug!("Observed children and parents: {combine:?}");
-    combine.retain(|pop| expected.contains(pop));
-    debug!("Observed children and parents that match expected: {combine:?}");
-    if combine.len() == expected.len() {
+    // if no expected parents remain to be fullfilled
+    if !expected_fulfilled.values().contains(&None) {
         return Ok(true);
     }
 
