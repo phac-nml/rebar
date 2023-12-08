@@ -164,7 +164,8 @@ impl Phylogeny {
     ///
     /// Removes named node and all descendants.
     pub fn prune(&mut self, name: &str) -> Result<(), Report> {
-        let descendants = self.get_descendants(name)?;
+        let recombination = true;
+        let descendants = self.get_descendants(name, recombination)?;
         for d in descendants {
             self.remove(&d)?;
         }
@@ -228,8 +229,15 @@ impl Phylogeny {
         Ok(())
     }
 
+    // Get all descendants of a population.
+    //
+    // Returns a big pile (single vector) of all descendants in all paths to tips.
     // Reminder, this function will also include name (the parent)
-    pub fn get_descendants(&self, name: &str) -> Result<Vec<String>, Report> {
+    pub fn get_descendants(
+        &self,
+        name: &str,
+        recombination: bool,
+    ) -> Result<Vec<String>, Report> {
         let mut descendants = Vec::new();
 
         // Find the node that matches the name
@@ -244,6 +252,17 @@ impl Phylogeny {
             // Get node name
             let nx_name = self.get_name(&nx)?;
             descendants.push(nx_name);
+        }
+
+        // exclude descendants that are novel recombinants
+        if !recombination {
+            let recombinant_ancestor = self.get_recombinant_ancestor(name).ok();
+            descendants = descendants
+                .into_iter()
+                .filter(|desc| {
+                    recombinant_ancestor == self.get_recombinant_ancestor(desc).ok()
+                })
+                .collect_vec();
         }
 
         Ok(descendants)
@@ -286,15 +305,19 @@ impl Phylogeny {
     /// They might be parent-child instead.
     pub fn get_problematic_recombinants(&self) -> Result<Vec<String>, Report> {
         let mut problematic_recombinants = Vec::new();
+        let recombination = true;
 
         for recombinant in &self.recombinants {
             let parents = self.get_parents(recombinant)?;
             for i1 in 0..parents.len() - 1 {
                 let p1 = &parents[i1];
                 for p2 in parents.iter().skip(i1 + 1) {
-                    let mut descendants = self.get_descendants(p2)?;
-                    let ancestors =
-                        self.get_ancestors(p2)?.into_iter().flatten().collect_vec();
+                    let mut descendants = self.get_descendants(p2, recombination)?;
+                    let ancestors = self
+                        .get_ancestors(p2, recombination)?
+                        .into_iter()
+                        .flatten()
+                        .collect_vec();
                     descendants.extend(ancestors);
 
                     if descendants.contains(p1) {
@@ -354,15 +377,34 @@ impl Phylogeny {
     }
 
     /// NOTE: Don't think this will work with 3+ parents yet, to be tested.
-    pub fn get_ancestors(&self, name: &str) -> Result<Vec<Vec<String>>, Report> {
+    pub fn get_ancestors(
+        &self,
+        name: &str,
+        recombination: bool,
+    ) -> Result<Vec<Vec<String>>, Report> {
         let mut paths = self.get_paths(name, "root", petgraph::Incoming)?;
 
-        // remove self name (first element) from paths, and then reverse order
-        // so that it's ['root'.... name]
-        paths.iter_mut().for_each(|p| {
-            p.remove(0);
-            p.reverse();
-        });
+        if recombination {
+            // remove self name (first element) from paths, and then reverse order
+            // so that it's ['root'.... name]
+            paths.iter_mut().for_each(|p| {
+                p.remove(0);
+                p.reverse();
+            });
+        } else {
+            paths = paths
+                .into_iter()
+                .map(|path| {
+                    let result =
+                        path.iter().position(|p| self.is_recombinant(p).unwrap_or(false));
+                    if let Some(i) = result {
+                        path[0..=i].to_vec()
+                    } else {
+                        path
+                    }
+                })
+                .collect_vec();
+        }
 
         Ok(paths)
     }
@@ -381,7 +423,6 @@ impl Phylogeny {
             .map(|pop| {
                 let paths = self.get_paths(pop, "root", Direction::Incoming)?;
                 let ancestors = paths.into_iter().flatten().unique().collect_vec();
-                debug!("{pop}: {ancestors:?}");
                 Ok(ancestors)
             })
             .collect::<Result<Vec<_>, Report>>()?
@@ -399,8 +440,6 @@ impl Phylogeny {
             })
             .collect();
 
-        debug!("common_ancestors: {common_ancestors:?}");
-
         // get the depths (distance to root) of the common ancestors
         let depths = common_ancestors
             .into_iter()
@@ -411,7 +450,6 @@ impl Phylogeny {
                     .max_by(|a, b| a.len().cmp(&b.len()))
                     .unwrap_or_default();
                 let depth = longest_path.len();
-                debug!("{pop}: {depth}");
                 Ok((pop, depth))
             })
             .collect::<Result<Vec<_>, Report>>()?;
