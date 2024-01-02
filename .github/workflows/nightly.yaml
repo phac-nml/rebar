@@ -39,7 +39,7 @@ jobs:
       binary: ${{ matrix.binary }}
 
   # ---------------------------------------------------------------------------
-  latest:
+  nightly:
 
     needs: compile
 
@@ -88,7 +88,7 @@ jobs:
         uses: actions/upload-artifact@v3
         if: always()
         with:
-          name: validate-${{ matrix.arch }}
-          path: output/sars-cov-2/nightly/validate
+          name: validate-linelist_${{ matrix.arch }}
+          path: output/sars-cov-2/nightly/validate/linelist.tsv
           if-no-files-found: error
           retention-days: 7
