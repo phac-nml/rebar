@@ -3,10 +3,12 @@ use crate::dataset::attributes::{Name, Summary, Tag};
 use crate::dataset::Dataset;
 use crate::phylogeny::Phylogeny;
 use crate::sequence::{read_reference, Sequence, Substitution};
-use bio::io::fasta;
-use color_eyre::eyre::{eyre, Report, Result, WrapErr};
+use color_eyre::eyre::{Report, Result};
 use log::{info, warn};
+use noodles::fasta;
 use std::collections::BTreeMap;
+use std::fs::File;
+use std::io::BufReader;
 use std::path::Path;
 
 // ----------------------------------------------------------------------------
@@ -88,9 +90,8 @@ pub fn parse_populations(
     Report,
 > {
     // read in populations from fasta
-    let populations_reader = fasta::Reader::from_file(populations_path)
-        .map_err(|e| eyre!(e))
-        .wrap_err(format!("Failed to read file: {populations_path:?}"))?;
+    let mut reader =
+        File::open(populations_path).map(BufReader::new).map(fasta::Reader::new)?;
 
     // read in reference from fasta
     let reference = read_reference(reference_path, mask)?;
@@ -98,15 +99,16 @@ pub fn parse_populations(
     let mut populations = BTreeMap::new();
     let mut mutations = BTreeMap::new();
 
-    for result in populations_reader.records() {
+    reader.records().try_for_each(|result| {
         let record = result?;
         let sequence = Sequence::from_record(record, Some(&reference), mask)?;
         populations.insert(sequence.id.clone(), sequence.clone());
 
-        for sub in sequence.substitutions {
+        sequence.substitutions.into_iter().for_each(|sub| {
             mutations.entry(sub).or_insert(Vec::new()).push(sequence.id.clone());
-        }
-    }
+        });
+        Ok::<(), Report>(())
+    })?;
 
     Ok((populations, mutations))
 }
