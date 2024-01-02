@@ -30,7 +30,7 @@ impl Summary {
     pub fn from_sequence(
         sequence: &Sequence,
         query: &Sequence,
-        coordinates: Option<&Vec<usize>>,
+        coordinates: Option<&[usize]>,
     ) -> Result<Self, Report> {
         let mut parsimony_summary = Summary::new();
 
