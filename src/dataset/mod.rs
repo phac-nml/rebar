@@ -12,6 +12,7 @@ use color_eyre::eyre::{eyre, Report, Result, WrapErr};
 use indoc::formatdoc;
 use itertools::Itertools;
 use log::debug;
+use noodles::fasta;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 use std::default::Default;
@@ -84,13 +85,15 @@ impl Dataset {
             })
             .join("");
 
-        // create bio record
-        let description = None;
-        let record =
-            bio::io::fasta::Record::with_attrs(name, description, consensus.as_bytes());
+        // create new fasta record
+        let definition = fasta::record::Definition::new(name, None);
+        let sequence = fasta::record::Sequence::from(consensus.as_bytes().to_vec());
+        let record = fasta::Record::new(definition, sequence);
+
         // parse and create Sequence record
         // dataset is already masked, no need
         let mask = Vec::new();
+
         let sequence = Sequence::from_record(record, Some(&self.reference), &mask)?;
 
         Ok(sequence)

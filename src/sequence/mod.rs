@@ -1,11 +1,13 @@
 pub mod parsimony;
 
-use bio::io::fasta;
-use color_eyre::eyre::{eyre, Report, Result, WrapErr};
+use color_eyre::eyre::{eyre, ContextCompat, Report, Result, WrapErr};
 use color_eyre::Help;
+use noodles::{core::Position, fasta};
 use serde::{Deserialize, Serialize};
 use std::cmp::Ordering;
 use std::default::Default;
+use std::fs::File;
+use std::io::BufReader;
 use std::path::Path;
 use std::str::FromStr;
 
@@ -140,20 +142,35 @@ impl Sequence {
         }
     }
 
+    /// Parse fasta record into a rebar sequence.
     pub fn from_record(
-        record: bio::io::fasta::Record,
+        record: fasta::Record,
         reference: Option<&Sequence>,
         mask: &Vec<usize>,
     ) -> Result<Self, Report> {
         let mut sample = Sequence::new();
-        sample.id = record.id().to_string();
-        sample.seq = record.seq().iter().map(|b| *b as char).collect();
+
+        // parse fasta::Record into rebar Sequence
+        let id = record.name().to_string();
+
+        // convert sequence to vec of bases, noodle positions are 1-based!
+        let start = Position::try_from(1).unwrap();
+        let seq: Vec<char> = record
+            .sequence()
+            .get(start..)
+            .context(format!("Failed to parse sequence record {}", &sample.id))?
+            .iter()
+            .map(|b| *b as char)
+            .collect();
+        let sample_len = seq.len();
+        sample.id = id.clone();
+        sample.seq = seq;
 
         // check mask coord
         for bases in mask {
             if *bases > sample.seq.len() {
                 return Err(
-                    eyre!("5' and 3' masking ({mask:?}) is incompatible with sequence length {}", sample.seq.len())
+                    eyre!("5' and 3' masking ({mask:?}) is incompatible with {id} sequence length {sample_len}")
                     .suggestion("Please change your --mask parameter.")
                     .suggestion("Maybe you want to disable masking all together with --mask 0,0 ?")
                 );
@@ -161,15 +178,11 @@ impl Sequence {
         }
 
         if let Some(reference) = reference {
-            if sample.seq.len() != reference.seq.len() {
+            let ref_len = reference.seq.len();
+            if sample_len != ref_len {
                 return Err(
-                    eyre!(
-                        "Reference sequence ({ref_len}) and {record_id} ({record_len}) are different lengths!",
-                        ref_len=reference.seq.len(),
-                        record_id=sample.id,
-                        record_len=sample.seq.len(),
-                    )
-                    .suggestion("Are you sure your --alignment is aligned correctly?")
+                    eyre!("Reference and {id} are different lengths ({ref_len} vs {sample_len})!")
+                    .suggestion(format!("Are you sure {id} is aligned correctly?"))
                 );
             }
             sample.genome_length = reference.seq.len();
@@ -234,7 +247,7 @@ impl Sequence {
 /// Read first record of fasta path into sequence record.
 pub fn read_reference(path: &Path, mask: &Vec<usize>) -> Result<Sequence, Report> {
     // start reading in the reference as fasta, raise error if file doesn't exist
-    let reader = fasta::Reader::from_file(path).expect("Unable to read reference");
+    let mut reader = File::open(path).map(BufReader::new).map(fasta::Reader::new)?;
 
     // parse just the first record from the reference
     // 1. raise error if record iterator doesn't work

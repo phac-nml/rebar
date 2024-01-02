@@ -6,14 +6,14 @@ use crate::recombination;
 use crate::dataset::{attributes::Name, SearchResult};
 use crate::recombination::Recombination;
 use crate::sequence::Sequence;
-use bio::io::fasta;
-use color_eyre::eyre::{eyre, Report, Result, WrapErr};
+use color_eyre::eyre::{Report, Result, WrapErr};
 use indicatif::{style::ProgressStyle, ProgressBar};
 use itertools::Itertools;
 use log::{debug, info, warn};
+use noodles::fasta;
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 use std::fs::{create_dir_all, File};
-use std::io::Write;
+use std::io::{BufReader, Write};
 
 /// Run rebar on input alignment and/or dataset population(s)
 pub fn run(args: &mut cli::run::Args) -> Result<(), Report> {
@@ -111,11 +111,10 @@ pub fn run(args: &mut cli::run::Args) -> Result<(), Report> {
 
     if let Some(alignment) = &args.input.alignment {
         info!("Loading query alignment: {:?}", alignment);
-        let alignment_reader = fasta::Reader::from_file(alignment)
-            .map_err(|e| eyre!(e))
-            .wrap_err("Failed to read file: {alignment:?}")?;
+        let file = File::open(alignment);
+        let mut reader = file.map(BufReader::new).map(fasta::Reader::new)?;
 
-        for result in alignment_reader.records() {
+        for result in reader.records() {
             let record = result.wrap_err("Unable to parse alignment: {alignment:?}")?;
             let sequence =
                 Sequence::from_record(record, Some(&dataset.reference), &args.mask)?;
