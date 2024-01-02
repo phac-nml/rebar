@@ -141,7 +141,7 @@ impl Dataset {
         &self,
         sequence: &Sequence,
         populations: Option<&Vec<&String>>,
-        coordinates: Option<&Vec<usize>>,
+        coordinates: Option<&[usize]>,
     ) -> Result<SearchResult, Report> {
         // initialize an empty result, this will be the final product of this function
         let mut result = SearchResult::new(sequence);
