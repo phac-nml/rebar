@@ -151,6 +151,10 @@ jobs:
         if: always()
         with:
           name: output-${{ matrix.arch }}
-          path: output
+          path: |
+            output/alignment
+            output/toy1
+            output/populations/linelist.tsv
+
           if-no-files-found: error
           retention-days: 7
