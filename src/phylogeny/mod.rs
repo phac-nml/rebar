@@ -1,5 +1,5 @@
 use crate::utils;
-use color_eyre::eyre::{eyre, Report, Result, WrapErr};
+use color_eyre::eyre::{eyre, ContextCompat, Report, Result, WrapErr};
 use color_eyre::Help;
 use itertools::Itertools;
 use log::debug;
@@ -9,7 +9,6 @@ use petgraph::visit::{Dfs, IntoNodeReferences};
 use petgraph::Direction;
 use serde::{Deserialize, Serialize};
 use serde_json;
-use std::collections::HashMap;
 use std::fs::File;
 use std::io::Write;
 use std::path::Path;
@@ -369,65 +368,62 @@ impl Phylogeny {
     }
 
     /// Identify the most recent common ancestor shared between all node names.
-    pub fn get_common_ancestor(&self, names: &Vec<String>) -> Result<String, Report> {
+    pub fn get_common_ancestor(&self, names: &[String]) -> Result<String, Report> {
         // if only one node name was provided, just return it
         if names.len() == 1 {
             let common_ancestor = names[0].clone();
             return Ok(common_ancestor);
         }
 
-        // Phase 1: Count up the ancestors shared between all named populations
-        let mut ancestor_counts: HashMap<String, Vec<String>> = HashMap::new();
-        let mut ancestor_depths: HashMap<String, isize> = HashMap::new();
+        // mass pile of all ancestors of all named nodes
+        let ancestors: Vec<_> = names
+            .iter()
+            .map(|pop| {
+                let paths = self.get_paths(pop, "root", Direction::Incoming)?;
+                let ancestors = paths.into_iter().flatten().unique().collect_vec();
+                debug!("{pop}: {ancestors:?}");
+                Ok(ancestors)
+            })
+            .collect::<Result<Vec<_>, Report>>()?
+            .into_iter()
+            .flatten()
+            .collect::<Vec<_>>();
 
-        for name in names {
-            // directly use the get_paths method over get_ancestors, because
-            // get_ancestors removes the self node name from the list,
-            // but some datasets have named internal nodes, so a listed
-            // node could be a common ancestor!
-            let ancestor_paths = self.get_paths("root", name, petgraph::Outgoing)?;
+        // get ancestors shared by all sequences
+        let common_ancestors: Vec<_> = ancestors
+            .iter()
+            .unique()
+            .filter(|anc| {
+                let count = ancestors.iter().filter(|pop| pop == anc).count();
+                count == names.len()
+            })
+            .collect();
 
-            for ancestor_path in ancestor_paths {
-                for (depth, ancestor) in ancestor_path.iter().enumerate() {
-                    let depth = depth as isize;
-                    // add ancestor if first time encountered
-                    ancestor_depths.entry(ancestor.clone()).or_insert(depth);
+        debug!("common_ancestors: {common_ancestors:?}");
 
-                    // recombinants can appear multiple times in ancestors, update
-                    // depth map to use deepest one
-                    if depth > ancestor_depths[ancestor] {
-                        ancestor_depths.insert(ancestor.clone(), depth);
-                    }
-                    ancestor_counts
-                        .entry(ancestor.clone())
-                        .and_modify(|p| {
-                            p.push(name.clone());
-                            p.dedup();
-                        })
-                        .or_insert(vec![name.clone()]);
-                }
-            }
-        }
+        // get the depths (distance to root) of the common ancestors
+        let depths = common_ancestors
+            .into_iter()
+            .map(|pop| {
+                let paths = self.get_paths(pop, "root", Direction::Incoming)?;
+                let longest_path = paths
+                    .into_iter()
+                    .max_by(|a, b| a.len().cmp(&b.len()))
+                    .unwrap_or_default();
+                let depth = longest_path.len();
+                debug!("{pop}: {depth}");
+                Ok((pop, depth))
+            })
+            .collect::<Result<Vec<_>, Report>>()?;
 
-        // Phase 2: Find the highest depth ancestor shared between all
-        let mut common_ancestor = "root".to_string();
-        let mut max_depth = 0;
+        // get the deepest (ie. most recent common ancestor)
+        let deepest_ancestor = depths
+            .into_iter()
+            .max_by(|a, b| a.1.cmp(&b.1))
+            .context("Failed to get common ancestor.")?;
 
-        for (ancestor, populations) in ancestor_counts {
-            // Which ancestors were found in all populations?
-            if populations.len() == names.len() {
-                // Which ancestor has the max depth?
-
-                let depth = ancestor_depths
-                    .get(&ancestor)
-                    .cloned()
-                    .expect("Ancestor {ancestor} was not found in ancestor depths.");
-                if depth > max_depth {
-                    max_depth = depth;
-                    common_ancestor = ancestor;
-                }
-            }
-        }
+        // tuple (population name, depth)
+        let common_ancestor = deepest_ancestor.0.to_string();
 
         Ok(common_ancestor)
     }
