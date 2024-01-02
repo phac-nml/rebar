@@ -30,11 +30,10 @@
 
 ## Install
 
-`rebar` is a standalone binary file that you can simply download and run:
+`rebar` is a standalone binary file, we recommend [conda](https://anaconda.org/bioconda/rebar) or [direct download](https://github.com/phac-nml/rebar/releases/latest/download/rebar-x86_64-unknown-linux-musl).
 
 ```bash
-wget -O rebar https://github.com/phac-nml/rebar/releases/latest/download/rebar-x86_64-unknown-linux-musl
-./rebar --help
+conda install -c bioconda rebar
 ```
 
 - Please see the [install](docs/install.md) docs for Windows, macOS, Docker, Singularity, and Conda.
